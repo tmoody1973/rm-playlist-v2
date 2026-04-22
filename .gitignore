@@ -8,6 +8,10 @@ coverage/
 .env.local
 .env.*.local
 
+# Apple Music API private keys — never commit (lives in ~/.gstack/secrets/)
+*.p8
+AuthKey_*.p8
+
 .DS_Store
 *.log
 npm-debug.log*

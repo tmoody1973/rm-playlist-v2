@@ -1239,6 +1239,10 @@ export function artistKey(name: string): string {
 
 ### Reverse lookup: "what's touring from our rotation?"
 
+**Eng review 2026-04-22:** This join is cached via a nightly Trigger.dev cron (4am local) that materializes a `touringFromRotation` derived Convex table per station. Dashboard reads from cache (sub-100ms). Touring data updates daily, which matches the natural rhythm of show announcements. Cache invalidation triggers on `events.created` for fresh shows. On-demand recompute available via a Settings affordance. See TODO-11.
+
+
+
 A single Convex query powers the music director's "artists in our rotation who are touring nearby" view:
 
 ```typescript
@@ -1360,17 +1364,27 @@ The failure mode of most JS embeds is shipping React + a full design system and 
 - **Shadow DOM for style isolation.** Gets the one advantage iframes had (no CSS leak in either direction) without the iframe. CSS custom properties still pierce the shadow boundary, so host-page theming still works.
 - **Shared connection detection.** On second `<script>` load on a page, reuse the existing Convex connection instead of opening a new one.
 
-Budget to hold: **~15KB gzip** for loader + one variant. Larger than `<iframe src="...">` but smaller than most analytics scripts stations already run.
+Budget to hold: **~15KB gzip target / 25KB gzip ceiling** for loader + one variant. Larger than `<iframe src="...">` but smaller than most analytics scripts stations already run. (Eng review 2026-04-22: Convex client core is non-trivial; 15KB is the aspirational target, 25KB is the ceiling — if we exceed 25KB after measurement during scaffold week, we revisit by code-splitting more aggressively, dropping a variant, or considering a leaner Convex subscription primitive. Measure with `vite-bundle-visualizer` or `esbuild --analyze` on first widget build.)
 
 ### Widget variants (MVP set)
 
-| Variant | Purpose |
-|---------|---------|
-| `now-playing-strip` | Compact current-track bar. Most common embed. |
-| `now-playing-card` | Larger card with album art, optional "see them live" event surfacing. |
-| `recently-played` | Scrollable list of last N tracks with search. |
-| `events-feed` | Upcoming events in station region (Ticketmaster/AXS/custom), with "played on this station" badges. |
-| `schedule` | Live show / program schedule from Spinitron. |
+Realigned to V1 reality 2026-04-22: v2 MVP is **one V1-carry-forward widget + two net-new variants**, not six.
+
+| Variant | Purpose | V1 parity |
+|---------|---------|-----------|
+| `playlist` | V1's full playlist widget carried forward. Config-driven: `layout: list \| grid`, tabs (Recent, Top 20 Songs, Top 20 30-days, Concerts, About Us), search + date filter, `maxItems`/`unlimitedSongs`, `compact`, `height`, `theme`, `showSearch`/`showHeader`/`showLoadMore`/`autoUpdate`. Interleaves inline concert cards (V1 `ArtistEvents`). Includes related-tracks carousel (V1 `RelatedCarousel`). Powers `radiomilwaukee.org/playlist` as its flagship consumer. Preview button uses **Apple Music API** (revised 2026-04-22 from Spotify after `preview_url` deprecation research; see DESIGN.md decisions log + TODO-1) plus deep-link buttons to both Spotify and Apple Music. | **Yes** — full carry-forward + Apple Music preview + deep-link buttons |
+| `now-playing-strip` | Compact single-row current-track bar. Most common embed for partner station pages that want the smallest footprint. Not in V1. | New |
+| `now-playing-card` | Larger single-current-track card with album art, "ON AIR" label, and an optional LIVE event row when the current artist has upcoming local shows. Not in V1. | New |
+
+**Deferred (not MVP, revisit post-shakedown):**
+
+| Variant | Why deferred |
+|---------|--------------|
+| `recently-played` | Subsumed into `playlist` with `tab=Recent`, fewer config options. Don't ship two things that are the same thing. |
+| `events-feed` | V1 inlines concert cards into the playlist widget via `ArtistEvents`; standalone events feed has no demonstrated demand. Revisit if a partner explicitly asks. |
+| `schedule` | No V1 equivalent, no RM-stated need. Build if requested. |
+
+See `docs/design/001-information-architecture.md` for detailed IA of each variant.
 
 ### Widgets schema
 
