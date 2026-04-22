@@ -115,6 +115,7 @@ Edit `package.json` to declare workspaces:
 ```
 
 Create:
+
 - `tsconfig.base.json` with `"strict": true`, `"moduleResolution": "bundler"`, `"jsx": "preserve"`
 - `.prettierrc`, `.eslintrc.cjs` per CLAUDE.md clean-code standards (2-space indent, consistent-return, no-unused-vars)
 - `bunfig.toml` with `[install] exact = true`
@@ -126,9 +127,11 @@ Create:
 Packages have no framework dependency, so they compile without Convex/Next/Clerk. Scaffold them first; adapter contract blocks everything else.
 
 ### packages/types
+
 Shared `NormalizedPlay`, `Station`, `IngestionSource`, `PlayRow`. No runtime deps.
 
 ### packages/adapters
+
 ```bash
 cd packages/adapters
 bun init -y
@@ -137,6 +140,7 @@ bun add -d fast-check vitest
 ```
 
 Implement:
+
 - `src/types.ts` — `AdapterContract` interface: `{ name: string; parse: (raw: unknown) => NormalizedPlay[] }`. Crucially: `parse()` **never throws**, always returns array (possibly empty). This is the central invariant.
 - `src/registry.ts` — `registerAdapter(name, impl)`, `getAdapter(name)`
 - `src/spinitron.ts` — first real implementation. Zod schema for Spinitron's spin shape, safeparse → NormalizedPlay or empty.
@@ -194,6 +198,7 @@ Task: `poll-sgmetadata-hyfin` — runs every 30s via Trigger schedule, calls SGm
 **Concurrency: 1** (per brainstorm + eng review acceptance). **No retry on parse-never-throws** (empty array is a valid result).
 
 Validation:
+
 - Start trigger dev server: `bunx trigger.dev@latest dev`
 - Watch Convex dashboard → `plays` table populates
 - Watch `ingestionEvents` → each poll produces a row (success or fail)
@@ -206,12 +211,14 @@ Validation:
 This is the CEO-plan Week 1-2 deliverable: single-page admin dashboard surfacing `ingestionEvents` rollups. Implement per `docs/design/001-information-architecture.md` section A.
 
 ### Shell
+
 - Top bar: RM wordmark + role indicator
 - Left sidebar (icon-only, Lucide icons): Dashboard / Streams / Reports / Events / Unclassified / Widgets / Settings
 - Dark mode default with tokens from `DESIGN.md` (CSS custom properties on `:root`)
 - Tailwind config reads tokens from one source: `apps/web/app/design-tokens.css`
 
 ### Dashboard home — MVP scope for Week 1-2
+
 - Row 1: 4 station cards (live now-playing via Convex subscription) — but only HYFIN has real data, others show "configuring..." until Week 3
 - Row 2: Needs Attention panel — lists latest `ingestionEvents` with status ≠ success; derived-value unclassified-count placeholder for now
 - Row 2: Reports panel — placeholder "Reports coming Week 3-4" card
@@ -247,7 +254,7 @@ This closes the CEO-plan scope item "Day 1: GitHub Actions CI gate requiring >=1
 import { readdirSync } from "node:fs";
 for (const adapter of ["spinitron", "icy", "sgmetadata"]) {
   test(`${adapter} has ≥10 fixtures`, () => {
-    const count = readdirSync(`test/fixtures`).filter(f => f.startsWith(adapter)).length;
+    const count = readdirSync(`test/fixtures`).filter((f) => f.startsWith(adapter)).length;
     expect(count).toBeGreaterThanOrEqual(10);
   });
 }
@@ -305,11 +312,12 @@ bun add -d vite vite-plugin-preact @preact/preset-vite
 ### Cloudflare Pages deploy pipeline
 
 `.github/workflows/widget-publish.yml`:
+
 ```yaml
 name: Widget publish
 on:
   push:
-    paths: ['apps/embed/**', '.github/workflows/widget-publish.yml']
+    paths: ["apps/embed/**", ".github/workflows/widget-publish.yml"]
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -368,13 +376,13 @@ After Lane A+B: Milestones 4-7 run sequentially in one lane (each depends on the
 
 ## Risk register (things that could bite Week 1-2)
 
-| Risk | Mitigation |
-|------|------------|
-| Convex schema shape changes mid-week | Freeze schema after Milestone 3; any change requires re-running all seed mutations |
-| Clerk Custom Claims for role lookup don't reach Convex correctly | Test the Clerk→Convex identity bridge in Milestone 3 exit gate before moving to Milestone 4 |
-| Trigger.dev task timeouts on SGmetadata slow response | `concurrency: 1` + 20s timeout on HTTP fetch; poll interval 30s gives 10s headroom |
-| Bun workspace resolution breaks on named package imports across workspaces | Use `"type": "module"` everywhere + explicit `exports` field in each package's package.json |
-| Cloudflare Pages build fails on first deploy due to missing build step config | Test the GitHub Action locally with `act` before merging Milestone 7 |
+| Risk                                                                          | Mitigation                                                                                  |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Convex schema shape changes mid-week                                          | Freeze schema after Milestone 3; any change requires re-running all seed mutations          |
+| Clerk Custom Claims for role lookup don't reach Convex correctly              | Test the Clerk→Convex identity bridge in Milestone 3 exit gate before moving to Milestone 4 |
+| Trigger.dev task timeouts on SGmetadata slow response                         | `concurrency: 1` + 20s timeout on HTTP fetch; poll interval 30s gives 10s headroom          |
+| Bun workspace resolution breaks on named package imports across workspaces    | Use `"type": "module"` everywhere + explicit `exports` field in each package's package.json |
+| Cloudflare Pages build fails on first deploy due to missing build step config | Test the GitHub Action locally with `act` before merging Milestone 7                        |
 
 ## If you hit a blocker
 

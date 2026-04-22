@@ -41,18 +41,18 @@ function loadDotEnv(path: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const line of readFileSync(path, "utf8").split("\n")) {
     const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
-    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    if (!m) continue;
+    const key = m[1];
+    const rawValue = m[2] ?? "";
+    if (!key) continue;
+    out[key] = rawValue.replace(/^["']|["']$/g, "");
   }
   return out;
 }
 
 function base64UrlEncode(input: Buffer | string): string {
   const buf = typeof input === "string" ? Buffer.from(input) : input;
-  return buf
-    .toString("base64")
-    .replace(/=+$/, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  return buf.toString("base64").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function signDeveloperToken(opts: {
@@ -90,7 +90,9 @@ async function main() {
   const storefront = env.APPLE_MUSIC_STOREFRONT ?? "us";
 
   if (!teamId || !keyId || !keyPath) {
-    console.error("Missing one of: APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, APPLE_MUSIC_PRIVATE_KEY");
+    console.error(
+      "Missing one of: APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, APPLE_MUSIC_PRIVATE_KEY",
+    );
     process.exit(1);
   }
   if (!existsSync(keyPath)) {
@@ -124,14 +126,18 @@ async function main() {
     process.exit(1);
   }
   const searchJson = (await searchRes.json()) as {
-    results?: { songs?: { data?: Array<{ id: string; attributes: { name: string; artistName: string } }> } };
+    results?: {
+      songs?: { data?: Array<{ id: string; attributes: { name: string; artistName: string } }> };
+    };
   };
   const firstSong = searchJson.results?.songs?.data?.[0];
   if (!firstSong) {
     console.error("Search returned no songs. Try a different APPLE_MUSIC_TEST_SEARCH.");
     process.exit(1);
   }
-  console.log(`✓ Search found: "${firstSong.attributes.name}" by ${firstSong.attributes.artistName} (id: ${firstSong.id})`);
+  console.log(
+    `✓ Search found: "${firstSong.attributes.name}" by ${firstSong.attributes.artistName} (id: ${firstSong.id})`,
+  );
   console.log("");
 
   // Step 2 — fetch full song detail to confirm preview URL is present

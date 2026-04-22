@@ -40,6 +40,7 @@ v2 ships as a single-tenant system for Radio Milwaukee. Multi-tenancy is deferre
 ## Forward-compat markers
 
 Schema retains `orgId` on every table. Convex queries filter on `orgId` even when there is exactly one. This means the day multi-tenant becomes real, the migration is:
+
 1. Un-hardcode the single org ID
 2. Wire Clerk Organizations for the org-switcher UX
 3. Build onboarding
@@ -50,6 +51,7 @@ No schema rewrites. No query rewrites. That's the whole point of keeping the `or
 ## Revisit triggers
 
 Revisit this decision if any of:
+
 - A second public radio station commits to using v2 in production
 - Radio Milwaukee spins up a new brand that warrants real org separation
 - Pricing experiment requires per-tenant billing telemetry

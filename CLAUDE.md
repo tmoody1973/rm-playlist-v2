@@ -3,6 +3,7 @@
 Always read `DESIGN.md` before making any visual or UI decisions. All font choices, colors, spacing, motion, aesthetic direction, and component vocabulary are defined there. Do not deviate without explicit user approval. In QA mode, flag any code that doesn't match `DESIGN.md`.
 
 Authoritative companion docs in `docs/design/`:
+
 - `001-information-architecture.md` — what every UI surface shows, in what hierarchy
 - `002-interaction-states.md` — loading/empty/error/success states per surface
 - `003-responsive-accessibility.md` — viewport breakpoints, keyboard nav, ARIA, contrast, motion

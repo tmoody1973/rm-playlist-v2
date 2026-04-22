@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "verbatimModuleSyntax": false,
+    "useDefineForClassFields": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@rm/types": ["packages/types/src/index.ts"],
+      "@rm/types/*": ["packages/types/src/*"],
+      "@rm/ingestion": ["packages/ingestion/src/index.ts"],
+      "@rm/ingestion/*": ["packages/ingestion/src/*"],
+      "@rm/enrichment": ["packages/enrichment/src/index.ts"],
+      "@rm/enrichment/*": ["packages/enrichment/src/*"],
+      "@rm/convex": ["packages/convex/src/index.ts"],
+      "@rm/convex/*": ["packages/convex/src/*"]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+.next
+coverage
+.convex
+.turbo
+.trigger
+bun.lockb
+bun.lock
+radiomke-playlist-app V1
+v1-reference
+docs
+*.md

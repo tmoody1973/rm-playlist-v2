@@ -21,6 +21,7 @@ The RM staffer's landing view after sign-in. Data-dense, calm, Linear/Vercel-aes
 
 **Row 1 — Live station wall (PRIMARY, ~30% vertical height).**
 Four peer cards, equal width, one per stream (HYFIN, 88Nine, 414 Music, Rhythm Lab). Each card surfaces in this order of visual weight:
+
 1. Station name + current track title (artist — title)
 2. Time played (relative, e.g. "time played 3 min ago")
 3. Source badge (Spinitron / ICY / Spinitron+ICY for dual-source)
@@ -30,6 +31,7 @@ This row answers "is every stream alive right now?" in under 2 seconds.
 
 **Row 2 — Reports + Needs Attention (SECONDARY, ~25% vertical height).**
 Two equal-width panels:
+
 - **Reports (left).** Primary CTA button: "Generate SoundExchange Q-next export". Below it: "Last export N hours ago" muted. Secondary actions (CPB, PRO reports) accessible via a disclosure / "More reports".
 - **Needs Attention (right).** Prioritized list, most severe first:
   1. Paused sources (red)
@@ -108,6 +110,7 @@ V1 ships both. v2 keeps both. Selected via `data-layout="list"` or `data-layout=
 #### `list` layout (vertical, the flagship for `radiomilwaukee.org/playlist`)
 
 **Recent tab.**
+
 - Search input full-width, placeholder "Search songs or artists...". Toggle-able via `showSearch`.
 - Date Search toggle (collapsed default, expands to range picker). Toggle-able via `enableDateSearch`.
 - Live play list, reverse chronological, auto-updating via Convex subscription:
@@ -128,6 +131,7 @@ V1 ships both. v2 keeps both. Selected via `data-layout="list"` or `data-layout=
 Designed for WIDE but SHORT embed slots: homepage sections, blog sidebars, donate-page contexts.
 
 **Recent tab.**
+
 - Tab row stays on top.
 - Four album-art cards in a single horizontal row (desktop); 2-up or 1-up depending on width (responsive).
 - Per card: large square album art (fills card width, ~240-280px) + **inline play-button overlay top-right** (Apple Music API 30-sec preview), below the art: track title (bold), artist, time played, duration (right-aligned).
@@ -142,29 +146,29 @@ Designed for WIDE but SHORT embed slots: homepage sections, blog sidebars, donat
 
 ### Responsive behavior
 
-| Viewport | `list` layout | `grid` layout |
-|----------|---------------|---------------|
-| 1280px+ (desktop) | Full-width list, album art 48px thumbs | 4 cards per row |
-| 768-1279px (tablet) | Full-width list, larger thumbs OK | 2-3 cards, horizontal swipe |
-| <768px (mobile) | List stays vertical, comfortable | Collapses to 1-card-at-a-time swipeable |
+| Viewport            | `list` layout                          | `grid` layout                           |
+| ------------------- | -------------------------------------- | --------------------------------------- |
+| 1280px+ (desktop)   | Full-width list, album art 48px thumbs | 4 cards per row                         |
+| 768-1279px (tablet) | Full-width list, larger thumbs OK      | 2-3 cards, horizontal swipe             |
+| <768px (mobile)     | List stays vertical, comfortable       | Collapses to 1-card-at-a-time swipeable |
 
 ### Config surface (V1 carry-forward, all preserved)
 
-| Attribute | Values | Purpose |
-|-----------|--------|---------|
-| `data-station` | e.g. `hyfin`, `88nine`, `rhythmlab`, `414music` | Which station's playlist |
-| `data-layout` | `list` \| `grid` | Which visual mode |
-| `data-theme` | `auto` \| `light` \| `dark` | Color scheme |
-| `data-compact` | boolean | Tighter density |
-| `data-max-items` | integer | Max plays shown (pre-Load-More) |
-| `data-unlimited-songs` | boolean | No upper bound, lazy-load as scrolled |
-| `data-height` | e.g. `400px`, `auto` | Container height for iframe fallback |
-| `data-show-search` | boolean | Show search input |
-| `data-enable-date-search` | boolean | Show date-range filter |
-| `data-enable-youtube` | boolean | Show preview button (renamed in v2 to `data-enable-preview`, YouTube → Apple Music API; backward-compat alias maintained) |
-| `data-show-header` | boolean | Show title + intro copy |
-| `data-show-load-more` | boolean | Show pagination button |
-| `data-auto-update` | boolean | Subscribe to Convex for live updates (recommend default `true`) |
+| Attribute                 | Values                                          | Purpose                                                                                                                   |
+| ------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `data-station`            | e.g. `hyfin`, `88nine`, `rhythmlab`, `414music` | Which station's playlist                                                                                                  |
+| `data-layout`             | `list` \| `grid`                                | Which visual mode                                                                                                         |
+| `data-theme`              | `auto` \| `light` \| `dark`                     | Color scheme                                                                                                              |
+| `data-compact`            | boolean                                         | Tighter density                                                                                                           |
+| `data-max-items`          | integer                                         | Max plays shown (pre-Load-More)                                                                                           |
+| `data-unlimited-songs`    | boolean                                         | No upper bound, lazy-load as scrolled                                                                                     |
+| `data-height`             | e.g. `400px`, `auto`                            | Container height for iframe fallback                                                                                      |
+| `data-show-search`        | boolean                                         | Show search input                                                                                                         |
+| `data-enable-date-search` | boolean                                         | Show date-range filter                                                                                                    |
+| `data-enable-youtube`     | boolean                                         | Show preview button (renamed in v2 to `data-enable-preview`, YouTube → Apple Music API; backward-compat alias maintained) |
+| `data-show-header`        | boolean                                         | Show title + intro copy                                                                                                   |
+| `data-show-load-more`     | boolean                                         | Show pagination button                                                                                                    |
+| `data-auto-update`        | boolean                                         | Subscribe to Convex for live updates (recommend default `true`)                                                           |
 
 v2 rename: `data-enable-youtube` → `data-enable-preview` (backward-compat alias for old embed codes).
 
@@ -173,12 +177,14 @@ v2 rename: `data-enable-youtube` → `data-enable-preview` (backward-compat alia
 V1 uses `LazyYouTubePreviewButton` which loads a YouTube embed on hover. v2 swaps it for **Apple Music API previews** in our own `<audio>` element.
 
 **Why Apple Music API, not Spotify (revised path):**
+
 - Spotify deprecated `preview_url` for new apps registered after Nov 27, 2024. Even RM's grandfathered status would be a future-risk dependency.
 - Spotify Web Playback SDK is premium-only — cuts out the majority of public-radio listeners.
 - Spotify iframe embed works for everyone but is Spotify-branded — fights the editorial-broadcast design system.
 - Apple Music API, with RM's existing Apple Developer Program membership, gives us reliable preview URLs we play in our own `<audio>` element with full theming control.
 
 **Implementation path:**
+
 1. Enrichment resolves both `spotify_track_id` (kept for canonical metadata + Spotify deep-link) AND `apple_music_song_id` (new, used to fetch preview URL).
 2. Apple Music API call: `GET /v1/catalog/us/songs/{id}` returns `attributes.previews[0].url` — a 30-sec MP3 URL.
 3. Preview button on hover/tap plays that URL in a native `<audio>` element. Stop control + "now previewing" indicator on the active row.
@@ -205,14 +211,17 @@ V1 uses `LazyYouTubePreviewButton` which loads a YouTube embed on hover. v2 swap
 - Premium subscriber upgrade path: Apple MusicKit JS (Apple Music subscribers hear full tracks in-place) AND Spotify Web Playback SDK (Spotify premium subscribers hear full tracks in-place). Both deferred post-MVP (TODO-4). MVP ships with 30-sec previews via Apple Music API for everyone.
 
 ## E. Reserved
-*(section D subsumed what was here; renumbering avoided for stability of backreferences)*
+
+_(section D subsumed what was here; renumbering avoided for stability of backreferences)_
 
 ## F. Reserved
-*(section D subsumed what was here; renumbering avoided for stability of backreferences)*
+
+_(section D subsumed what was here; renumbering avoided for stability of backreferences)_
 
 ## G. Dashboard — Embed Generator (`/widgets` route)
 
 Three-step flow, not a form:
+
 1. **Step 1 — Pick a variant.** Visual picker: 5 cards showing mini-previews of each variant with one-line description. No dropdowns.
 2. **Step 2 — Configure.** Live preview pane on the right, config inputs on the left (station, maxItems, theme: auto/light/dark, show events yes/no, allowedOrigins list). Preview updates instantly.
 3. **Step 3 — Copy your tag.** Three tabs: "One-liner script", "Declarative div", "Programmatic API". Copy-to-clipboard button prominent. Secondary link: "Iframe fallback for CMSes that strip scripts".
@@ -222,6 +231,7 @@ Progress indicator across top. Back/forward navigation on left.
 ## H. Dashboard — Unclassified tracks queue (`/unclassified` route)
 
 Table, one row per unclassified track:
+
 1. **PRIMARY.** Track title + artist (as ingested, pre-enrichment).
 2. **SECONDARY.** Play count + first-seen / last-seen timestamps + station(s) where played.
 3. **TERTIARY.** Action: "Enrich manually" (opens override panel) or "Ignore this artist" (custom-overlay shortcut).
@@ -231,6 +241,7 @@ Top of page: filter chips (station, time range, reason-for-unclassified). Bulk s
 ## I. Dashboard — Custom DJ event creation
 
 Two-column form (not modal, full page):
+
 - Left: event fields (artist search typeahead against canonical artists, venue search, date/time, ticket URL, notes).
 - Right: live preview of how the event will appear in the events-feed widget.
 
@@ -241,6 +252,7 @@ Submit button bottom-right with live validation.
 List view of prior reports at top; "Generate new report" panel below.
 
 Generate panel:
+
 1. **PRIMARY.** Report type picker (SoundExchange / CPB / PRO / diversity).
 2. **SECONDARY.** Date range (defaults to current quarter for SoundExchange).
 3. **TERTIARY.** Station filter (default: all stations).
@@ -277,12 +289,12 @@ That 5-year outcome is the one unique thing this product can do that Spotify/App
 
 The journey a music director runs multiple times per week.
 
-| Step | Action | UI surface | Friction budget |
-|------|--------|------------|-----------------|
-| 1 | See a wrong track on dashboard | Dashboard home | 0 clicks — it's already visible |
-| 2 | Click into the unclassified or wrong entry | Unclassified queue OR station-detail view | 1 click |
-| 3 | Fix artist/title via override | Override panel (overlays the row in place, no modal) | 1 click + typing |
-| 4 | See the fix propagate | Row updates live; dashboard card reflects within ~2s via Convex subscription | 0 clicks |
+| Step | Action                                     | UI surface                                                                   | Friction budget                 |
+| ---- | ------------------------------------------ | ---------------------------------------------------------------------------- | ------------------------------- |
+| 1    | See a wrong track on dashboard             | Dashboard home                                                               | 0 clicks — it's already visible |
+| 2    | Click into the unclassified or wrong entry | Unclassified queue OR station-detail view                                    | 1 click                         |
+| 3    | Fix artist/title via override              | Override panel (overlays the row in place, no modal)                         | 1 click + typing                |
+| 4    | See the fix propagate                      | Row updates live; dashboard card reflects within ~2s via Convex subscription | 0 clicks                        |
 
 Goal: 3 clicks maximum from dashboard to fixed row. If current design exceeds 3, redesign the override affordance.
 
@@ -301,7 +313,7 @@ Goal: 3 clicks maximum from dashboard to fixed row. If current design exceeds 3,
 
 ## Approved Mockups
 
-| Screen/Section | Mockup Path | Direction | Notes |
-|----------------|-------------|-----------|-------|
-| Operator dashboard home | ~/.gstack/projects/rm-playlist-v2/designs/dashboard-home-20260422/variant-B.png | Dark, calm Linear/Vercel aesthetic, 4-station wall-of-status, single amber accent | Approved 2026-04-22. "PM" in top-right resolved to role label. Mockup typo "SounmExchange" is image-gen artifact, not a design choice. |
-| Widget now-playing-card | ~/.gstack/projects/rm-playlist-v2/designs/widget-now-playing-card-20260422/variant-C.png | Editorial light-mode card embedded in host-page chrome, NPR-adjacent feel, LIVE event row visible | Approved 2026-04-22. Inherits host typography. LIVE row is the differentiator and stays visible by default. |
+| Screen/Section          | Mockup Path                                                                              | Direction                                                                                         | Notes                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Operator dashboard home | ~/.gstack/projects/rm-playlist-v2/designs/dashboard-home-20260422/variant-B.png          | Dark, calm Linear/Vercel aesthetic, 4-station wall-of-status, single amber accent                 | Approved 2026-04-22. "PM" in top-right resolved to role label. Mockup typo "SounmExchange" is image-gen artifact, not a design choice. |
+| Widget now-playing-card | ~/.gstack/projects/rm-playlist-v2/designs/widget-now-playing-card-20260422/variant-C.png | Editorial light-mode card embedded in host-page chrome, NPR-adjacent feel, LIVE event row visible | Approved 2026-04-22. Inherits host typography. LIVE row is the differentiator and stays visible by default.                            |

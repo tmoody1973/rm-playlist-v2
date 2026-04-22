@@ -9,21 +9,25 @@ Specific heuristics, string handlers, and workarounds V1 accumulated that V2 mus
 Source: `supabase/functions/youtube-search/search-utils.ts`, `youtube-api.ts`
 
 **Artist/song cleanup pattern** (V2 must replicate in enrichment package):
+
 ```typescript
 term
-  .replace(/\(.*?\)/g, '')      // strip (parens content)
-  .replace(/\[.*?\]/g, '')      // strip [bracket content]
-  .replace(/feat\.|ft\.|featuring/gi, '')   // strip featuring indicators
-  .replace(/[^\w\s]/g, ' ')     // strip non-word chars
-  .replace(/\s+/g, ' ').trim()  // normalize whitespace
+  .replace(/\(.*?\)/g, "") // strip (parens content)
+  .replace(/\[.*?\]/g, "") // strip [bracket content]
+  .replace(/feat\.|ft\.|featuring/gi, "") // strip featuring indicators
+  .replace(/[^\w\s]/g, " ") // strip non-word chars
+  .replace(/\s+/g, " ")
+  .trim(); // normalize whitespace
 ```
 
 **Artist name variations** — try all:
+
 - Original: `"The Beatles"`
 - Cleaned: `"Beatles"`
 - Abbreviated: strip `.` and leading `The ` → `"Beatles"`
 
 **Query sequence (in order, stop on excellent match):**
+
 1. `${cleanArtist} ${cleanSong}`
 2. `${artist} ${song}` (raw)
 3. `${cleanSong} ${cleanArtist}` (reversed)
@@ -88,6 +92,7 @@ Note: the `- Topic` channels are YouTube's auto-generated artist channels — hi
 Source: `supabase/functions/ticketmaster-events/utils/filtering.ts`
 
 **Single-word artist names** (e.g. "Omar", "Prince", "Sault") are a minefield. V1 hard-codes strict match rules:
+
 - Event name must exactly equal artist name, OR
 - Event name must start with `artist + ' '` / `artist + ':'` / `artist + ' -'` / `artist + ' |'`, OR
 - Event name must end with `' ' + artist`, OR
@@ -97,10 +102,13 @@ Source: `supabase/functions/ticketmaster-events/utils/filtering.ts`
 **Multi-word artist names:** bidirectional `startsWith` check (artist startsWith event OR event startsWith artist) after non-alphanumeric normalization.
 
 **Normalization for both:**
+
 ```typescript
-name.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')  // strip special chars (handles "NxWorries" vs "NXworries")
-    .replace(/\s+/g, ' ').trim()
+name
+  .toLowerCase()
+  .replace(/[^a-z0-9\s]/g, "") // strip special chars (handles "NxWorries" vs "NXworries")
+  .replace(/\s+/g, " ")
+  .trim();
 ```
 
 V2: fold this into `packages/enrichment/src/normalize.ts`'s `artistKey()` path. Brainstorm flags this as open question #11 — this file is the answer for the common cases.
@@ -143,9 +151,10 @@ Query params in use:
 ## 7. Theme isolation (V1 brute force — V2 uses shadow DOM instead)
 
 V1 does this to escape host-page CSS:
+
 ```typescript
-document.documentElement.className = '';
-document.body.className = '';
+document.documentElement.className = "";
+document.body.className = "";
 // then forcibly injects CSS vars and scrollbar styles via style element
 ```
 
@@ -156,6 +165,7 @@ V2: shadow DOM inside widget root. Host CSS can't bleed in. CSS custom propertie
 Source: `src/utils/playlistHelpers.ts`
 
 Only the FIRST item in the live feed (index 0) shows as "now playing," and only when:
+
 - No active filters (no search, no date filter)
 - `timeSinceStart >= -twoMinutesInMs` (2-min grace for clock drift)
 - AND `timeSinceStart <= maxTimeWindow` (configured max window)
@@ -170,6 +180,7 @@ Without `duration`: use `defaultMaxDurationMs` (typical song length).
 Source: `src/services/spinDataService.ts`
 
 Order of operations when user searches:
+
 1. **Database-first:** ILIKE on `song | artist | release` in local `songs` table (full-text via gin).
 2. If no DB results AND user has search term → hit Spinitron API via `spinitron-proxy`.
 3. If Spinitron API fails → fall back to older DB rows in same station (last 14 days or similar).
@@ -194,6 +205,7 @@ create table api_cache (
 ```
 
 Cache keys in use (found via grep of function source):
+
 - `related:spotify:{track_id}`
 - `related:artist:{artist}:{song}`
 - Ticketmaster events per artist
@@ -239,7 +251,10 @@ Source: `supabase/functions/spinitron-proxy/index.ts:74`
 
 ```typescript
 const { data: stationData } = await supabase
-  .from('stations').select('*').eq('id', stationId).single();
+  .from("stations")
+  .select("*")
+  .eq("id", stationId)
+  .single();
 
 const apiKey = Deno.env.get(stationData.api_key_secret_name);
 // stationData.api_key_secret_name is e.g. "HYFIN_SPINITRON_KEY"
@@ -250,6 +265,7 @@ V2 translation: `ingestionSources.config.apiKeyRef = "HYFIN_SPINITRON_KEY"` → 
 ## 14. Known-TODO inventory in V1
 
 Only one live TODO found:
+
 - `src/components/admin/ManualSongsList.tsx:184` — "Implement edit functionality" (manual song edit UI not yet built)
 
 V2 equivalent (overlay UI in Weeks 9-12 per brainstorm) supersedes this.

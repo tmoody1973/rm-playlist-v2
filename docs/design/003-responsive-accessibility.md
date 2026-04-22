@@ -14,46 +14,46 @@ RM's audience skews older than typical web product audiences. CPB underwrites pu
 
 ## Viewport breakpoints (project-wide)
 
-| Breakpoint | Range | Primary contexts |
-|------------|-------|------------------|
-| `mobile` | <640px | Phone portrait |
-| `tablet` | 640-1023px | Phone landscape, tablet portrait |
-| `desktop` | 1024-1439px | Tablet landscape, small laptop, embed in narrow article column |
-| `wide` | ≥1440px | Full laptop, external monitor, dashboard primary use |
+| Breakpoint | Range       | Primary contexts                                               |
+| ---------- | ----------- | -------------------------------------------------------------- |
+| `mobile`   | <640px      | Phone portrait                                                 |
+| `tablet`   | 640-1023px  | Phone landscape, tablet portrait                               |
+| `desktop`  | 1024-1439px | Tablet landscape, small laptop, embed in narrow article column |
+| `wide`     | ≥1440px     | Full laptop, external monitor, dashboard primary use           |
 
 Widgets are tested against ALL four. Dashboard's required floor is `desktop` (operators are at desks); `tablet` and `mobile` should degrade gracefully but not be the optimization target.
 
 ## A. Operator dashboard responsive behavior
 
-| Region | Wide (≥1440) | Desktop (1024-1439) | Tablet (640-1023) | Mobile (<640) |
-|--------|--------------|---------------------|--------------------|---------------|
-| Sidebar | Full icon nav, persistent | Persistent | Collapses to top hamburger menu | Top hamburger menu |
-| Top bar | Full | Full | Full | Logo + role indicator only |
-| Station card row | 4-up grid | 4-up grid (cards narrow) | 2x2 grid | 1-up stacked |
-| Reports + Needs Attention | Side-by-side | Side-by-side | Stacked, Reports first | Stacked, Reports first |
-| Upcoming from rotation | 2-column | 2-column | 1-column | 1-column |
+| Region                    | Wide (≥1440)              | Desktop (1024-1439)      | Tablet (640-1023)               | Mobile (<640)              |
+| ------------------------- | ------------------------- | ------------------------ | ------------------------------- | -------------------------- |
+| Sidebar                   | Full icon nav, persistent | Persistent               | Collapses to top hamburger menu | Top hamburger menu         |
+| Top bar                   | Full                      | Full                     | Full                            | Logo + role indicator only |
+| Station card row          | 4-up grid                 | 4-up grid (cards narrow) | 2x2 grid                        | 1-up stacked               |
+| Reports + Needs Attention | Side-by-side              | Side-by-side             | Stacked, Reports first          | Stacked, Reports first     |
+| Upcoming from rotation    | 2-column                  | 2-column                 | 1-column                        | 1-column                   |
 
 **Mobile-specific concession:** the dashboard at <640px is "use it in a pinch on a phone, not a primary surface." If the music director needs to fix something on the road, it works. We don't add mobile-only features.
 
 ## B. Widget `playlist` — list layout responsive
 
-| Element | Wide | Desktop | Tablet | Mobile |
-|---------|------|---------|--------|--------|
-| Tab row | Horizontal full-width | Horizontal | Horizontal scrollable | Horizontal scrollable |
-| Search input | Full-width | Full-width | Full-width | Full-width |
-| Date filter | Inline with search | Inline | Below search | Below search |
-| Play row | Single row, all metadata | Single row | Single row, label may truncate | Stacked: art + (track / artist / time) |
-| Inline concert card | Full-width inset | Full-width inset | Full-width inset | Full-width inset, smaller padding |
-| Load more | Centered button | Centered | Centered | Full-width |
+| Element             | Wide                     | Desktop          | Tablet                         | Mobile                                 |
+| ------------------- | ------------------------ | ---------------- | ------------------------------ | -------------------------------------- |
+| Tab row             | Horizontal full-width    | Horizontal       | Horizontal scrollable          | Horizontal scrollable                  |
+| Search input        | Full-width               | Full-width       | Full-width                     | Full-width                             |
+| Date filter         | Inline with search       | Inline           | Below search                   | Below search                           |
+| Play row            | Single row, all metadata | Single row       | Single row, label may truncate | Stacked: art + (track / artist / time) |
+| Inline concert card | Full-width inset         | Full-width inset | Full-width inset               | Full-width inset, smaller padding      |
+| Load more           | Centered button          | Centered         | Centered                       | Full-width                             |
 
 ## C. Widget `playlist` — grid layout responsive
 
-| Element | Wide | Desktop | Tablet | Mobile |
-|---------|------|---------|--------|--------|
-| Cards per row | 4 | 4 (narrower) | 2 | 1, swipeable |
-| Card art ratio | 1:1 | 1:1 | 1:1 | 1:1 |
-| Card metadata under art | Full | Full | Truncate album field | Track + artist only |
-| Tab row | Same as list | Same | Same | Same |
+| Element                 | Wide         | Desktop      | Tablet               | Mobile              |
+| ----------------------- | ------------ | ------------ | -------------------- | ------------------- |
+| Cards per row           | 4            | 4 (narrower) | 2                    | 1, swipeable        |
+| Card art ratio          | 1:1          | 1:1          | 1:1                  | 1:1                 |
+| Card metadata under art | Full         | Full         | Truncate album field | Track + artist only |
+| Tab row                 | Same as list | Same         | Same                 | Same                |
 
 ## D. Widget `now-playing-card` responsive
 
@@ -141,25 +141,25 @@ When a new track plays, the station card's `aria-live="polite"` region announces
 
 ## Content edge cases
 
-| Edge | Behavior |
-|------|----------|
-| Artist name 47+ chars | Wraps at word boundary in `list` layout; truncates with ellipsis + tooltip in `now-playing-strip` |
-| Non-Latin script (Korean/Japanese pop on HYFIN) | Renders correctly with system fallback fonts; no romanization fallback |
-| Right-to-left scripts | Mirror the layout via CSS logical properties from day one (cheap when designed for, painful to retrofit) |
-| Missing album art | Muted music-glyph placeholder (NOT a broken image icon) |
-| Track has no Spotify ID | Preview button absent (graceful absence, not disabled state) |
-| Show name in 88Nine schedule >40 chars | Wrap, don't truncate (schedule is informational) |
+| Edge                                            | Behavior                                                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Artist name 47+ chars                           | Wraps at word boundary in `list` layout; truncates with ellipsis + tooltip in `now-playing-strip`        |
+| Non-Latin script (Korean/Japanese pop on HYFIN) | Renders correctly with system fallback fonts; no romanization fallback                                   |
+| Right-to-left scripts                           | Mirror the layout via CSS logical properties from day one (cheap when designed for, painful to retrofit) |
+| Missing album art                               | Muted music-glyph placeholder (NOT a broken image icon)                                                  |
+| Track has no Spotify ID                         | Preview button absent (graceful absence, not disabled state)                                             |
+| Show name in 88Nine schedule >40 chars          | Wrap, don't truncate (schedule is informational)                                                         |
 
 ## Verification gates
 
-| Gate | Check | When |
-|------|-------|------|
-| Storybook a11y addon | All components pass axe in isolation | Per-component CI |
-| axe-core full-page audit | Dashboard + every widget + embed generator | Per-PR CI |
-| Keyboard-only manual smoke | All flows runnable without mouse | Pre-shakedown release |
-| Screen reader pass (NVDA + VoiceOver) | All flows narrate sensibly | Pre-shakedown release |
-| Contrast audit | Real CSS tokens checked against AA | Per-PR CI (linter) |
-| Reduced-motion test | `prefers-reduced-motion` honored everywhere | Pre-shakedown release |
+| Gate                                  | Check                                       | When                  |
+| ------------------------------------- | ------------------------------------------- | --------------------- |
+| Storybook a11y addon                  | All components pass axe in isolation        | Per-component CI      |
+| axe-core full-page audit              | Dashboard + every widget + embed generator  | Per-PR CI             |
+| Keyboard-only manual smoke            | All flows runnable without mouse            | Pre-shakedown release |
+| Screen reader pass (NVDA + VoiceOver) | All flows narrate sensibly                  | Pre-shakedown release |
+| Contrast audit                        | Real CSS tokens checked against AA          | Per-PR CI (linter)    |
+| Reduced-motion test                   | `prefers-reduced-motion` honored everywhere | Pre-shakedown release |
 
 ## Rating recovery
 

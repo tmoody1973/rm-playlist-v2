@@ -27,15 +27,15 @@ The Radio Milwaukee use case is the reference implementation: one org, four stre
 
 ## Stack decision
 
-| Concern | Tool | Why |
-|---------|------|-----|
-| Data, real-time queries, auth context | **Convex** | Real-time subscriptions are the product's headline feature (live widgets). TypeScript-end-to-end. Already in use for Crate and Deskside, so stack-consistent. |
-| Multi-tenant auth, orgs, roles | **Clerk Organizations** | One org per station (not per station-group), members with roles (admin/editor/viewer), org-scoped API keys for embeds. |
-| Scheduled ingestion (API sources) | **Trigger.dev** | Multi-tenant schedules via `externalId`, concurrency keys for external API rate limits, durable retries with checkpointing, OTel-powered observability. |
-| Enrichment pipeline | **Trigger.dev** | `queue: { concurrencyLimit: 1 }` on a `"musicbrainz"` key globally rate-limits every tenant's enrichment across the whole product. |
-| Events ingestion (Ticketmaster, AXS) | **Trigger.dev** | Scheduled tasks, per-region queries, concurrency keys for API rate limits. Events change slowly (every 6h is fine); not real-time. |
-| Persistent stream connections (ICY) | **Fly.io** | Trigger.dev isn't designed for 24/7 open sockets. One small Fly worker (shared-cpu-1x, ~$2-3/mo) holds all ICY sockets across all tenants, auto-discovers new sources via Convex subscription. |
-| Frontend | **Next.js 15** | Pairs natively with Clerk and Convex. |
+| Concern                               | Tool                    | Why                                                                                                                                                                                            |
+| ------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Data, real-time queries, auth context | **Convex**              | Real-time subscriptions are the product's headline feature (live widgets). TypeScript-end-to-end. Already in use for Crate and Deskside, so stack-consistent.                                  |
+| Multi-tenant auth, orgs, roles        | **Clerk Organizations** | One org per station (not per station-group), members with roles (admin/editor/viewer), org-scoped API keys for embeds.                                                                         |
+| Scheduled ingestion (API sources)     | **Trigger.dev**         | Multi-tenant schedules via `externalId`, concurrency keys for external API rate limits, durable retries with checkpointing, OTel-powered observability.                                        |
+| Enrichment pipeline                   | **Trigger.dev**         | `queue: { concurrencyLimit: 1 }` on a `"musicbrainz"` key globally rate-limits every tenant's enrichment across the whole product.                                                             |
+| Events ingestion (Ticketmaster, AXS)  | **Trigger.dev**         | Scheduled tasks, per-region queries, concurrency keys for API rate limits. Events change slowly (every 6h is fine); not real-time.                                                             |
+| Persistent stream connections (ICY)   | **Fly.io**              | Trigger.dev isn't designed for 24/7 open sockets. One small Fly worker (shared-cpu-1x, ~$2-3/mo) holds all ICY sockets across all tenants, auto-discovers new sources via Convex subscription. |
+| Frontend                              | **Next.js 15**          | Pairs natively with Clerk and Convex.                                                                                                                                                          |
 
 **What's explicitly NOT being used for v2:** Supabase (migrating off), Lovable (graduating out), per-station VMs (the Fly worker is one process for everyone).
 
@@ -53,6 +53,7 @@ The Radio Milwaukee use case is the reference implementation: one org, four stre
 Open: alternative is "one org with multiple stations." Decide when Clerk's org-switching UX feels right for the user flow. Current default: **one org per station**.
 
 Roles (Clerk-native):
+
 - `admin` — manage API keys, embeds, members, ingestion sources
 - `editor` — correct metadata, flag tracks, manage widget configs
 - `viewer` — dashboard access only
@@ -72,9 +73,10 @@ export default defineSchema({
   organizations: defineTable({
     clerkOrgId: v.string(),
     name: v.string(),
-    slug: v.string(),                // "hyfin", "88nine"
+    slug: v.string(), // "hyfin", "88nine"
     plan: v.union(v.literal("free"), v.literal("pro")),
-  }).index("by_clerk_id", ["clerkOrgId"])
+  })
+    .index("by_clerk_id", ["clerkOrgId"])
     .index("by_slug", ["slug"]),
 
   stations: defineTable({
@@ -82,13 +84,14 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(),
     timezone: v.string(),
-    brandConfig: v.optional(v.any()),   // colors, logo, for widget theming
-  }).index("by_org", ["orgId"])
+    brandConfig: v.optional(v.any()), // colors, logo, for widget theming
+  })
+    .index("by_org", ["orgId"])
     .index("by_slug", ["slug"]),
 
   ingestionSources: defineTable({
     stationId: v.id("stations"),
-    orgId: v.id("organizations"),       // denormalized for fast queries
+    orgId: v.id("organizations"), // denormalized for fast queries
     kind: v.union(
       v.literal("spinitron"),
       v.literal("sgmetadata"),
@@ -100,16 +103,17 @@ export default defineSchema({
       v.literal("azuracast"),
       v.literal("radioco"),
     ),
-    config: v.any(),                    // kind-specific shape
-    priority: v.number(),               // 1=primary, 2=secondary
+    config: v.any(), // kind-specific shape
+    priority: v.number(), // 1=primary, 2=secondary
     role: v.union(
-      v.literal("authoritative"),       // writes plays directly
-      v.literal("supplementary"),       // fills gaps only
-      v.literal("verification"),        // compares, doesn't write
+      v.literal("authoritative"), // writes plays directly
+      v.literal("supplementary"), // fills gaps only
+      v.literal("verification"), // compares, doesn't write
     ),
     enabled: v.boolean(),
     lastSeenAt: v.optional(v.number()),
-  }).index("by_station", ["stationId"])
+  })
+    .index("by_station", ["stationId"])
     .index("by_station_enabled", ["stationId", "enabled"])
     .index("by_kind_enabled", ["kind", "enabled"]),
 
@@ -117,21 +121,26 @@ export default defineSchema({
     orgId: v.id("organizations"),
     stationId: v.id("stations"),
     sourceId: v.id("ingestionSources"), // which source reported this
-    artist: v.string(),                 // as-reported, preserved for audit
-    track: v.string(),                  // as-reported
+    artist: v.string(), // as-reported, preserved for audit
+    track: v.string(), // as-reported
     album: v.optional(v.string()),
     rawTitle: v.string(),
-    artistKey: v.string(),              // FK to artists.artistKey — join to canonical
-    trackKey: v.string(),               // FK to tracks.trackKey
+    artistKey: v.string(), // FK to artists.artistKey — join to canonical
+    trackKey: v.string(), // FK to tracks.trackKey
     playedAt: v.number(),
     segmentType: v.optional(v.string()),
-    alternates: v.optional(v.array(v.object({
-      sourceId: v.id("ingestionSources"),
-      artist: v.string(),
-      track: v.string(),
-      playedAt: v.number(),
-    }))),
-  }).index("by_station_recent", ["stationId", "playedAt"])
+    alternates: v.optional(
+      v.array(
+        v.object({
+          sourceId: v.id("ingestionSources"),
+          artist: v.string(),
+          track: v.string(),
+          playedAt: v.number(),
+        }),
+      ),
+    ),
+  })
+    .index("by_station_recent", ["stationId", "playedAt"])
     .index("by_org_recent", ["orgId", "playedAt"])
     .index("by_artist_key", ["artistKey", "playedAt"])
     .index("by_track_key", ["trackKey", "playedAt"])
@@ -147,8 +156,8 @@ export default defineSchema({
   // stations benefit.
 
   artists: defineTable({
-    artistKey: v.string(),              // normalized join key
-    name: v.string(),                   // canonical display name
+    artistKey: v.string(), // normalized join key
+    name: v.string(), // canonical display name
     aliases: v.optional(v.array(v.string())),
 
     // External IDs
@@ -160,15 +169,17 @@ export default defineSchema({
 
     // Descriptive
     bio: v.optional(v.string()),
-    bioSource: v.optional(v.string()),   // "wikipedia" | "musicbrainz" | "curated"
+    bioSource: v.optional(v.string()), // "wikipedia" | "musicbrainz" | "curated"
     bioUpdatedAt: v.optional(v.number()),
     genres: v.optional(v.array(v.string())),
     hometown: v.optional(v.string()),
     country: v.optional(v.string()),
-    activeYears: v.optional(v.object({
-      start: v.number(),
-      end: v.optional(v.number()),
-    })),
+    activeYears: v.optional(
+      v.object({
+        start: v.number(),
+        end: v.optional(v.number()),
+      }),
+    ),
 
     // Demographics (for public-radio reporting)
     gender: v.optional(v.string()),
@@ -181,16 +192,17 @@ export default defineSchema({
 
     // Provenance
     enrichedAt: v.number(),
-    sources: v.array(v.string()),        // ["musicbrainz","discogs","curated"]
-    confidence: v.number(),              // 0–1
-  }).index("by_key", ["artistKey"])
+    sources: v.array(v.string()), // ["musicbrainz","discogs","curated"]
+    confidence: v.number(), // 0–1
+  })
+    .index("by_key", ["artistKey"])
     .index("by_mbid", ["mbid"]),
 
   tracks: defineTable({
-    trackKey: v.string(),                // `${artistKey}:::${titleKey}`
-    artistKey: v.string(),               // FK to artists
+    trackKey: v.string(), // `${artistKey}:::${titleKey}`
+    artistKey: v.string(), // FK to artists
     title: v.string(),
-    canonicalTitle: v.string(),          // stripped of "(feat. X)", "(Remastered)"
+    canonicalTitle: v.string(), // stripped of "(feat. X)", "(Remastered)"
 
     // Recording identifiers
     isrc: v.optional(v.string()),
@@ -223,7 +235,8 @@ export default defineSchema({
     enrichedAt: v.number(),
     sources: v.array(v.string()),
     confidence: v.number(),
-  }).index("by_key", ["trackKey"])
+  })
+    .index("by_key", ["trackKey"])
     .index("by_artist_key", ["artistKey"])
     .index("by_isrc", ["isrc"]),
 
@@ -273,8 +286,8 @@ export default defineSchema({
   artistOverlays: defineTable({
     orgId: v.id("organizations"),
     artistKey: v.string(),
-    fields: v.any(),                     // partial override
-    reason: v.optional(v.string()),      // "local-artist spotlight", "DJ correction"
+    fields: v.any(), // partial override
+    reason: v.optional(v.string()), // "local-artist spotlight", "DJ correction"
     createdBy: v.string(),
     updatedAt: v.number(),
   }).index("by_org_artist", ["orgId", "artistKey"]),
@@ -295,7 +308,7 @@ export default defineSchema({
     orgId: v.id("organizations"),
     artistKey: v.string(),
     note: v.string(),
-    kind: v.optional(v.string()),        // "contact", "programming", "rotation", "general"
+    kind: v.optional(v.string()), // "contact", "programming", "rotation", "general"
     createdBy: v.string(),
     createdAt: v.number(),
   }).index("by_org_artist", ["orgId", "artistKey"]),
@@ -311,15 +324,12 @@ export default defineSchema({
     field: v.string(),
     proposedValue: v.any(),
     supportingOrgs: v.array(v.id("organizations")),
-    status: v.union(
-      v.literal("open"),
-      v.literal("accepted"),
-      v.literal("rejected"),
-    ),
+    status: v.union(v.literal("open"), v.literal("accepted"), v.literal("rejected")),
     createdAt: v.number(),
     resolvedAt: v.optional(v.number()),
     resolvedBy: v.optional(v.string()),
-  }).index("by_status", ["status"])
+  })
+    .index("by_status", ["status"])
     .index("by_entity", ["entityType", "entityKey"]),
 
   apiKeys: defineTable({
@@ -328,7 +338,8 @@ export default defineSchema({
     hashedKey: v.string(),
     scopes: v.array(v.string()),
     lastUsedAt: v.optional(v.number()),
-  }).index("by_org", ["orgId"])
+  })
+    .index("by_org", ["orgId"])
     .index("by_hash", ["hashedKey"]),
 
   ingestionEvents: defineTable({
@@ -349,40 +360,33 @@ export default defineSchema({
   stationRegions: defineTable({
     stationId: v.id("stations"),
     orgId: v.id("organizations"),
-    name: v.string(),                   // "Milwaukee metro", "Madison"
+    name: v.string(), // "Milwaukee metro", "Madison"
     kind: v.union(
-      v.literal("dma"),                 // Ticketmaster dmaId
-      v.literal("radius"),              // lat/long + miles
-      v.literal("venue_list"),          // explicit venues (AXS pre-filtered)
-      v.literal("state"),               // state code
+      v.literal("dma"), // Ticketmaster dmaId
+      v.literal("radius"), // lat/long + miles
+      v.literal("venue_list"), // explicit venues (AXS pre-filtered)
+      v.literal("state"), // state code
     ),
-    config: v.any(),                    // { dmaId }, { lat, lng, radiusMiles }, { venueIds }, { stateCode }
-    priority: v.number(),               // 1 = primary, 2+ = secondary
+    config: v.any(), // { dmaId }, { lat, lng, radiusMiles }, { venueIds }, { stateCode }
+    priority: v.number(), // 1 = primary, 2+ = secondary
     enabled: v.boolean(),
   }).index("by_station", ["stationId"]),
 
   eventSources: defineTable({
     orgId: v.id("organizations"),
-    stationId: v.optional(v.id("stations")),  // null = org-wide
-    kind: v.union(
-      v.literal("ticketmaster"),
-      v.literal("axs"),
-      v.literal("custom"),
-    ),
-    config: v.any(),                    // API keys, venue allowlist, etc.
+    stationId: v.optional(v.id("stations")), // null = org-wide
+    kind: v.union(v.literal("ticketmaster"), v.literal("axs"), v.literal("custom")),
+    config: v.any(), // API keys, venue allowlist, etc.
     enabled: v.boolean(),
-  }).index("by_org", ["orgId"])
+  })
+    .index("by_org", ["orgId"])
     .index("by_kind_enabled", ["kind", "enabled"]),
 
   events: defineTable({
     orgId: v.id("organizations"),
     stationId: v.id("stations"),
-    source: v.union(
-      v.literal("ticketmaster"),
-      v.literal("axs"),
-      v.literal("custom"),
-    ),
-    sourceEventId: v.optional(v.string()),  // external ID for dedup & updates
+    source: v.union(v.literal("ticketmaster"), v.literal("axs"), v.literal("custom")),
+    sourceEventId: v.optional(v.string()), // external ID for dedup & updates
     title: v.string(),
     venue: v.string(),
     venueExternalId: v.optional(v.string()),
@@ -405,11 +409,12 @@ export default defineSchema({
       v.literal("postponed"),
       v.literal("sold_out"),
     ),
-    createdBy: v.optional(v.string()),  // Clerk user id, for custom events
-    duplicateOf: v.optional(v.id("events")),  // set when AXS supersedes TM for same show
-    lastSeenAt: v.number(),             // last time ingestion saw this event
+    createdBy: v.optional(v.string()), // Clerk user id, for custom events
+    duplicateOf: v.optional(v.id("events")), // set when AXS supersedes TM for same show
+    lastSeenAt: v.number(), // last time ingestion saw this event
     updatedAt: v.number(),
-  }).index("by_station_upcoming", ["stationId", "startsAt"])
+  })
+    .index("by_station_upcoming", ["stationId", "startsAt"])
     .index("by_org_upcoming", ["orgId", "startsAt"])
     .index("by_source_external", ["source", "sourceEventId"])
     .searchIndex("search_events", {
@@ -419,16 +424,13 @@ export default defineSchema({
 
   eventArtists: defineTable({
     eventId: v.id("events"),
-    stationId: v.id("stations"),        // denormalized for cross-lookup queries
+    stationId: v.id("stations"), // denormalized for cross-lookup queries
     orgId: v.id("organizations"),
-    artistKey: v.string(),              // normalized, same key as plays/enrichments
-    artistName: v.string(),             // display-friendly
-    role: v.union(
-      v.literal("headliner"),
-      v.literal("support"),
-      v.literal("special_guest"),
-    ),
-  }).index("by_event", ["eventId"])
+    artistKey: v.string(), // normalized, same key as plays/enrichments
+    artistName: v.string(), // display-friendly
+    role: v.union(v.literal("headliner"), v.literal("support"), v.literal("special_guest")),
+  })
+    .index("by_event", ["eventId"])
     .index("by_artist_station_upcoming", ["artistKey", "stationId"]),
 });
 ```
@@ -459,9 +461,9 @@ export interface NormalizedPlay {
   track: string;
   album?: string;
   rawTitle: string;
-  playedAt: number;            // epoch ms, provider-authoritative when possible
+  playedAt: number; // epoch ms, provider-authoritative when possible
   segmentType?: "music" | "psa" | "promo" | "talk" | "id";
-  externalId?: string;         // provider's play id, for dedup
+  externalId?: string; // provider's play id, for dedup
   extra?: Record<string, any>;
 }
 
@@ -477,17 +479,17 @@ export interface Adapter {
 
 MVP: **spinitron, sgmetadata, icy.** Everything else is additive.
 
-| Adapter | Mode | Notes |
-|---------|------|-------|
-| `spinitron` | poll | DJ-logged, includes segment type and show context. Per-station API key. |
-| `sgmetadata` | poll | StreamGuys paid service. Requires account API key + scraper UUID per stream. |
-| `icy` | stream | **Universal fallback.** Any stream URL with ICY metadata — StreamGuys streams, self-hosted Icecast/Shoutcast, CDN-fronted. No vendor involvement. |
-| `hls` | poll | ID3 tags in `.ts`/`.aac` segments. Needed for modern simulcasts (NPR apps, iHeart). De-prioritize until requested. |
-| `icecast_status` | poll | Self-hosted Icecast `/status-json.xsl`. |
-| `shoutcast_v1` | poll | Legacy `/7.html`. |
-| `shoutcast_v2` | poll | `/stats?sid=N`. |
-| `azuracast` | poll | `/api/nowplaying`. Growing in community radio. |
-| `radioco` | poll | Public `radio.co/stations/{id}/status`. |
+| Adapter          | Mode   | Notes                                                                                                                                             |
+| ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `spinitron`      | poll   | DJ-logged, includes segment type and show context. Per-station API key.                                                                           |
+| `sgmetadata`     | poll   | StreamGuys paid service. Requires account API key + scraper UUID per stream.                                                                      |
+| `icy`            | stream | **Universal fallback.** Any stream URL with ICY metadata — StreamGuys streams, self-hosted Icecast/Shoutcast, CDN-fronted. No vendor involvement. |
+| `hls`            | poll   | ID3 tags in `.ts`/`.aac` segments. Needed for modern simulcasts (NPR apps, iHeart). De-prioritize until requested.                                |
+| `icecast_status` | poll   | Self-hosted Icecast `/status-json.xsl`.                                                                                                           |
+| `shoutcast_v1`   | poll   | Legacy `/7.html`.                                                                                                                                 |
+| `shoutcast_v2`   | poll   | `/stats?sid=N`.                                                                                                                                   |
+| `azuracast`      | poll   | `/api/nowplaying`. Growing in community radio.                                                                                                    |
+| `radioco`        | poll   | Public `radio.co/stations/{id}/status`.                                                                                                           |
 
 ### Important distinction: `sgmetadata` vs `icy` for StreamGuys streams
 
@@ -519,7 +521,7 @@ export const spinitronAdapter: Adapter = {
 export const SGMetadataConfig = z.object({
   apiKey: z.string(),
   scraperUuid: z.string(),
-  baseUrl: z.string().optional(),    // confirm per-account URL with SG rep
+  baseUrl: z.string().optional(), // confirm per-account URL with SG rep
 });
 
 // packages/ingestion/src/adapters/icy.ts
@@ -530,7 +532,7 @@ export const IcyConfig = z.object({
 
 // packages/ingestion/src/adapters/hls.ts
 export const HlsConfig = z.object({
-  playlistUrl: z.string().url(),     // .m3u8
+  playlistUrl: z.string().url(), // .m3u8
 });
 ```
 
@@ -571,11 +573,16 @@ export const pollSources = schedules.task({
       try {
         const plays = await adapter.poll(src.config);
         await convexPost("/ingest", {
-          sourceId: src._id, stationId: src.stationId, orgId: src.orgId, plays,
+          sourceId: src._id,
+          stationId: src.stationId,
+          orgId: src.orgId,
+          plays,
         });
       } catch (e) {
         await convexPost("/ingestion-events", {
-          sourceId: src._id, kind: "poll_error", detail: { message: String(e) },
+          sourceId: src._id,
+          kind: "poll_error",
+          detail: { message: String(e) },
         });
       }
     }
@@ -623,7 +630,7 @@ A nightly CI job curls a list of public endpoints (Icecast status URLs, public S
 // packages/ingestion/scripts/liveness.ts — runs nightly in CI
 const liveTargets = [
   { kind: "icecast_status", url: "https://stream.somafm.com/status-json.xsl" },
-  { kind: "icy",            url: "https://wyms.streamguys1.com/live" },
+  { kind: "icy", url: "https://wyms.streamguys1.com/live" },
   // ... 10-20 public endpoints per adapter
 ];
 for (const t of liveTargets) {
@@ -660,13 +667,14 @@ export const validateSource = action({
   args: { kind: v.string(), config: v.any() },
   handler: async (ctx, { kind, config }) => {
     const adapter = adapters[kind];
-    const plays = adapter.mode === "poll"
-      ? await adapter.poll(config)
-      : await sampleStreamOnce(adapter, config, 15_000);
+    const plays =
+      adapter.mode === "poll"
+        ? await adapter.poll(config)
+        : await sampleStreamOnce(adapter, config, 15_000);
     return {
       ok: true,
       sample: plays.slice(0, 5),
-      warnings: validatePlays(plays),  // "empty artist on 3/5", etc.
+      warnings: validatePlays(plays), // "empty artist on 3/5", etc.
     };
   },
 });
@@ -689,12 +697,12 @@ During the shakedown, these page Slack. When external stations onboard, each org
 
 SGmetadata as authoritative primary across all four streams; Spinitron as supplementary for segment context; ICY as shadow-mode verification on selected streams for continuous adapter QA:
 
-| Stream | Primary (authoritative) | Supplementary | Verification (shadow) |
-|--------|------------------------|----------------|------------------------|
-| HYFIN | SGmetadata | Spinitron | ICY |
-| 88Nine | SGmetadata | Spinitron | — |
-| Rhythm Lab | SGmetadata | Spinitron | ICY |
-| 414 Music | SGmetadata | Spinitron | — |
+| Stream     | Primary (authoritative) | Supplementary | Verification (shadow) |
+| ---------- | ----------------------- | ------------- | --------------------- |
+| HYFIN      | SGmetadata              | Spinitron     | ICY                   |
+| 88Nine     | SGmetadata              | Spinitron     | —                     |
+| Rhythm Lab | SGmetadata              | Spinitron     | ICY                   |
+| 414 Music  | SGmetadata              | Spinitron     | —                     |
 
 Radio Milwaukee gets best-quality data; the product gets a continuous test harness for the universal-fallback `icy` adapter with SGmetadata as ground truth.
 
@@ -713,8 +721,6 @@ Email StreamGuys rep now (lead time is a few days):
 Build the `sgmetadata` adapter against published docs + fixtures while waiting; swap in credentials when they land.
 
 ---
-
-
 
 ---
 
@@ -759,7 +765,7 @@ import { schedules } from "@trigger.dev/sdk";
 
 export const pollSpinitron = schedules.task({
   id: "poll-spinitron",
-  cron: "*/20 * * * * *",            // every 20s
+  cron: "*/20 * * * * *", // every 20s
   maxDuration: 60,
   run: async () => {
     const sources = await convexFetch("/sources/by-kind/spinitron");
@@ -770,7 +776,7 @@ export const pollSpinitron = schedules.task({
 async function pollOne(source) {
   const r = await fetch(
     `https://spinitron.com/api/spins?station=${source.config.stationId}&count=5`,
-    { headers: { Authorization: `Bearer ${source.config.apiKey}` }}
+    { headers: { Authorization: `Bearer ${source.config.apiKey}` } },
   );
   const { items } = await r.json();
   if (!items?.length) return;
@@ -778,12 +784,12 @@ async function pollOne(source) {
     sourceId: source._id,
     stationId: source.stationId,
     orgId: source.orgId,
-    plays: items.map(i => ({
+    plays: items.map((i) => ({
       artist: i.artist,
       track: i.song,
       album: i.release,
       rawTitle: `${i.artist} - ${i.song}`,
-      playedAt: new Date(i.start).getTime(),  // provider timestamp is authoritative
+      playedAt: new Date(i.start).getTime(), // provider timestamp is authoritative
       segmentType: i.type,
     })),
   });
@@ -803,7 +809,7 @@ const convex = new ConvexClient(process.env.CONVEX_URL!);
 const connections = new Map<string, AbortController>();
 
 convex.onUpdate(api.sources.streamSources, {}, (sources) => {
-  const activeIds = new Set(sources.map(s => s._id));
+  const activeIds = new Set(sources.map((s) => s._id));
 
   // Close connections for sources no longer active
   for (const [id, ctrl] of connections) {
@@ -818,7 +824,7 @@ convex.onUpdate(api.sources.streamSources, {}, (sources) => {
     if (!connections.has(source._id)) {
       const ctrl = new AbortController();
       connections.set(source._id, ctrl);
-      streamLoop(source, ctrl.signal).catch(err => {
+      streamLoop(source, ctrl.signal).catch((err) => {
         console.error(`stream ${source._id} died:`, err);
         connections.delete(source._id);
       });
@@ -843,13 +849,13 @@ async function streamLoop(source, signal: AbortSignal) {
             artist: np.artist,
             track: np.track,
             rawTitle: np.rawTitle,
-            playedAt: Date.now(),       // exact moment of change
+            playedAt: Date.now(), // exact moment of change
           }),
         });
       }
     } catch (e) {
       if (signal.aborted) return;
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, 5000));
     }
   }
 }
@@ -900,7 +906,8 @@ function splitTitle(t: string): [string, string] {
 
 function concat(a: Uint8Array, b: Uint8Array) {
   const out = new Uint8Array(a.length + b.length);
-  out.set(a, 0); out.set(b, a.length);
+  out.set(a, 0);
+  out.set(b, a.length);
   return out;
 }
 ```
@@ -922,6 +929,7 @@ Rules (draft — needs refinement):
 5. **Silence alarm:** if a source hasn't reported in > expected interval × 3, fire `source_silent` event, surface in dashboard.
 
 Open questions for later:
+
 - What's the right tolerance window for "same play"?
 - When sources disagree, should dashboard show the authoritative version or a "merged" view?
 - Is there a station-configurable tie-breaking rule (e.g., "Spinitron wins for metadata, ICY wins for timestamp")?
@@ -942,20 +950,20 @@ This is why the schema has **three layers** for music reference data:
 
 The principle: **if another station would benefit from knowing this, it's shared; if it's editorial/relational/private, it's per-tenant.**
 
-| Field | Layer | Reasoning |
-|-------|-------|-----------|
-| MBID, ISRC, Spotify/Apple IDs | canonical | Factual, immutable, identifier data |
-| Canonical name, aliases | canonical | One truth |
-| Bio (Wikipedia, MusicBrainz source) | canonical | Public-domain / permissively-licensed facts |
-| Discography, release dates, labels | canonical | Same |
-| Public social links (Bandcamp, IG, Spotify) | canonical | Public-facing, non-controversial |
-| YouTube video ID for playback preview | canonical | Expensive to search per-tenant; same result everywhere |
-| Genre tags, peak year | canonical | Factual but sometimes contested — use `confidence` + overlays for disagreement |
-| Hometown (where contested) | canonical + overlay | Canonical from MB/Wikipedia; overlay if station knows better (local artist case) |
-| Station's Sound Code or internal genre | overlay | Each station's classification system differs |
-| DJ's hand-written bio for local artist | overlay | Station's editorial voice |
-| "Artist declined interview 2024" | note | Private, relationship |
-| "Booking contact is xyz@mgmt.com" | note | Private, operational |
+| Field                                       | Layer               | Reasoning                                                                        |
+| ------------------------------------------- | ------------------- | -------------------------------------------------------------------------------- |
+| MBID, ISRC, Spotify/Apple IDs               | canonical           | Factual, immutable, identifier data                                              |
+| Canonical name, aliases                     | canonical           | One truth                                                                        |
+| Bio (Wikipedia, MusicBrainz source)         | canonical           | Public-domain / permissively-licensed facts                                      |
+| Discography, release dates, labels          | canonical           | Same                                                                             |
+| Public social links (Bandcamp, IG, Spotify) | canonical           | Public-facing, non-controversial                                                 |
+| YouTube video ID for playback preview       | canonical           | Expensive to search per-tenant; same result everywhere                           |
+| Genre tags, peak year                       | canonical           | Factual but sometimes contested — use `confidence` + overlays for disagreement   |
+| Hometown (where contested)                  | canonical + overlay | Canonical from MB/Wikipedia; overlay if station knows better (local artist case) |
+| Station's Sound Code or internal genre      | overlay             | Each station's classification system differs                                     |
+| DJ's hand-written bio for local artist      | overlay             | Station's editorial voice                                                        |
+| "Artist declined interview 2024"            | note                | Private, relationship                                                            |
+| "Booking contact is xyz@mgmt.com"           | note                | Private, operational                                                             |
 
 ### The feedback loop that turns overlays into a better corpus
 
@@ -972,7 +980,7 @@ export const detectConvergence = internalMutation({
     const keyField = entityType === "artist" ? "artistKey" : "trackKey";
     const overlays = await ctx.db
       .query(table)
-      .withIndex("by_key", q => q.eq(keyField, entityKey))
+      .withIndex("by_key", (q) => q.eq(keyField, entityKey))
       .collect();
 
     // Group by value of the field
@@ -992,7 +1000,7 @@ export const detectConvergence = internalMutation({
           entityKey,
           field,
           proposedValue: JSON.parse(value),
-          supportingOrgs: group.map(g => g.orgId),
+          supportingOrgs: group.map((g) => g.orgId),
           status: "open",
           createdAt: Date.now(),
         });
@@ -1012,9 +1020,13 @@ Every query that returns artist or track data must merge overlay over canonical.
 // convex/lib/merge.ts
 export async function getArtistForOrg(ctx, orgId, artistKey) {
   const [canonical, overlay] = await Promise.all([
-    ctx.db.query("artists").withIndex("by_key", q => q.eq("artistKey", artistKey)).unique(),
-    ctx.db.query("artistOverlays")
-      .withIndex("by_org_artist", q => q.eq("orgId", orgId).eq("artistKey", artistKey))
+    ctx.db
+      .query("artists")
+      .withIndex("by_key", (q) => q.eq("artistKey", artistKey))
+      .unique(),
+    ctx.db
+      .query("artistOverlays")
+      .withIndex("by_org_artist", (q) => q.eq("orgId", orgId).eq("artistKey", artistKey))
       .unique(),
   ]);
   if (!canonical) return overlay ? { artistKey, ...overlay.fields, _overlayOnly: true } : null;
@@ -1034,7 +1046,7 @@ The `gselector-enricher` logic extracts into `packages/enrichment` and runs as T
 // trigger/enrich-artist.ts
 export const enrichArtist = task({
   id: "enrich-artist",
-  queue: { name: "musicbrainz", concurrencyLimit: 1 },  // global MB rate
+  queue: { name: "musicbrainz", concurrencyLimit: 1 }, // global MB rate
   retry: { maxAttempts: 5, factor: 2, minTimeoutInMs: 1000 },
   run: async ({ artistKey }: { artistKey: string }) => {
     const existing = await convexQuery("/artists/byKey", { artistKey });
@@ -1100,7 +1112,7 @@ import { schedules } from "@trigger.dev/sdk";
 
 export const pollTicketmaster = schedules.task({
   id: "poll-ticketmaster",
-  cron: "0 */6 * * *",              // every 6 hours; events don't change that fast
+  cron: "0 */6 * * *", // every 6 hours; events don't change that fast
   queue: { name: "ticketmaster", concurrencyLimit: 2 },
   run: async () => {
     const sources = await convexFetch("/eventSources/by-kind/ticketmaster");
@@ -1108,7 +1120,7 @@ export const pollTicketmaster = schedules.task({
       const regions = await convexFetch(`/stations/${src.stationId}/regions`);
       const events = [];
       for (const region of regions) {
-        events.push(...await fetchTMEvents(region, src.config.apiKey));
+        events.push(...(await fetchTMEvents(region, src.config.apiKey)));
       }
       await convexPost("/events/upsert-batch", {
         orgId: src.orgId,
@@ -1178,7 +1190,7 @@ AXS is the interesting one because it's authoritative for specific venue groups 
 // trigger/poll-axs.ts
 export const pollAxs = schedules.task({
   id: "poll-axs",
-  cron: "0 */4 * * *",              // AXS is authoritative; poll more often
+  cron: "0 */4 * * *", // AXS is authoritative; poll more often
   queue: { name: "axs", concurrencyLimit: 1 },
   run: async () => {
     const sources = await convexFetch("/eventSources/by-kind/axs");
@@ -1228,8 +1240,9 @@ The `artistKey` normalization must be identical between plays, enrichments, and 
 export function artistKey(name: string): string {
   return name
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // strip accents
-    .replace(/\b(the|a|an)\b/g, "")                      // strip articles
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
+    .replace(/\b(the|a|an)\b/g, "") // strip articles
     .replace(/[^a-z0-9]/g, "")
     .trim();
 }
@@ -1240,8 +1253,6 @@ export function artistKey(name: string): string {
 ### Reverse lookup: "what's touring from our rotation?"
 
 **Eng review 2026-04-22:** This join is cached via a nightly Trigger.dev cron (4am local) that materializes a `touringFromRotation` derived Convex table per station. Dashboard reads from cache (sub-100ms). Touring data updates daily, which matches the natural rhythm of show announcements. Cache invalidation triggers on `events.created` for fresh shows. On-demand recompute available via a Settings affordance. See TODO-11.
-
-
 
 A single Convex query powers the music director's "artists in our rotation who are touring nearby" view:
 
@@ -1254,8 +1265,7 @@ export const touringFromRotation = query({
     const since = Date.now() - 30 * 24 * 60 * 60 * 1000;
     const recentPlays = await ctx.db
       .query("plays")
-      .withIndex("by_station_recent", q =>
-        q.eq("stationId", stationId).gte("playedAt", since))
+      .withIndex("by_station_recent", (q) => q.eq("stationId", stationId).gte("playedAt", since))
       .collect();
 
     // Unique artistKeys, ranked by spin count
@@ -1271,8 +1281,9 @@ export const touringFromRotation = query({
     for (const [key, spinCount] of artistCounts) {
       const matches = await ctx.db
         .query("eventArtists")
-        .withIndex("by_artist_station_upcoming", q =>
-          q.eq("artistKey", key).eq("stationId", stationId))
+        .withIndex("by_artist_station_upcoming", (q) =>
+          q.eq("artistKey", key).eq("stationId", stationId),
+        )
         .collect();
       for (const ea of matches) {
         const event = await ctx.db.get(ea.eventId);
@@ -1315,20 +1326,24 @@ Iframes are truly isolated — no CSS collisions, no JS conflicts, no risk a hos
 
 ```html
 <!-- 1. One-line drop-in — the default -->
-<script src="https://embed.radiomke-v2.example/widget.js"
-        data-station="hyfin"
-        data-variant="now-playing-strip"
-        async></script>
+<script
+  src="https://embed.radiomke-v2.example/widget.js"
+  data-station="hyfin"
+  data-variant="now-playing-strip"
+  async
+></script>
 ```
 
 ```html
 <!-- 2. Declarative placement with config -->
-<div id="rmke-widget"
-     data-station="rhythmlab"
-     data-variant="recently-played"
-     data-max-items="10"
-     data-show-events="true"
-     data-theme="auto"></div>
+<div
+  id="rmke-widget"
+  data-station="rhythmlab"
+  data-variant="recently-played"
+  data-max-items="10"
+  data-show-events="true"
+  data-theme="auto"
+></div>
 <script src="https://embed.radiomke-v2.example/widget.js" async></script>
 ```
 
@@ -1340,8 +1355,12 @@ Iframes are truly isolated — no CSS collisions, no JS conflicts, no risk a hos
     const w = RMKEWidget.mount("#container", {
       station: "88nine",
       variant: "recently-played",
-      onTrackChange: (play) => { /* host-side analytics hook */ },
-      onEventClick: (event) => { /* ticketing click-through */ },
+      onTrackChange: (play) => {
+        /* host-side analytics hook */
+      },
+      onEventClick: (event) => {
+        /* ticketing click-through */
+      },
     });
     w.update({ maxItems: 20 });
     w.destroy();
@@ -1351,8 +1370,10 @@ Iframes are truly isolated — no CSS collisions, no JS conflicts, no risk a hos
 
 ```html
 <!-- 4. Iframe fallback for script-hostile CMSes -->
-<iframe src="https://embed.radiomke-v2.example/iframe/hyfin/now-playing-strip?theme=dark"
-        style="width:100%; height:120px; border:none;"></iframe>
+<iframe
+  src="https://embed.radiomke-v2.example/iframe/hyfin/now-playing-strip?theme=dark"
+  style="width:100%; height:120px; border:none;"
+></iframe>
 ```
 
 ### Technical approach — keep the bundle small
@@ -1370,19 +1391,19 @@ Budget to hold: **~15KB gzip target / 25KB gzip ceiling** for loader + one varia
 
 Realigned to V1 reality 2026-04-22: v2 MVP is **one V1-carry-forward widget + two net-new variants**, not six.
 
-| Variant | Purpose | V1 parity |
-|---------|---------|-----------|
-| `playlist` | V1's full playlist widget carried forward. Config-driven: `layout: list \| grid`, tabs (Recent, Top 20 Songs, Top 20 30-days, Concerts, About Us), search + date filter, `maxItems`/`unlimitedSongs`, `compact`, `height`, `theme`, `showSearch`/`showHeader`/`showLoadMore`/`autoUpdate`. Interleaves inline concert cards (V1 `ArtistEvents`). Includes related-tracks carousel (V1 `RelatedCarousel`). Powers `radiomilwaukee.org/playlist` as its flagship consumer. Preview button uses **Apple Music API** (revised 2026-04-22 from Spotify after `preview_url` deprecation research; see DESIGN.md decisions log + TODO-1) plus deep-link buttons to both Spotify and Apple Music. | **Yes** — full carry-forward + Apple Music preview + deep-link buttons |
-| `now-playing-strip` | Compact single-row current-track bar. Most common embed for partner station pages that want the smallest footprint. Not in V1. | New |
-| `now-playing-card` | Larger single-current-track card with album art, "ON AIR" label, and an optional LIVE event row when the current artist has upcoming local shows. Not in V1. | New |
+| Variant             | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | V1 parity                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `playlist`          | V1's full playlist widget carried forward. Config-driven: `layout: list \| grid`, tabs (Recent, Top 20 Songs, Top 20 30-days, Concerts, About Us), search + date filter, `maxItems`/`unlimitedSongs`, `compact`, `height`, `theme`, `showSearch`/`showHeader`/`showLoadMore`/`autoUpdate`. Interleaves inline concert cards (V1 `ArtistEvents`). Includes related-tracks carousel (V1 `RelatedCarousel`). Powers `radiomilwaukee.org/playlist` as its flagship consumer. Preview button uses **Apple Music API** (revised 2026-04-22 from Spotify after `preview_url` deprecation research; see DESIGN.md decisions log + TODO-1) plus deep-link buttons to both Spotify and Apple Music. | **Yes** — full carry-forward + Apple Music preview + deep-link buttons |
+| `now-playing-strip` | Compact single-row current-track bar. Most common embed for partner station pages that want the smallest footprint. Not in V1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | New                                                                    |
+| `now-playing-card`  | Larger single-current-track card with album art, "ON AIR" label, and an optional LIVE event row when the current artist has upcoming local shows. Not in V1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | New                                                                    |
 
 **Deferred (not MVP, revisit post-shakedown):**
 
-| Variant | Why deferred |
-|---------|--------------|
-| `recently-played` | Subsumed into `playlist` with `tab=Recent`, fewer config options. Don't ship two things that are the same thing. |
-| `events-feed` | V1 inlines concert cards into the playlist widget via `ArtistEvents`; standalone events feed has no demonstrated demand. Revisit if a partner explicitly asks. |
-| `schedule` | No V1 equivalent, no RM-stated need. Build if requested. |
+| Variant           | Why deferred                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `recently-played` | Subsumed into `playlist` with `tab=Recent`, fewer config options. Don't ship two things that are the same thing.                                               |
+| `events-feed`     | V1 inlines concert cards into the playlist widget via `ArtistEvents`; standalone events feed has no demonstrated demand. Revisit if a partner explicitly asks. |
+| `schedule`        | No V1 equivalent, no RM-stated need. Build if requested.                                                                                                       |
 
 See `docs/design/001-information-architecture.md` for detailed IA of each variant.
 
@@ -1439,12 +1460,14 @@ This is where the cross-tenant enrichment cache pays the real dividend. When Sta
 **No migration from v1.** v2 launches with an empty database. v1 keeps running on its current Supabase stack; v2 runs at a new domain (or subdomain). No dual-write, no sync workers, no source-of-truth confusion. When v2 is proven, v1 gets redirected and archived — and the historical playlist data stays queryable in v1 for anyone who needs it.
 
 **Why clean, not migrated:**
+
 - v1 is a Lovable scaffold with some cleanup issues — data quality is mixed and not worth preserving at the schema level
 - The shakedown period is the only time in the product's life when breaking changes are free
 - Fresh enrichment means every track flows through the new waterfall with new confidence scoring and overlay mechanics
 - Radio Milwaukee rebuilds its own archive in 2–3 months of normal operation
 
 **Pre-launch work (in `v1-reference/`, don't skip):**
+
 1. Ask Claude Code (or spend an hour) to produce `V1_LEARNINGS.md` — what v1 got right, what it got wrong, what broke in production, what partners complained about
 2. Ask Claude Code to produce `V1_EDGE_CASES.md` — specific artist names, show formats, ad-break patterns, Spinitron oddities the v1 code has accumulated fixes for
 3. These inform v2 design; the code isn't worth porting but the institutional knowledge absolutely is
@@ -1454,21 +1477,25 @@ This is where the cross-tenant enrichment cache pays the real dividend. When Sta
 The temptation is to start small and add scope. Resist. The reconciliation, artist-matching, and widget-contract decisions only get stress-tested under realistic load, and a half-loaded Radio Milwaukee isn't realistic.
 
 **All four streams, not two:**
+
 - HYFIN (Spinitron only) — easy case
 - 88Nine (Spinitron only) — easy case
 - **Rhythm Lab (Spinitron + ICY, dual-source)** — the reconciliation test bed
 - 414 Music (Spinitron, maybe + ICY) — its own quirks
 
 **Events active immediately:**
+
 - Ticketmaster pulling Milwaukee DMA
 - AXS pulling Pabst Theater Group venues
 - Custom event UI available for DJs
 
 **Widgets live on radiomilwaukee.org:**
+
 - Replace v1 iframe embeds with v2 JS embeds
 - If something breaks, break it here — not on a future partner's site
 
 **Reports generated monthly against real data:**
+
 - SoundExchange-format export
 - Rotation diversity metrics
 - Local-artist percentages
