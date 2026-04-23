@@ -1,0 +1,128 @@
+"use client";
+
+import { useQuery } from "convex/react";
+import { api } from "@rm/convex/api";
+
+type StationSlug = "hyfin" | "88nine" | "414music" | "rhythmlab";
+
+interface StationCardProps {
+  slug: StationSlug;
+  name: string;
+}
+
+/**
+ * One of four station cards on the dashboard wall-of-status.
+ * Subscribes to the most-recent play via `plays.currentByStation` and to
+ * the source status (for the health dot + "last poll" line) via
+ * `ingestionSources.statusForDashboard` (filtered client-side).
+ *
+ * Per DESIGN.md section A (Mode A — Operator dashboard, dark, ops-dense).
+ */
+export function StationCard({ slug, name }: StationCardProps) {
+  const current = useQuery(api.plays.currentByStation, { stationSlug: slug });
+  const allStatus = useQuery(api.ingestionSources.statusForDashboard, {});
+  const sources = allStatus?.filter((s) => s.stationSlug === slug) ?? [];
+  const primary = sources.find((s) => s.role === "primary" && s.enabled);
+
+  const healthState = deriveHealth(primary?.lastSuccessAt);
+
+  return (
+    <article className="flex flex-col gap-3 rounded-md border border-border bg-bg-surface p-4 transition-colors duration-[var(--dur-short)] hover:border-[color-mix(in_oklab,var(--border)_50%,var(--text-muted))]">
+      <header className="flex items-center justify-between">
+        <h2
+          style={{ fontFamily: "var(--font-display)" }}
+          className="text-base font-semibold tracking-tight"
+        >
+          {name}
+        </h2>
+        <HealthDot state={healthState} />
+      </header>
+
+      {/* Now playing row */}
+      <div className="min-h-[3.5rem]">
+        {current === undefined ? (
+          <SkeletonRow />
+        ) : current === null ? (
+          <p className="text-sm text-text-muted">No plays yet.</p>
+        ) : (
+          <div>
+            <p className="truncate text-sm font-medium text-text-primary">{current.titleRaw}</p>
+            <p className="truncate text-xs text-text-secondary">{current.artistRaw}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Footer: source badge + time-played */}
+      <footer className="flex items-center justify-between text-xs text-text-muted">
+        <span className="rounded-sm px-1.5 py-0.5" style={{ fontFamily: "var(--font-mono)" }}>
+          {primary?.adapter ?? "—"}
+        </span>
+        <span style={{ fontFamily: "var(--font-mono)" }}>
+          {current?.playedAt
+            ? formatRelative(current.playedAt)
+            : primary?.lastSuccessAt
+              ? `poll ${formatRelative(primary.lastSuccessAt)}`
+              : "—"}
+        </span>
+      </footer>
+    </article>
+  );
+}
+
+// ---------- helpers ----------
+
+type HealthState = "ok" | "stale" | "down" | "idle";
+
+/** Derive the health-dot state from the primary source's lastSuccessAt. */
+function deriveHealth(lastSuccessAt: number | undefined): HealthState {
+  if (lastSuccessAt === undefined) return "idle";
+  const ageMs = Date.now() - lastSuccessAt;
+  if (ageMs < 2 * 60 * 1000) return "ok"; // ≤ 2 minutes
+  if (ageMs < 5 * 60 * 1000) return "stale"; // ≤ 5 minutes
+  return "down";
+}
+
+function HealthDot({ state }: { state: HealthState }) {
+  const label: Record<HealthState, string> = {
+    ok: "Ingestion healthy",
+    stale: "Ingestion slow",
+    down: "Ingestion down",
+    idle: "No ingestion yet",
+  };
+  const colorClass: Record<HealthState, string> = {
+    ok: "bg-status-ok",
+    stale: "bg-status-warn",
+    down: "bg-status-error",
+    idle: "bg-text-muted",
+  };
+  return (
+    <span
+      role="status"
+      aria-label={label[state]}
+      title={label[state]}
+      className={`inline-block h-2 w-2 rounded-full ${colorClass[state]}`}
+    />
+  );
+}
+
+function SkeletonRow() {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="h-4 w-3/4 animate-pulse rounded-sm bg-bg-elevated" />
+      <div className="h-3 w-1/2 animate-pulse rounded-sm bg-bg-elevated" />
+    </div>
+  );
+}
+
+/** Short relative-time formatter. e.g. "just now", "2m ago", "45m ago". */
+function formatRelative(epochMs: number): string {
+  const ageSec = Math.floor((Date.now() - epochMs) / 1000);
+  if (ageSec < 10) return "just now";
+  if (ageSec < 60) return `${ageSec}s ago`;
+  const ageMin = Math.floor(ageSec / 60);
+  if (ageMin < 60) return `${ageMin}m ago`;
+  const ageHr = Math.floor(ageMin / 60);
+  if (ageHr < 24) return `${ageHr}h ago`;
+  const ageDay = Math.floor(ageHr / 24);
+  return `${ageDay}d ago`;
+}

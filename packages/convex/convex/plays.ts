@@ -110,6 +110,47 @@ export const recordPollFailure = mutation({
 });
 
 /**
+ * Single most-recent non-deleted play for a station. Drives each station
+ * card's now-playing row on the dashboard wall-of-status. Returns null
+ * if the station has never had a play (fresh install) or only has
+ * soft-deleted plays.
+ */
+export const currentByStation = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+  },
+  handler: async (ctx, { stationSlug }) => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) return null;
+
+    const latest = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) => q.eq("stationId", station._id))
+      .order("desc")
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    if (latest === null) return null;
+
+    return {
+      _id: latest._id,
+      artistRaw: latest.artistRaw,
+      titleRaw: latest.titleRaw,
+      albumRaw: latest.albumRaw,
+      playedAt: latest.playedAt,
+    };
+  },
+});
+
+/**
  * Public dashboard view: the most recent N plays per station.
  */
 export const recentByStation = query({

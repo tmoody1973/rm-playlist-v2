@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, JetBrains_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -8,8 +8,8 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -24,8 +24,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-[#0E0F11] text-[#F1EFEB]">
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
+    >
+      <head>
+        {/* General Sans from Fontshare — display / H1-H3 per DESIGN.md */}
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@500,600,700&display=swap"
+        />
+      </head>
+      <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
         <Providers>{children}</Providers>
       </body>
     </html>

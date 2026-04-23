@@ -12,6 +12,7 @@ import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as plays from "../plays.js";
 import type * as seed from "../seed.js";
+import type * as stations from "../stations.js";
 import type * as users from "../users.js";
 
 import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
@@ -21,6 +22,7 @@ declare const fullApi: ApiFromModules<{
   ingestionSources: typeof ingestionSources;
   plays: typeof plays;
   seed: typeof seed;
+  stations: typeof stations;
   users: typeof users;
 }>;
 
