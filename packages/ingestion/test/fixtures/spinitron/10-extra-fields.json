@@ -1,0 +1,20 @@
+{
+  "_description": "Spinitron adds new fields we don't know about. Passthrough preserves them in raw without erroring.",
+  "_input": {
+    "items": [
+      {
+        "id": 900001,
+        "song": "Future Stream",
+        "artist": "Unknown Artist",
+        "release": "Future Album",
+        "start": "2026-04-22T14:00:00Z",
+        "duration": 240,
+        "new_field_spinitron_added_last_week": "opaque-value",
+        "another_one": { "nested": true, "deeply": [1, 2, 3] }
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_description": "StreamTitle with excess whitespace — splitArtistTitle trims both sides.",
+  "_input": "StreamTitle='  Yo Maps   -   So Mone  ';StreamUrl='';",
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Yo Maps",
+        "titleRaw": "So Mone"
+      }
+    ]
+  }
+}

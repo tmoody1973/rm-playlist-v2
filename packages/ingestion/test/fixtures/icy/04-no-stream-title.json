@@ -1,0 +1,7 @@
+{
+  "_description": "ICY metadata without StreamTitle field (some encoders send only StreamUrl) → empty.",
+  "_input": "StreamUrl='http://example.com/info';",
+  "_expected": {
+    "playCount": 0
+  }
+}

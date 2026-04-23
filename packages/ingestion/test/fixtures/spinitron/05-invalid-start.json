@@ -1,0 +1,22 @@
+{
+  "_description": "Spins with unparseable start timestamp are dropped silently (never throw).",
+  "_input": {
+    "items": [
+      {
+        "id": 300001,
+        "song": "Valid Track",
+        "artist": "Valid Artist",
+        "start": "not-an-iso-timestamp"
+      },
+      {
+        "id": 300002,
+        "song": "Also Valid",
+        "artist": "Another Artist",
+        "start": "2026-04-22T14:00:00Z"
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

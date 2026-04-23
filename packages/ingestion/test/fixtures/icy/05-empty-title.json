@@ -1,0 +1,7 @@
+{
+  "_description": "StreamTitle present but empty (stream is in a silence/ad break).",
+  "_input": "StreamTitle='';StreamUrl='';",
+  "_expected": {
+    "playCount": 0
+  }
+}

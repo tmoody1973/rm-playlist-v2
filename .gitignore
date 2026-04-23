@@ -30,3 +30,11 @@ radiomke-playlist-app V1/
 .turbo/
 .trigger/
 yarn.lock
+
+# Convex dev scaffolding landed at repo root by default; will move to packages/convex/ in Milestone 3.
+# Ignore the misplaced copy until then so we don't commit it in the wrong location.
+/convex/
+
+# Trigger.dev tasks landed at repo-root /src/trigger/ via default config.
+# Will relocate to services/trigger/src/ during Milestone 4.
+/src/

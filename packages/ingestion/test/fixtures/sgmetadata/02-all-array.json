@@ -1,0 +1,24 @@
+{
+  "_description": "getMetadataAll endpoint returns an array of objects. Adapter handles both shapes.",
+  "_input": [
+    {
+      "StreamTitle": "JOHN MELLENCAMP - Paper In Fire",
+      "StreamUrl": "?autoID=OY49&autoCat=OM1&sec=227&dur=205",
+      "date": "Thu Dec 08 2016 13:45:00 GMT-0600 (CST)",
+      "timestamp": 1481226300000
+    },
+    {
+      "StreamTitle": "Beatrix Becker - La Gatita Loca",
+      "date": "Thu Dec 08 2016 13:39:39 GMT-0600 (CST)",
+      "timestamp": 1481225979059
+    },
+    {
+      "StreamTitle": "Christopher Boscole - Takako",
+      "date": "Thu Dec 08 2016 13:23:39 GMT-0600 (CST)",
+      "timestamp": 1481225019114
+    }
+  ],
+  "_expected": {
+    "playCount": 3
+  }
+}

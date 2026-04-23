@@ -1,0 +1,15 @@
+{
+  "_description": "SGmetadata adds SmartMetadata-derived fields. Passthrough preserves them for enrichment.",
+  "_input": {
+    "StreamTitle": "Gary Clark Jr. - Bright Lights",
+    "StreamUrl": "?autoID=BL123",
+    "date": "Mon Apr 22 2026 14:35:00 GMT-0500 (CDT)",
+    "timestamp": 1776893700000,
+    "isrc_candidate": "USQX91900001",
+    "smart_metadata_score": 100,
+    "external_ids": { "isrc": "USQX91900001", "upc": "123456789012" }
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

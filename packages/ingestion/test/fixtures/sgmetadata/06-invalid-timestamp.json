@@ -1,0 +1,10 @@
+{
+  "_description": "Zero or negative timestamp indicates garbage data from upstream. Silently drop.",
+  "_input": {
+    "StreamTitle": "Valid Artist - Valid Title",
+    "timestamp": 0
+  },
+  "_expected": {
+    "playCount": 0
+  }
+}

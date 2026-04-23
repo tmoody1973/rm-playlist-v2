@@ -1,0 +1,16 @@
+{
+  "_description": "Some broadcasters use ' | ' as separator instead of ' - '. Splitter handles it.",
+  "_input": {
+    "StreamTitle": "Whisperings | Solo Piano Vol. 1",
+    "timestamp": 1481225826913
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Whisperings",
+        "titleRaw": "Solo Piano Vol. 1"
+      }
+    ]
+  }
+}

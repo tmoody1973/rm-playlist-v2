@@ -1,0 +1,16 @@
+{
+  "_description": "En-dash (–) separator is common when broadcasters copy/paste from word processors.",
+  "_input": {
+    "StreamTitle": "Black Pumas – More Than a Love Song",
+    "timestamp": 1729620000000
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Black Pumas",
+        "titleRaw": "More Than a Love Song"
+      }
+    ]
+  }
+}

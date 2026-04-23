@@ -1,0 +1,28 @@
+{
+  "_description": "Spins with whitespace-only artist or song are dropped (after trim).",
+  "_input": {
+    "items": [
+      {
+        "id": 400001,
+        "song": "   ",
+        "artist": "Some Artist",
+        "start": "2026-04-22T14:00:00Z"
+      },
+      {
+        "id": 400002,
+        "song": "Some Song",
+        "artist": "",
+        "start": "2026-04-22T14:00:00Z"
+      },
+      {
+        "id": 400003,
+        "song": "Real Song",
+        "artist": "Real Artist",
+        "start": "2026-04-22T14:00:00Z"
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "_description": "Object form with rawMetadataString — adapter extracts StreamTitle from within.",
+  "_input": {
+    "rawMetadataString": "StreamTitle='Gary Clark Jr. - Bright Lights';StreamUrl='http://example.com/xx';",
+    "receivedAt": 1776893700000
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Gary Clark Jr.",
+        "titleRaw": "Bright Lights"
+      }
+    ]
+  }
+}

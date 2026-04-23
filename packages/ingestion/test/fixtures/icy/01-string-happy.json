@@ -1,0 +1,14 @@
+{
+  "_description": "Canonical ICY metadata string as delivered in-band from a Shoutcast/Icecast stream.",
+  "_input": "StreamTitle='Tems - Free Mind';StreamUrl='';",
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "source": "icy",
+        "artistRaw": "Tems",
+        "titleRaw": "Free Mind"
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_description": "Unicode artist/title names pass through ICY cleanly.",
+  "_input": "StreamTitle='Burna Boy - Ọrẹ Mi';StreamUrl='';",
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Burna Boy",
+        "titleRaw": "Ọrẹ Mi"
+      }
+    ]
+  }
+}

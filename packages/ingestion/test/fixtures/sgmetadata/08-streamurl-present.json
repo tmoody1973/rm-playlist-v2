@@ -1,0 +1,12 @@
+{
+  "_description": "StreamUrl field is preserved in the raw payload (used later for ISRC / autoID lookups).",
+  "_input": {
+    "StreamTitle": "Charley Cooks - Milwaukee Mornings",
+    "StreamUrl": "?autoID=OM39&autoCat=OM1&sec=130&dur=125&cat=music&album=&Label=&YearSG=&Field1=&Field2=",
+    "date": "Thu Dec 08 2016 13:50:00 GMT-0600 (CST)",
+    "timestamp": 1481226600000
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

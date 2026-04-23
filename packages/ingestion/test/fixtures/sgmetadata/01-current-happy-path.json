@@ -1,0 +1,19 @@
+{
+  "_description": "Canonical SGmetadata single-object response from getCurrent.",
+  "_input": {
+    "StreamTitle": "Vicky Emerson - Flight",
+    "date": "Thu Dec 08 2016 13:42:21 GMT-0600 (CST)",
+    "timestamp": 1481226141687
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "source": "sgmetadata",
+        "artistRaw": "Vicky Emerson",
+        "titleRaw": "Flight",
+        "playedAt": 1481226141687
+      }
+    ]
+  }
+}

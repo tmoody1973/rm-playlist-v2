@@ -1,0 +1,24 @@
+{
+  "_description": "Non-Latin artist/song names pass through unchanged (HYFIN plays some Korean/Afro material).",
+  "_input": {
+    "items": [
+      {
+        "id": 500001,
+        "song": "봄 여름 가을 겨울",
+        "artist": "김광석",
+        "release": "다시 부르기",
+        "start": "2026-04-22T14:00:00Z"
+      },
+      {
+        "id": 500002,
+        "song": "Ọrẹ Mi",
+        "artist": "Burna Boy",
+        "release": "I Told Them...",
+        "start": "2026-04-22T13:56:00Z"
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 2
+  }
+}

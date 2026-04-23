@@ -1,0 +1,13 @@
+{
+  "name": "@rm/types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no tests in @rm/types (types-only package)'"
+  }
+}

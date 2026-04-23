@@ -1,0 +1,36 @@
+{
+  "_input": {
+    "items": [
+      {
+        "id": 100001,
+        "song": "Bright Lights",
+        "artist": "Gary Clark Jr.",
+        "release": "Blak And Blu",
+        "label": "Warner Records",
+        "start": "2026-04-22T14:35:00Z",
+        "duration": 325
+      },
+      {
+        "id": 100002,
+        "song": "So Mone (feat. Tay Grin)",
+        "artist": "Yo Maps",
+        "release": "Single",
+        "label": "Olive Entertainment",
+        "start": "2026-04-22T14:31:00Z",
+        "duration": 254
+      },
+      {
+        "id": 100003,
+        "song": "Don't Leave",
+        "artist": "Jorja Smith",
+        "release": "Lost & Found",
+        "label": "FAMM",
+        "start": "2026-04-22T14:28:00Z",
+        "duration": 131
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 3
+  }
+}

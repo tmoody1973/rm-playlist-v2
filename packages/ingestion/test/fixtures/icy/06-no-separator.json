@@ -1,0 +1,7 @@
+{
+  "_description": "Station IDs and promos lack an artist-title separator → empty (not an error).",
+  "_input": "StreamTitle='WYMS HD2 HYFIN';StreamUrl='';",
+  "_expected": {
+    "playCount": 0
+  }
+}

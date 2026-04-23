@@ -1,0 +1,10 @@
+{
+  "_description": "Ad breaks and silence sometimes produce empty StreamTitle. No play should emit.",
+  "_input": {
+    "StreamTitle": "",
+    "timestamp": 1481225826913
+  },
+  "_expected": {
+    "playCount": 0
+  }
+}

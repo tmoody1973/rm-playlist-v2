@@ -1,0 +1,25 @@
+{
+  "_description": "Spins with missing release/label/duration should still produce plays — those fields are optional.",
+  "_input": {
+    "items": [
+      {
+        "id": 200001,
+        "song": "Ensalada (feat. Anderson .Paak)",
+        "artist": "Freddie Gibbs",
+        "start": "2026-04-22T14:24:00Z"
+      },
+      {
+        "id": 200002,
+        "song": "Bright Lights",
+        "artist": "Gary Clark Jr.",
+        "release": null,
+        "label": null,
+        "duration": null,
+        "start": "2026-04-22T14:20:00Z"
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 2
+  }
+}

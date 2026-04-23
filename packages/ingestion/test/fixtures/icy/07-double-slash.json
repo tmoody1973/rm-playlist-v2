@@ -1,0 +1,13 @@
+{
+  "_description": "Double-slash separator convention used by some public-radio encoders.",
+  "_input": "StreamTitle='Jorja Smith // Blue Lights';StreamUrl='';",
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Jorja Smith",
+        "titleRaw": "Blue Lights"
+      }
+    ]
+  }
+}

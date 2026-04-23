@@ -1,0 +1,13 @@
+{
+  "_description": "Some encoders append extra metadata after the semicolon. Regex only captures inside the quotes.",
+  "_input": "StreamTitle='Freddie Gibbs - Ensalada';extra-garbage-here-ignored",
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Freddie Gibbs",
+        "titleRaw": "Ensalada"
+      }
+    ]
+  }
+}

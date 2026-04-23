@@ -1,0 +1,17 @@
+{
+  "_description": "Some Spinitron deployments return id as string, not number. Union type tolerates both.",
+  "_input": {
+    "items": [
+      {
+        "id": "abc-123-xyz",
+        "song": "Track A",
+        "artist": "Artist A",
+        "start": "2026-04-22T14:00:00Z",
+        "duration": 200
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 1
+  }
+}

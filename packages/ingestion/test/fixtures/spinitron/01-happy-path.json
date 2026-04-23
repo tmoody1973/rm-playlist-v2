@@ -1,0 +1,29 @@
+{
+  "_input": {
+    "items": [
+      {
+        "id": 123456789,
+        "song": "Tems — Free Mind",
+        "artist": "Tems",
+        "release": "If Orange Was A Place",
+        "label": "RCA Records",
+        "start": "2026-04-22T20:31:00Z",
+        "duration": 182
+      }
+    ]
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "source": "spinitron",
+        "artistRaw": "Tems",
+        "titleRaw": "Tems — Free Mind",
+        "albumRaw": "If Orange Was A Place",
+        "labelRaw": "RCA Records",
+        "durationSec": 182,
+        "playedAt": 1776889860000
+      }
+    ]
+  }
+}

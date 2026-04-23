@@ -1,0 +1,11 @@
+{
+  "_description": "Response missing 'items' entirely → zero plays (parse still succeeds, adapter never throws).",
+  "_input": {
+    "_links": {
+      "self": { "href": "/api/spins" }
+    }
+  },
+  "_expected": {
+    "playCount": 0
+  }
+}

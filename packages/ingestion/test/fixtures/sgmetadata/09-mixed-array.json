@@ -1,0 +1,13 @@
+{
+  "_description": "All-metadata array with mix of valid plays and unparseable entries. Valid ones emit; others drop.",
+  "_input": [
+    { "StreamTitle": "Artist One - Song One", "timestamp": 1481226000000 },
+    { "StreamTitle": "STATION PROMO", "timestamp": 1481225900000 },
+    { "StreamTitle": "Artist Two - Song Two", "timestamp": 1481225800000 },
+    { "StreamTitle": "", "timestamp": 1481225700000 },
+    { "StreamTitle": "Artist Three - Song Three", "timestamp": 1481225600000 }
+  ],
+  "_expected": {
+    "playCount": 3
+  }
+}

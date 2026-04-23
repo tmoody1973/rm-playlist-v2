@@ -1,0 +1,17 @@
+{
+  "_description": "Worker-normalized object form with explicit streamTitle + receivedAt.",
+  "_input": {
+    "streamTitle": "Black Pumas - More Than a Love Song",
+    "receivedAt": 1776893700000
+  },
+  "_expected": {
+    "playCount": 1,
+    "plays": [
+      {
+        "artistRaw": "Black Pumas",
+        "titleRaw": "More Than a Love Song",
+        "playedAt": 1776893700000
+      }
+    ]
+  }
+}
