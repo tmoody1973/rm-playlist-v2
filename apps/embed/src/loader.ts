@@ -1,0 +1,134 @@
+/**
+ * rm-playlist-v2 widget loader.
+ *
+ * Partner stations drop a single <script> tag on their page; this file
+ * discovers every widget mount point (either <script data-*> or a
+ * <div data-rmke-widget data-*>), creates a shadow root per mount, and
+ * dynamically imports the right variant chunk.
+ *
+ * Bundle target: ~5KB gzip (loader only, no variant code). Variants
+ * are code-split and lazy-loaded.
+ *
+ * Usage patterns (DESIGN.md integration modes):
+ *
+ *   <!-- 1. Script-attribute shorthand — the most common partner case -->
+ *   <script src="https://embed.radiomilwaukee.org/v1/widget.js"
+ *           data-station="hyfin"
+ *           data-variant="now-playing-card"
+ *           async></script>
+ *
+ *   <!-- 2. Declarative div + one script per page -->
+ *   <div data-rmke-widget
+ *        data-station="rhythmlab"
+ *        data-variant="playlist"
+ *        data-layout="list"></div>
+ *   <script src=".../v1/widget.js" async></script>
+ *
+ *   <!-- 3. Programmatic API (wired in Week 4+, not in Milestone 7) -->
+ */
+
+import type { WidgetConfig } from "./types";
+import type * as PlaylistVariant from "./variants/playlist";
+
+type Variant = WidgetConfig["variant"];
+
+/** Lazy chunk map. Vite code-splits each import() into its own chunk. */
+const VARIANT_LOADERS: Record<Variant, () => Promise<typeof PlaylistVariant>> = {
+  playlist: () => import("./variants/playlist"),
+  // "now-playing-card" and "now-playing-strip" land in Week 4. For
+  // Milestone 7 we only ship the playlist stub so partners can verify
+  // their embed reaches the CDN.
+  "now-playing-card": () => import("./variants/playlist"),
+  "now-playing-strip": () => import("./variants/playlist"),
+};
+
+function parseConfig(el: HTMLElement): WidgetConfig | null {
+  const station = el.dataset.station as WidgetConfig["station"] | undefined;
+  const variant = el.dataset.variant as Variant | undefined;
+
+  if (!station) {
+    console.warn("[rmke-widget] missing data-station");
+    return null;
+  }
+  if (!variant || !(variant in VARIANT_LOADERS)) {
+    console.warn(`[rmke-widget] unknown or missing data-variant: ${variant}`);
+    return null;
+  }
+
+  return {
+    station,
+    variant,
+    layout: (el.dataset.layout as WidgetConfig["layout"] | undefined) ?? "list",
+    theme: (el.dataset.theme as WidgetConfig["theme"] | undefined) ?? "auto",
+    maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
+    showSearch: el.dataset.showSearch !== "false",
+    showHeader: el.dataset.showHeader !== "false",
+  };
+}
+
+/** Find every mount point on the page. */
+function findMounts(): HTMLElement[] {
+  const mounts: HTMLElement[] = [];
+
+  // 1. Declarative div mounts
+  document.querySelectorAll<HTMLElement>("[data-rmke-widget]").forEach((el) => mounts.push(el));
+
+  // 2. The <script> tag itself, if it has the data-* attributes (shorthand)
+  const current = document.currentScript;
+  if (current instanceof HTMLScriptElement && current.dataset.station && current.dataset.variant) {
+    // Create a sibling div right after the script tag to host the widget.
+    const host = document.createElement("div");
+    host.dataset.rmkeWidget = "";
+    for (const key of [
+      "station",
+      "variant",
+      "layout",
+      "theme",
+      "maxItems",
+      "showSearch",
+      "showHeader",
+    ]) {
+      const v = current.dataset[key];
+      if (v != null) host.dataset[key] = v;
+    }
+    current.parentNode?.insertBefore(host, current.nextSibling);
+    mounts.push(host);
+  }
+
+  return mounts;
+}
+
+async function mountOne(host: HTMLElement): Promise<void> {
+  const config = parseConfig(host);
+  if (!config) return;
+
+  // Shadow DOM isolates our CSS from the host page. Host-page theming
+  // still pierces via CSS custom properties — see DESIGN.md widget mode B.
+  const shadow = host.attachShadow({ mode: "open" });
+  const mount = document.createElement("div");
+  mount.className = "rmke-root";
+  shadow.appendChild(mount);
+
+  try {
+    const module = await VARIANT_LOADERS[config.variant]();
+    module.render(mount, config);
+  } catch (err) {
+    // Graceful degradation per DESIGN.md state matrix — the widget shows
+    // a single polite error, never a broken-looking stack.
+    mount.textContent = "This playlist isn't available right now.";
+    console.error("[rmke-widget] variant load failed", err);
+  }
+}
+
+// Boot — run once after DOM is ready.
+function boot() {
+  findMounts().forEach((host) => {
+    void mountOne(host);
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot, { once: true });
+} else {
+  boot();
+}

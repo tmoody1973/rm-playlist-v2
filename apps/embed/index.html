@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>rm-playlist-v2 widget — local test harness</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #fafaf7;
+        color: #1a1a1a;
+        max-width: 780px;
+        margin: 3rem auto;
+        padding: 0 1.5rem;
+      }
+      h1 {
+        font-size: 18px;
+        margin-bottom: 2rem;
+        color: #6b6e73;
+      }
+      .mock-station-page {
+        margin-bottom: 2.5rem;
+      }
+      .mock-station-page h2 {
+        font-size: 14px;
+        color: #94989e;
+        font-weight: 500;
+        margin: 0 0 0.75rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Widget local test harness (4 stations × playlist stub)</h1>
+
+    <section class="mock-station-page">
+      <h2>HYFIN · data-variant="playlist" · list layout</h2>
+      <div
+        data-rmke-widget
+        data-station="hyfin"
+        data-variant="playlist"
+        data-layout="list"
+      ></div>
+    </section>
+
+    <section class="mock-station-page">
+      <h2>88Nine · data-variant="now-playing-card"</h2>
+      <div
+        data-rmke-widget
+        data-station="88nine"
+        data-variant="now-playing-card"
+      ></div>
+    </section>
+
+    <section class="mock-station-page">
+      <h2>Rhythm Lab · data-variant="playlist" · grid layout</h2>
+      <div
+        data-rmke-widget
+        data-station="rhythmlab"
+        data-variant="playlist"
+        data-layout="grid"
+      ></div>
+    </section>
+
+    <section class="mock-station-page">
+      <h2>414 Music · data-variant="now-playing-strip"</h2>
+      <div
+        data-rmke-widget
+        data-station="414music"
+        data-variant="now-playing-strip"
+      ></div>
+    </section>
+
+    <script type="module" src="/src/loader.ts"></script>
+  </body>
+</html>

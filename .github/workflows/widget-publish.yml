@@ -1,0 +1,66 @@
+name: Widget publish (Cloudflare Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/embed/**"
+      - "packages/types/**"
+      - ".github/workflows/widget-publish.yml"
+  workflow_dispatch: # manual trigger from the Actions UI
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: widget-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build + deploy widget bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: production
+      url: https://rm-playlist-v2-embed.pages.dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun --filter='@rm/embed' run typecheck
+
+      - name: Build widget bundle
+        run: bun --filter='@rm/embed' run build
+
+      - name: Enforce bundle size ceiling (25 KB gzip; eng review #2)
+        run: |
+          total_gz=0
+          for f in apps/embed/dist/v1/widget.js apps/embed/dist/v1/chunks/*.js; do
+            [ -f "$f" ] || continue
+            size=$(gzip -c "$f" | wc -c | tr -d ' ')
+            echo "::notice::$(basename "$f") gzipped=${size}B"
+            total_gz=$((total_gz + size))
+          done
+          echo "Total gzipped: ${total_gz} bytes"
+          CEILING=25600
+          if [ "$total_gz" -gt "$CEILING" ]; then
+            echo "::error::Bundle ${total_gz}B exceeds ${CEILING}B ceiling"
+            exit 1
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: d1fd8b8b5235d89303faf11170314041
+          command: pages deploy apps/embed/dist --project-name=rm-playlist-v2-embed --branch=main
