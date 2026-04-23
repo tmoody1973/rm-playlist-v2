@@ -31,10 +31,13 @@ radiomke-playlist-app V1/
 .trigger/
 yarn.lock
 
-# Convex dev scaffolding landed at repo root by default; will move to packages/convex/ in Milestone 3.
-# Ignore the misplaced copy until then so we don't commit it in the wrong location.
+# Root /convex/ existed temporarily in Milestone 2-3 when `convex dev` was
+# initialized at repo root; it was relocated to packages/convex/convex/ during
+# Milestone 3. Keep the ignore as a safety net against future accidental runs
+# from repo root that would recreate it in the wrong place.
 /convex/
 
-# Trigger.dev tasks landed at repo-root /src/trigger/ via default config.
-# Will relocate to services/trigger/src/ during Milestone 4.
-/src/
+# Trigger.dev tasks live at /src/trigger/ per trigger.config.ts `dirs: ["./src/trigger"]`.
+# We DO track these files (they're implementation code). Only the _generated
+# build output + caches get ignored.
+# (No ignore rule here — the .trigger/ cache ignore higher up handles those.)
