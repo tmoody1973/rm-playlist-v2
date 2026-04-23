@@ -104,6 +104,40 @@ export const markSuccess = internalMutation({
 });
 
 /**
+ * Public read: every enabled source with the minimum fields needed to poll.
+ * Consumed by the Trigger.dev dispatcher task (`poll-all-sources`). Omits
+ * sensitive-adjacent fields like `lastSuccessAt` that are dashboard-scoped.
+ *
+ * `config.apiKeyRef` is the NAME of the env var holding the real secret,
+ * not the secret itself. `config.scraperUuid` is an opaque identifier.
+ * Neither is a secret — safe to expose on a public query.
+ */
+export const listEnabledForPolling = query({
+  args: {},
+  handler: async (ctx) => {
+    const sources = await ctx.db
+      .query("ingestionSources")
+      .withIndex("by_enabled", (q) => q.eq("enabled", true))
+      .collect();
+
+    const stations = await ctx.db.query("stations").collect();
+    const stationSlugById = new Map(stations.map((s) => [s._id, s.slug]));
+
+    return sources.map((s) => ({
+      _id: s._id,
+      stationSlug: stationSlugById.get(s.stationId) ?? ("unknown" as const),
+      adapter: s.adapter,
+      role: s.role,
+      config: s.config as {
+        apiKeyRef?: string;
+        scraperUuid?: string;
+        count?: number;
+      },
+    }));
+  },
+});
+
+/**
  * One-off cleanup: disable a source by id. Used to retire duplicates that
  * accrued during rapid seed iteration.
  */
