@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["convex/**/*.ts"],
+  "exclude": ["node_modules", "convex/_generated"]
+}

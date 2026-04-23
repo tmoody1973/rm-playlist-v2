@@ -1,0 +1,25 @@
+{
+  "name": "@rm/convex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Convex database + real-time layer for rm-playlist-v2. Schema, queries, mutations, actions.",
+  "exports": {
+    "./api": "./convex/_generated/api.js",
+    "./schema": "./convex/schema.ts",
+    "./values": "./convex/_generated/dataModel.d.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "echo 'no tests in @rm/convex (Convex runtime — tested via integration in apps/web)'",
+    "codegen": "convex codegen",
+    "dev": "convex dev"
+  },
+  "dependencies": {
+    "@rm/types": "workspace:*",
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
+  }
+}
