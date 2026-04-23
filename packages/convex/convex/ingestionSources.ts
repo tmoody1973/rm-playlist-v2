@@ -123,17 +123,99 @@ export const listEnabledForPolling = query({
     const stations = await ctx.db.query("stations").collect();
     const stationSlugById = new Map(stations.map((s) => [s._id, s.slug]));
 
-    return sources.map((s) => ({
-      _id: s._id,
-      stationSlug: stationSlugById.get(s.stationId) ?? ("unknown" as const),
-      adapter: s.adapter,
-      role: s.role,
-      config: s.config as {
+    const rows: Array<{
+      _id: Doc<"ingestionSources">["_id"];
+      stationSlug: Doc<"stations">["slug"];
+      adapter: Doc<"ingestionSources">["adapter"];
+      role: Doc<"ingestionSources">["role"];
+      config: {
         apiKeyRef?: string;
         scraperUuid?: string;
         count?: number;
-      },
-    }));
+        /** ICY adapter: full HTTP(S) URL of the broadcaster stream. */
+        streamUrl?: string;
+      };
+    }> = [];
+    for (const s of sources) {
+      const stationSlug = stationSlugById.get(s.stationId);
+      if (stationSlug === undefined) continue;
+      rows.push({
+        _id: s._id,
+        stationSlug,
+        adapter: s.adapter,
+        role: s.role,
+        config: s.config as {
+          apiKeyRef?: string;
+          scraperUuid?: string;
+          count?: number;
+          streamUrl?: string;
+        },
+      });
+    }
+    return rows;
+  },
+});
+
+/**
+ * Seed/upsert a Rhythm Lab-style ICY source without a poll interval.
+ *
+ * Distinct from `upsert` because ICY sources carry `config.streamUrl`
+ * rather than `apiKeyRef/scraperUuid`, and have no meaningful poll
+ * interval (the worker holds a persistent connection).
+ *
+ * Called once per station via `bunx convex run ingestionSources:upsertIcy
+ *   '{ "stationSlug": "rhythmlab", "streamUrl": "https://...", "role": "primary", "enabled": true }'`
+ */
+export const upsertIcy = internalMutation({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    streamUrl: v.string(),
+    role: v.union(v.literal("primary"), v.literal("supplementary"), v.literal("shadow")),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", args.stationSlug))
+      .first();
+    if (station === null) {
+      throw new Error(`Station not seeded: ${args.stationSlug}`);
+    }
+
+    const existing = await ctx.db
+      .query("ingestionSources")
+      .withIndex("by_station", (q) => q.eq("stationId", station._id))
+      .filter((q) =>
+        q.and(q.eq(q.field("adapter"), "icy"), q.eq(q.field("role"), args.role)),
+      )
+      .first();
+
+    const config = { streamUrl: args.streamUrl };
+    const now = Date.now();
+
+    if (existing !== null) {
+      await ctx.db.patch(existing._id, {
+        config,
+        enabled: args.enabled,
+      });
+      return { sourceId: existing._id, action: "updated" as const };
+    }
+
+    const sourceId = await ctx.db.insert("ingestionSources", {
+      orgId: station.orgId,
+      stationId: station._id,
+      adapter: "icy",
+      role: args.role,
+      config,
+      enabled: args.enabled,
+      createdAt: now,
+    });
+    return { sourceId, action: "inserted" as const };
   },
 });
 

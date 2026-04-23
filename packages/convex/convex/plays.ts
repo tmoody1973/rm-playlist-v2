@@ -1,6 +1,23 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { type MutationCtx, mutation, query } from "./_generated/server";
+
+/**
+ * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
+ * `recordStreamPlay` (single) — both need the orgId/stationId off the source
+ * row to attribute the play correctly.
+ */
+async function loadSourceOrThrow(
+  ctx: MutationCtx,
+  sourceId: Id<"ingestionSources">,
+): Promise<Doc<"ingestionSources">> {
+  const source = await ctx.db.get(sourceId);
+  if (source === null) {
+    throw new Error(`Unknown source: ${sourceId}`);
+  }
+  return source;
+}
 
 /**
  * Record a batch of normalized plays from a single adapter poll.
@@ -32,10 +49,7 @@ export const recordPolledPlays = mutation({
     ),
   },
   handler: async (ctx, { sourceId, plays: incoming }) => {
-    const source = await ctx.db.get(sourceId);
-    if (source === null) {
-      throw new Error(`Unknown source: ${sourceId}`);
-    }
+    const source = await loadSourceOrThrow(ctx, sourceId);
 
     let inserted = 0;
     let skipped = 0;
@@ -85,6 +99,75 @@ export const recordPolledPlays = mutation({
 });
 
 /**
+ * Record a single play from a long-lived stream (ICY worker on Fly).
+ *
+ * Unlike `recordPolledPlays` — which runs once per minute and logs a
+ * `poll_ok` ingestionEvent per batch — streams emit one StreamTitle per song
+ * change (~every 3 min per station). Logging a Convex event for every tick
+ * would flood `ingestionEvents`. So this mutation:
+ *
+ *   - Dedups by `(stationId, playedAt)` exactly like the batch version.
+ *   - Does NOT write an ingestionEvent on success (too noisy).
+ *   - Does NOT update `lastSuccessAt` here — a session-3 heartbeat mutation
+ *     or ingestion-events kind extension will own that path.
+ *
+ * Returns a discriminated result so the worker can distinguish new plays
+ * from duplicates without catching exceptions, and surface unknown-source
+ * errors up to the supervisor for abort-this-source handling.
+ */
+// TODO(security): unauthenticated public mutation — same threat profile as
+// `recordPolledPlays` above. Before partner stations go live: (a) HMAC-sign
+// requests from the Fly worker using a shared secret, verify here with
+// `crypto.timingSafeEqual`; (b) sliding-window rate limit per sourceId to
+// cap at ~60 inserts/min/source (real ICY streams tick ~20/hr). These two
+// mitigations collapse the DoS + sourceId-trust + playedAt-displacement
+// concerns flagged in M8 session 2 security review.
+export const recordStreamPlay = mutation({
+  args: {
+    sourceId: v.id("ingestionSources"),
+    play: v.object({
+      artistRaw: v.string(),
+      titleRaw: v.string(),
+      albumRaw: v.optional(v.string()),
+      labelRaw: v.optional(v.string()),
+      durationSec: v.optional(v.number()),
+      playedAt: v.number(),
+      raw: v.any(),
+    }),
+  },
+  handler: async (ctx, { sourceId, play }) => {
+    const source = await loadSourceOrThrow(ctx, sourceId);
+
+    const dup = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) =>
+        q.eq("stationId", source.stationId).eq("playedAt", play.playedAt),
+      )
+      .first();
+    if (dup !== null) {
+      return { inserted: false as const, reason: "duplicate" as const };
+    }
+
+    await ctx.db.insert("plays", {
+      orgId: source.orgId,
+      stationId: source.stationId,
+      sourceId,
+      artistRaw: play.artistRaw,
+      titleRaw: play.titleRaw,
+      albumRaw: play.albumRaw,
+      labelRaw: play.labelRaw,
+      durationSec: play.durationSec,
+      playedAt: play.playedAt,
+      enrichmentStatus: "pending",
+      raw: play.raw,
+      createdAt: Date.now(),
+    });
+
+    return { inserted: true as const };
+  },
+});
+
+/**
  * Log a poll failure. Called from Trigger task's catch block.
  */
 export const recordPollFailure = mutation({
@@ -94,10 +177,7 @@ export const recordPollFailure = mutation({
     context: v.optional(v.any()),
   },
   handler: async (ctx, { sourceId, errorMessage, context }) => {
-    const source = await ctx.db.get(sourceId);
-    if (source === null) {
-      throw new Error(`Unknown source: ${sourceId}`);
-    }
+    const source = await loadSourceOrThrow(ctx, sourceId);
     await ctx.runMutation(internal.ingestionEvents.log, {
       orgId: source.orgId,
       stationId: source.stationId,

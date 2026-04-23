@@ -1,20 +1,22 @@
-import type { StationSlug } from "@rm/types";
+import { createConvexGateway } from "./convex-client";
 import { logger } from "./logger";
-import { runWorker } from "./worker";
+import { runSupervisor } from "./supervisor";
 
-const STREAM_URL = process.env.ICY_STREAM_URL;
-const STATION_SLUG = (process.env.ICY_STATION_SLUG ?? "rhythmlab") as StationSlug;
+const CONVEX_URL = process.env.CONVEX_URL ?? process.env.NEXT_PUBLIC_CONVEX_URL;
+const REFRESH_SEC_RAW = process.env.SOURCE_REFRESH_SEC;
 
-if (!STREAM_URL) {
+if (!CONVEX_URL) {
   logger.error("ingestion.lifecycle", {
     phase: "boot_failed",
-    reason: "ICY_STREAM_URL not set",
+    reason: "CONVEX_URL (or NEXT_PUBLIC_CONVEX_URL) not set",
   });
   process.exit(1);
 }
 
-const controller = new AbortController();
+const parsedRefresh = REFRESH_SEC_RAW != null ? Number.parseInt(REFRESH_SEC_RAW, 10) : NaN;
+const refreshMs = Number.isFinite(parsedRefresh) && parsedRefresh > 0 ? parsedRefresh * 1000 : undefined;
 
+const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     logger.info("ingestion.lifecycle", { phase: "signal", signal });
@@ -22,10 +24,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-runWorker({
-  stationSlug: STATION_SLUG,
-  streamUrl: STREAM_URL,
+runSupervisor({
+  gateway: createConvexGateway({ url: CONVEX_URL }),
   signal: controller.signal,
+  refreshMs,
 }).catch((err: unknown) => {
   logger.error("ingestion.lifecycle", {
     phase: "crashed",

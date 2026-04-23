@@ -35,8 +35,10 @@
       "name": "@rm/icy-worker",
       "version": "0.0.0",
       "dependencies": {
+        "@rm/convex": "workspace:*",
         "@rm/ingestion": "workspace:*",
         "@rm/types": "workspace:*",
+        "convex": "^1.17.0",
       },
       "devDependencies": {
         "@types/bun": "^1.2.0",

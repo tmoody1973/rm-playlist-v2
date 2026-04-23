@@ -18,7 +18,8 @@ primary_region = "ord"
 
 [env]
   NODE_ENV = "production"
-  ICY_STATION_SLUG = "rhythmlab"
+  # CONVEX_URL is set via `fly secrets set CONVEX_URL=https://<...>.convex.cloud`
+  # SOURCE_REFRESH_SEC defaults to 60 inside the worker; override here if needed.
 
 [[vm]]
   cpu_kind = "shared"

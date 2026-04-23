@@ -1,42 +1,57 @@
 # @rm/icy-worker
 
-Persistent ICY stream listener for rm-playlist-v2. Holds a long-lived HTTP
-connection to a broadcaster stream, extracts Shoutcast/Icecast in-band
-metadata (`StreamTitle='Artist - Title';`), and normalizes plays through
-`@rm/ingestion`'s `icyAdapter`.
+Persistent ICY stream listener for rm-playlist-v2. Holds long-lived HTTP
+connections to broadcaster streams, extracts Shoutcast/Icecast in-band
+metadata (`StreamTitle='Artist - Title';`), and writes normalized plays to
+Convex via `plays.recordStreamPlay`.
 
-Session 1 scope — this ships the worker that reads one hardcoded stream URL
-(via env var) and logs parsed plays to stdout. Session 2 wires Convex-driven
-source discovery and mutation writes.
+The worker discovers which streams to listen to by polling Convex's
+`ingestionSources.listEnabledForPolling` every 60 seconds and filtering to
+`adapter: "icy"`. Adding a new ICY source is a single
+`ingestionSources:upsertIcy` call — no worker redeploy.
 
 ## Environment variables
 
 | Var | Purpose |
 |-----|---------|
-| `ICY_STREAM_URL`   | Full URL of the ICY stream. Must pass the SSRF allowlist (see `src/ssrf.ts`). |
-| `ICY_STATION_SLUG` | Which `StationSlug` tag to attach to emitted plays. Default `rhythmlab`. |
-| `ICY_ALLOWED_PORTS` | Comma-separated non-default ports to accept (e.g. `8000,8443`). |
+| `CONVEX_URL` (or `NEXT_PUBLIC_CONVEX_URL`) | Convex deployment URL. Required. |
+| `SOURCE_REFRESH_SEC` | Override the 60s source-list refresh cadence. Optional. |
+| `ICY_ALLOWED_PORTS` | Comma-separated non-default ports the SSRF allowlist should accept (e.g. `8000,8443`). Optional. |
+
+## Seeding a source
+
+```bash
+# From repo root. Upsert the Rhythm Lab ICY source:
+cd packages/convex
+bunx convex run ingestionSources:upsertIcy '{
+  "stationSlug": "rhythmlab",
+  "streamUrl": "https://wyms.streamguys1.com/rhythmlab",
+  "role": "primary",
+  "enabled": true
+}'
+```
+
+The worker picks up the new row on its next refresh tick (within 60s).
 
 ## Local development
 
 ```bash
 # From repo root
 bun install
-
-# Point at any public ICY stream for a smoke test
-ICY_STREAM_URL="http://stream.example.com:8000/live" \
-ICY_STATION_SLUG=rhythmlab \
+CONVEX_URL="https://<your-dev>.convex.cloud" \
   bun --filter @rm/icy-worker run dev
 ```
 
 ## Tests
 
 ```bash
-bun --filter @rm/icy-worker run test
+cd apps/icy-worker && bun test
 ```
 
-Tests use `Bun.serve` to spin up a mock ICY HTTP server on a random port —
-no network access required, no real broadcaster credentials needed.
+Tests cover the SSRF allowlist, the ICY byte-stream parser, the exponential
+backoff, the supervisor's lifecycle (spawn/abort/respawn on URL change),
+the Convex gateway contract (duplicate-silent, unknown-source-abort), and an
+end-to-end path: mock ICY server → client → adapter → mock Convex writePlay.
 
 ## Deployment
 
@@ -44,18 +59,16 @@ no network access required, no real broadcaster credentials needed.
 # From repo root, after `flyctl auth login`
 fly deploy --config apps/icy-worker/fly.toml --dockerfile apps/icy-worker/Dockerfile .
 
-# Secrets
-fly secrets set \
-  ICY_STREAM_URL="https://..." \
+fly secrets set CONVEX_URL="https://<your-prod>.convex.cloud" \
   --config apps/icy-worker/fly.toml
 ```
 
 ## What this worker does NOT do (yet)
 
-- No Convex mutations — plays are logged to stdout only. Session 2.
-- No multi-source fan-out — one stream URL per worker instance. Session 2.
-- No reconciliation with Spinitron — dual-source logic is session 3.
-- No HTTP health endpoint — Fly TCP checks suffice for session 1. Added with Convex wiring.
+- No Rhythm Lab dual-source reconciliation against Spinitron. Session 3.
+- No WebSocket-based live source-list subscription. We poll on interval. Session 3.
+- No heartbeat / `lastSuccessAt` updates on the `ingestionSources` row. Session 3.
+- No HTTP health endpoint — Fly TCP checks suffice until Convex wiring needs monitoring.
 
 Architecture rationale lives in `radiomke-playlist-v2-brainstorm.md` sections
 "Persistent stream connections (ICY)" and "Rhythm Lab dual-source reconciliation".
