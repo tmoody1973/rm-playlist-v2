@@ -104,6 +104,17 @@ export const markSuccess = internalMutation({
 });
 
 /**
+ * One-off cleanup: disable a source by id. Used to retire duplicates that
+ * accrued during rapid seed iteration.
+ */
+export const disableById = internalMutation({
+  args: { sourceId: v.id("ingestionSources") },
+  handler: async (ctx, { sourceId }) => {
+    await ctx.db.patch(sourceId, { enabled: false });
+  },
+});
+
+/**
  * Public-read view of ingestion status per station, for the dashboard
  * "Needs Attention" panel. Omits config (which contains apiKeyRef).
  */
