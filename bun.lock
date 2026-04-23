@@ -31,6 +31,18 @@
         "vite": "^6.0.7",
       },
     },
+    "apps/icy-worker": {
+      "name": "@rm/icy-worker",
+      "version": "0.0.0",
+      "dependencies": {
+        "@rm/ingestion": "workspace:*",
+        "@rm/types": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+        "typescript": "^5.7.0",
+      },
+    },
     "apps/web": {
       "name": "@rm/web",
       "version": "0.0.0",
@@ -381,6 +393,8 @@
     "@rm/convex": ["@rm/convex@workspace:packages/convex"],
 
     "@rm/embed": ["@rm/embed@workspace:apps/embed"],
+
+    "@rm/icy-worker": ["@rm/icy-worker@workspace:apps/icy-worker"],
 
     "@rm/ingestion": ["@rm/ingestion@workspace:packages/ingestion"],
 
