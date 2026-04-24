@@ -246,9 +246,7 @@ function SummaryLine({
       <span title="rows missing recordLabel — still valid for SoundExchange but flagged for completeness">
         missing label: {summary.missingLabel}
       </span>
-      <span title="rows missing ISRC — optional for SOR">
-        missing ISRC: {summary.missingIsrc}
-      </span>
+      <span title="rows missing ISRC — optional for SOR">missing ISRC: {summary.missingIsrc}</span>
       <span title="rows missing duration">missing duration: {summary.missingDuration}</span>
     </p>
   );
@@ -290,7 +288,10 @@ function toIsoDate(d: Date): string {
  * Returns null if either date fails to parse or the range is
  * empty/reversed.
  */
-function toEpochRange(startDate: string, endDate: string): { startMs: number; endMs: number } | null {
+function toEpochRange(
+  startDate: string,
+  endDate: string,
+): { startMs: number; endMs: number } | null {
   const startMs = milwaukeeMidnightEpoch(startDate);
   const endDayMs = milwaukeeMidnightEpoch(endDate);
   if (startMs === null || endDayMs === null) return null;

@@ -1,10 +1,5 @@
 import type { Throttle } from "../throttle";
-import type {
-  FetchLike,
-  MusicBrainzMissReason,
-  MusicBrainzResult,
-  PlayIdentity,
-} from "../types";
+import type { FetchLike, MusicBrainzMissReason, MusicBrainzResult, PlayIdentity } from "../types";
 import { type MusicBrainzErrorCode, MusicBrainzError, searchRecording } from "./client";
 
 export interface LookupMusicBrainzDeps {

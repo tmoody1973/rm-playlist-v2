@@ -106,10 +106,7 @@ export const fillMissingDurationsFromApple = action({
 
     for (const track of candidates) {
       try {
-        const durationSec = await fetchAppleSongDurationSec(
-          track.appleMusicSongId,
-          token.token,
-        );
+        const durationSec = await fetchAppleSongDurationSec(track.appleMusicSongId, token.token);
         if (durationSec === null) {
           skippedNoDuration += 1;
           continue;
@@ -137,10 +134,7 @@ export const fillMissingDurationsFromApple = action({
   },
 });
 
-async function fetchAppleSongDurationSec(
-  songId: string,
-  token: string,
-): Promise<number | null> {
+async function fetchAppleSongDurationSec(songId: string, token: string): Promise<number | null> {
   const url = `https://api.music.apple.com/v1/catalog/us/songs/${encodeURIComponent(songId)}`;
   const res = await fetch(url, {
     headers: {

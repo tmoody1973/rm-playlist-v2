@@ -12,11 +12,11 @@ The worker discovers which streams to listen to by polling Convex's
 
 ## Environment variables
 
-| Var | Purpose |
-|-----|---------|
-| `CONVEX_URL` (or `NEXT_PUBLIC_CONVEX_URL`) | Convex deployment URL. Required. |
-| `SOURCE_REFRESH_SEC` | Override the 60s source-list refresh cadence. Optional. |
-| `ICY_ALLOWED_PORTS` | Comma-separated non-default ports the SSRF allowlist should accept (e.g. `8000,8443`). Optional. |
+| Var                                        | Purpose                                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `CONVEX_URL` (or `NEXT_PUBLIC_CONVEX_URL`) | Convex deployment URL. Required.                                                                 |
+| `SOURCE_REFRESH_SEC`                       | Override the 60s source-list refresh cadence. Optional.                                          |
+| `ICY_ALLOWED_PORTS`                        | Comma-separated non-default ports the SSRF allowlist should accept (e.g. `8000,8443`). Optional. |
 
 ## Seeding a source
 

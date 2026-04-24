@@ -27,7 +27,8 @@ export function createMockFetch(): MockFetch {
   const calls: MockFetchCall[] = [];
 
   const fetchImpl: MockFetchFn = async (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const headers: Record<string, string> = {};
     const rawHeaders = init?.headers;
     if (rawHeaders) {
@@ -50,7 +51,11 @@ export function createMockFetch(): MockFetch {
       return new Response("mock exhausted", { status: 500 });
     }
     const bodyText =
-      next.body === undefined ? "" : typeof next.body === "string" ? next.body : JSON.stringify(next.body);
+      next.body === undefined
+        ? ""
+        : typeof next.body === "string"
+          ? next.body
+          : JSON.stringify(next.body);
     return new Response(bodyText, {
       status: next.status ?? 200,
       headers: next.headers,

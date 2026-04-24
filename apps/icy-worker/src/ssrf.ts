@@ -22,7 +22,12 @@
 const ALWAYS_ALLOWED_PORTS = new Set(["80", "443", ""]);
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 
-const PRIVATE_HOSTNAMES = new Set(["localhost", "localhost.localdomain", "ip6-localhost", "ip6-loopback"]);
+const PRIVATE_HOSTNAMES = new Set([
+  "localhost",
+  "localhost.localdomain",
+  "ip6-localhost",
+  "ip6-loopback",
+]);
 
 const METADATA_IP = "169.254.169.254";
 const IPV6_LOOPBACK = "::1";

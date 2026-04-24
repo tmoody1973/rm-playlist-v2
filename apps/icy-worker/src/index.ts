@@ -14,7 +14,8 @@ if (!CONVEX_URL) {
 }
 
 const parsedRefresh = REFRESH_SEC_RAW != null ? Number.parseInt(REFRESH_SEC_RAW, 10) : NaN;
-const refreshMs = Number.isFinite(parsedRefresh) && parsedRefresh > 0 ? parsedRefresh * 1000 : undefined;
+const refreshMs =
+  Number.isFinite(parsedRefresh) && parsedRefresh > 0 ? parsedRefresh * 1000 : undefined;
 
 const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

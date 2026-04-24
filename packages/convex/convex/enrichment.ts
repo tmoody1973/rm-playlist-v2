@@ -301,9 +301,7 @@ export const patchTrackMetadata = mutation({
     if (args.isrc !== undefined) {
       const value = args.isrc.trim().toUpperCase();
       if (value.length > 0 && !/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/.test(value)) {
-        throw new Error(
-          "ISRC must be 12 chars: 2 country + 3 registrant + 2 year + 5 designation",
-        );
+        throw new Error("ISRC must be 12 chars: 2 country + 3 registrant + 2 year + 5 designation");
       }
       patch.isrc = value.length === 0 ? undefined : value;
     }

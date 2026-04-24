@@ -84,9 +84,10 @@ describe("readIcyStream — errors", () => {
       status: 403,
     });
     try {
-      await expect(
-        readIcyStream({ url: server.url, onMetadata: () => {} }),
-      ).rejects.toMatchObject({ name: "IcyProtocolError", code: "http_4xx" });
+      await expect(readIcyStream({ url: server.url, onMetadata: () => {} })).rejects.toMatchObject({
+        name: "IcyProtocolError",
+        code: "http_4xx",
+      });
     } finally {
       await server.stop();
     }
@@ -99,9 +100,9 @@ describe("readIcyStream — errors", () => {
       status: 503,
     });
     try {
-      await expect(
-        readIcyStream({ url: server.url, onMetadata: () => {} }),
-      ).rejects.toMatchObject({ code: "http_5xx" });
+      await expect(readIcyStream({ url: server.url, onMetadata: () => {} })).rejects.toMatchObject({
+        code: "http_5xx",
+      });
     } finally {
       await server.stop();
     }
@@ -114,9 +115,9 @@ describe("readIcyStream — errors", () => {
       omitMetaintHeader: true,
     });
     try {
-      await expect(
-        readIcyStream({ url: server.url, onMetadata: () => {} }),
-      ).rejects.toMatchObject({ code: "no_metaint" });
+      await expect(readIcyStream({ url: server.url, onMetadata: () => {} })).rejects.toMatchObject({
+        code: "no_metaint",
+      });
     } finally {
       await server.stop();
     }
