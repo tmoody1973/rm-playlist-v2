@@ -310,6 +310,7 @@ async function buildPublicPlay(ctx: QueryCtx, play: Doc<"plays">): Promise<Publi
     artworkUrl: track?.artworkUrl ?? null,
     spotifyTrackId: track?.spotifyTrackId ?? null,
     appleMusicSongId: track?.appleMusicSongId ?? null,
+    previewUrl: track?.previewUrl ?? null,
     liveEvent: null,
   };
 }
@@ -328,6 +329,7 @@ export interface PublicPlay {
   readonly artworkUrl: string | null;
   readonly spotifyTrackId: string | null;
   readonly appleMusicSongId: string | null;
+  readonly previewUrl: string | null;
   readonly liveEvent: null;
 }
 

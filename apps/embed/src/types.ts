@@ -57,6 +57,7 @@ export interface PublicPlay {
   readonly artworkUrl: string | null;
   readonly spotifyTrackId: string | null;
   readonly appleMusicSongId: string | null;
+  readonly previewUrl: string | null;
   readonly liveEvent: LiveEventSummary | null;
 }
 

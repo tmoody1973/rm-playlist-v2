@@ -219,6 +219,9 @@ export default defineSchema({
     appleMusicSongId: v.optional(v.string()),
     /** Album art URL — chosen once at enrichment time from the best source. */
     artworkUrl: v.optional(v.string()),
+    /** Apple Music 30-second preview URL (from `attributes.previews[0].url`).
+     *  Cached here so the widget PreviewButton doesn't hit Apple on every click. */
+    previewUrl: v.optional(v.string()),
     verified: v.boolean(),
     createdAt: v.number(),
   })

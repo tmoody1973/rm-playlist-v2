@@ -110,6 +110,7 @@ export const upsertTrack = mutation({
     isrc: v.optional(v.string()),
     durationSec: v.optional(v.number()),
     artworkUrl: v.optional(v.string()),
+    previewUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const artworkUrl = sanitizeArtworkUrl(args.artworkUrl);
@@ -132,6 +133,7 @@ export const upsertTrack = mutation({
         if (args.isrc && !existing.isrc) patch.isrc = args.isrc;
         if (args.durationSec && !existing.durationSec) patch.durationSec = args.durationSec;
         if (artworkUrl && !existing.artworkUrl) patch.artworkUrl = artworkUrl;
+        if (args.previewUrl && !existing.previewUrl) patch.previewUrl = args.previewUrl;
         if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch);
         return existing._id;
       }
@@ -146,6 +148,7 @@ export const upsertTrack = mutation({
       durationSec: args.durationSec,
       appleMusicSongId: args.appleMusicSongId,
       artworkUrl,
+      previewUrl: args.previewUrl,
       verified: false,
       createdAt: Date.now(),
     });
