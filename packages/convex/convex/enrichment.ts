@@ -406,6 +406,96 @@ export const tracksMissingSoundExchangeFields = query({
 });
 
 /**
+ * Per-station enrichment coverage over the last `windowMs` (default 24h).
+ *
+ * Drives the compact coverage stat on each StationCard. Three ratios are
+ * computed against the set of resolved plays (plays with a
+ * `canonicalTrackId`) — NOT against the total plays, because a station
+ * running an un-indexed local act can't reach 100% and we want the
+ * denominator to reflect what enrichment actually got its hands on:
+ *
+ *   labelCoverage   — % of resolved plays whose track has a recordLabel
+ *   isrcCoverage    — % whose track has an isrc
+ *   durationCoverage — % whose track has durationSec > 0
+ *
+ * Also returns `resolvedRatio` (resolved / total) so operators can tell
+ * "this station's 40% label coverage is because enrichment can't match
+ * its catalog" from "it matched everything but Apple omits labels for
+ * half of it" — very different problems.
+ *
+ * 414 Music will show chronically low labelCoverage; the memory file
+ * (project_stations.md) documents this as expected, not a bug.
+ *
+ * Window defaults to 24h because each new play invalidates this query
+ * (via the `by_station_played_at` index read) — a 7d scan + track-get
+ * per resolved play × 12 plays/hr across the wall = expensive. 24h keeps
+ * the scan cheap (~70 rows) without losing signal.
+ */
+export const stationCoverage = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    windowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, { stationSlug, windowMs }) => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) return null;
+
+    const window = windowMs ?? 24 * 60 * 60 * 1000;
+    const since = Date.now() - window;
+
+    const recentPlays = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) =>
+        q.eq("stationId", station._id).gte("playedAt", since),
+      )
+      .take(500);
+
+    const trackCache = new Map<string, Doc<"tracks"> | null>();
+    let totalPlays = 0;
+    let resolvedPlays = 0;
+    let withLabel = 0;
+    let withIsrc = 0;
+    let withDuration = 0;
+
+    for (const play of recentPlays) {
+      if (play.deletedAt !== undefined) continue;
+      totalPlays += 1;
+      if (play.canonicalTrackId === undefined) continue;
+      resolvedPlays += 1;
+      const tid = play.canonicalTrackId as string;
+      let track = trackCache.get(tid);
+      if (track === undefined) {
+        track = await ctx.db.get(play.canonicalTrackId);
+        trackCache.set(tid, track);
+      }
+      if (track === null) continue;
+      if (track.recordLabel && track.recordLabel.trim().length > 0) withLabel += 1;
+      if (track.isrc && track.isrc.trim().length > 0) withIsrc += 1;
+      if (typeof track.durationSec === "number" && track.durationSec > 0) withDuration += 1;
+    }
+
+    const ratio = (n: number, d: number): number => (d === 0 ? 0 : n / d);
+    return {
+      totalPlays,
+      resolvedPlays,
+      resolvedRatio: ratio(resolvedPlays, totalPlays),
+      labelCoverage: ratio(withLabel, resolvedPlays),
+      isrcCoverage: ratio(withIsrc, resolvedPlays),
+      durationCoverage: ratio(withDuration, resolvedPlays),
+      windowMs: window,
+    };
+  },
+});
+
+/**
  * Operator action — flip every resolved play pointing at a track back
  * to `pending` so the next enrich cron tick re-runs the Apple+Discogs
  * lookups. `upsertTrack`'s patch branch fills in any fields that
