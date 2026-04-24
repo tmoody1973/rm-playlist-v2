@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { MusicBrainzError, searchRecording } from "../../src/musicbrainz/client";
+import {
+  MusicBrainzError,
+  normalizeArtistForMb,
+  normalizeTitleForMb,
+  searchRecording,
+} from "../../src/musicbrainz/client";
 import { lookupMusicBrainz } from "../../src/musicbrainz";
 import { createThrottle } from "../../src/throttle";
 import { createMockFetch } from "../fetch-mock";
@@ -160,5 +165,36 @@ describe("MusicBrainzError", () => {
     expect(err.code).toBe("rate_limited");
     expect(err.status).toBe(429);
     expect(err.name).toBe("MusicBrainzError");
+  });
+});
+
+describe("normalizeArtistForMb", () => {
+  test.each([
+    ["4hero, Carina Andersson", "4hero"],
+    ["Buddy feat. A$AP Ferg", "Buddy"],
+    ["Buddy Feat. A$AP Ferg", "Buddy"],
+    ["Buddy featuring A$AP Ferg", "Buddy"],
+    ["Artist A & Artist B", "Artist A"],
+    ["Kendrick Lamar with SZA", "Kendrick Lamar"],
+    ["D'Angelo", "D'Angelo"],
+    ["", ""],
+  ])("%s -> %s", (input, expected) => {
+    expect(normalizeArtistForMb(input)).toBe(expected);
+  });
+});
+
+describe("normalizeTitleForMb", () => {
+  test.each([
+    ["Black (feat. A$AP Ferg)", "Black"],
+    ["Mysterious Girl (Radio Edit)", "Mysterious Girl"],
+    ["Delfonics Theme (How Could You)", "Delfonics Theme"],
+    ["Song (Extended Mix)", "Song"],
+    ["Song (Live)", "Song"],
+    ["Song (Remastered)", "Song"],
+    ["Plain Title", "Plain Title"],
+    ["Title With (Subtitle) In Middle", "Title With (Subtitle) In Middle"],
+    ["", ""],
+  ])("%s -> %s", (input, expected) => {
+    expect(normalizeTitleForMb(input)).toBe(expected);
   });
 });

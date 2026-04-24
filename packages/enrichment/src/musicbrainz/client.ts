@@ -63,7 +63,10 @@ export async function searchRecording(
   input: SearchRecordingInput,
 ): Promise<NormalizedRecording[]> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
-  const query = luceneQuery(input.artist, input.title);
+  const query = luceneQuery(
+    normalizeArtistForMb(input.artist),
+    normalizeTitleForMb(input.title),
+  );
   const url = `${API_BASE}/recording?fmt=json&limit=5&query=${encodeURIComponent(query)}`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -97,6 +100,42 @@ function luceneQuery(artist: string, title: string): string {
 
 function escapeLucene(value: string): string {
   return value.replace(/["\\]/g, "\\$&");
+}
+
+/**
+ * Strip feature credits and annotations from artistRaw before querying MB.
+ * Input like `"4hero, Carina Andersson"` or `"Buddy feat. A$AP Ferg"` or
+ * `"Artist A & Artist B"` becomes the primary artist (`4hero` / `Buddy` /
+ * `Artist A`) — matches how MusicBrainz stores the authoritative artist
+ * credit.
+ */
+export function normalizeArtistForMb(artist: string): string {
+  const first = artist
+    .split(/\s+feat\.?\s+|\s+featuring\s+|\s+with\s+|[,&]/i)[0]
+    ?.trim();
+  return first && first.length > 0 ? first : artist;
+}
+
+/**
+ * Strip title annotations that break MB exact-match: `(feat. X)`,
+ * `(Radio Edit)`, `(Live)`, `(Remix)`, `(Remastered)`, and any trailing
+ * parenthetical subtitle. Keeps trailing `!`/`.` punctuation intact since
+ * MB honors those.
+ */
+export function normalizeTitleForMb(title: string): string {
+  const stripped = title
+    .replace(/\s*\(feat\.?[^)]*\)/gi, "")
+    .replace(/\s*\(featuring[^)]*\)/gi, "")
+    .replace(/\s*\(radio edit\)/gi, "")
+    .replace(/\s*\(live\)/gi, "")
+    .replace(/\s*\(remaster(?:ed)?\)/gi, "")
+    .replace(/\s*\([^)]*\bmix\)/gi, "")
+    .replace(/\s*\([^)]*\bremix\)/gi, "")
+    .replace(/\s*\([^)]*\bversion\)/gi, "")
+    .replace(/\s*\([^)]*\bedit\)/gi, "")
+    .replace(/\s*\([^)]+\)\s*$/g, "")
+    .trim();
+  return stripped.length > 0 ? stripped : title;
 }
 
 function normalize(rec: MbRecording): NormalizedRecording | null {
