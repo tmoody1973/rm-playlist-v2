@@ -14,15 +14,20 @@ const STATIONS: ReadonlyArray<{ slug: StationSlug; label: string }> = [
 ];
 
 /**
- * Row 2 left — SoundExchange Report of Use export.
+ * Row 2 left — NPR music-rights playlist log export.
  *
  * Operators pick a station + date range, preview resolved-play count
- * (with per-column completeness), and download a CSV that matches the
- * SoundExchange non-commercial webcaster SOR playlist format.
+ * (with per-column completeness), and download a tab-delimited TXT
+ * file that matches NPR's SoundExchange playlist log format:
+ *   Start Time <tab> End Time <tab> Title <tab> Artist <tab> Album <tab> Label
+ * Times are rendered in Milwaukee local time (America/Chicago) as
+ * `MM/dd/yyyy HH:mm:ss`. End Time = Start Time + durationSec when
+ * duration is known; blank when it isn't (those rows must be filled
+ * via Needs Attention before submission).
  *
- * Default range: previous calendar month in UTC — SoundExchange
- * reporting is monthly, and we'd rather default to a completed period
- * than a partial in-progress one.
+ * Default range: previous calendar month — music-rights reporting is
+ * monthly, and we'd rather default to a completed period than a partial
+ * in-progress one.
  */
 export function ReportsPanel() {
   const { start: defaultStart, end: defaultEnd } = usePreviousMonthRange();
@@ -57,9 +62,9 @@ export function ReportsPanel() {
         setError("No resolved plays in that range.");
         return;
       }
-      const csv = toCsv(result.rows);
-      const filename = `soundexchange-${station}-${startDate}-to-${endDate}.csv`;
-      downloadCsv(csv, filename);
+      const txt = toPlaylistTxt(result.rows);
+      const filename = `playlist-log-${station}-${startDate}-to-${endDate}.txt`;
+      downloadTxt(txt, filename);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -74,9 +79,9 @@ export function ReportsPanel() {
       className="flex flex-col gap-3 rounded-md border border-border bg-bg-surface p-5"
     >
       <header className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold tracking-tight">SoundExchange Report of Use</h3>
+        <h3 className="text-sm font-semibold tracking-tight">Playlist log (NPR / SoundExchange)</h3>
         <span className="text-xs text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>
-          CSV
+          TXT
         </span>
       </header>
 
@@ -131,12 +136,12 @@ export function ReportsPanel() {
         disabled={downloading || !rangeValid || !hasData}
         className="rounded-md border border-border bg-bg-elevated px-4 py-2 text-left text-sm text-text-primary transition-colors hover:border-text-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {downloading ? "Preparing CSV…" : "Download CSV"}
+        {downloading ? "Preparing playlist log…" : "Download playlist log"}
       </button>
 
       <p className="text-[10px] text-text-muted">
-        SoundExchange SOR — resolved plays only. Pending, unresolved, and ignored rows are excluded.
-        Triage those from Needs Attention before exporting.
+        Tab-delimited UTF-8 TXT, Milwaukee local time. Resolved plays only — pending, unresolved,
+        and ignored rows are excluded. Triage those from Needs Attention before exporting.
       </p>
     </section>
   );
@@ -227,7 +232,7 @@ function toEpochRange(startDate: string, endDate: string): { startMs: number; en
   return { startMs, endMs };
 }
 
-interface CsvRow {
+interface PlaylistRow {
   playedAt: number;
   channelName: string;
   featuredArtist: string;
@@ -238,54 +243,77 @@ interface CsvRow {
   durationSec: number | null;
 }
 
+const MILWAUKEE_TIMEZONE = "America/Chicago";
+
+const PLAYLIST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: MILWAUKEE_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
 /**
- * Render rows to a SoundExchange-compliant CSV string. Columns match the
- * non-commercial webcaster SOR playlist format — CHANNEL_NAME,
- * BROADCAST_DATE (UTC), PLAY_TIME (UTC), FEATURED_ARTIST,
- * SOUND_RECORDING_TITLE, ALBUM_TITLE, MARKETING_LABEL, ISRC,
- * DURATION_SECONDS.
+ * Format an epoch-ms timestamp as `MM/dd/yyyy HH:mm:ss` in Milwaukee
+ * local time. NPR's playlist log spec accepts this format by default
+ * (it's one of the three listed formats, and they assume local time
+ * unless an offset is appended).
  */
-function toCsv(rows: readonly CsvRow[]): string {
-  const header = [
-    "CHANNEL_NAME",
-    "BROADCAST_DATE",
-    "PLAY_TIME",
-    "FEATURED_ARTIST",
-    "SOUND_RECORDING_TITLE",
-    "ALBUM_TITLE",
-    "MARKETING_LABEL",
-    "ISRC",
-    "DURATION_SECONDS",
-  ].join(",");
+function formatPlaylistTimestamp(epochMs: number): string {
+  const parts = PLAYLIST_DATE_FMT.formatToParts(new Date(epochMs));
+  const get = (type: Intl.DateTimeFormatPart["type"]): string =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  const hour = get("hour");
+  // Intl can emit "24" for midnight under hour12:false on some engines.
+  const normalizedHour = hour === "24" ? "00" : hour;
+  return `${get("month")}/${get("day")}/${get("year")} ${normalizedHour}:${get("minute")}:${get("second")}`;
+}
+
+/**
+ * Render rows to NPR's tab-delimited playlist-log format. Columns:
+ * Start Time, End Time, Title, Artist, Album, Label. One row per play,
+ * chronological (query already sorts). End Time is blank when the
+ * track's durationSec is unknown — that row needs the Duration filled
+ * in Needs Attention before NPR will accept it.
+ *
+ * Tabs, CR, and LF are stripped from every field so they can't break
+ * the row boundaries NPR parses on.
+ */
+function toPlaylistTxt(rows: readonly PlaylistRow[]): string {
+  const header = ["Start Time", "End Time", "Title", "Artist", "Album", "Label"].join("\t");
   const body = rows.map((r) => {
-    const d = new Date(r.playedAt);
-    const broadcastDate = d.toISOString().slice(0, 10);
-    const playTime = d.toISOString().slice(11, 19);
+    const startTime = formatPlaylistTimestamp(r.playedAt);
+    const endTime =
+      r.durationSec !== null && r.durationSec > 0
+        ? formatPlaylistTimestamp(r.playedAt + r.durationSec * 1000)
+        : "";
     return [
-      csvEscape(r.channelName),
-      broadcastDate,
-      playTime,
-      csvEscape(r.featuredArtist),
-      csvEscape(r.soundRecordingTitle),
-      csvEscape(r.albumTitle),
-      csvEscape(r.marketingLabel),
-      csvEscape(r.isrc),
-      r.durationSec === null ? "" : String(r.durationSec),
-    ].join(",");
+      startTime,
+      endTime,
+      tsvEscape(r.soundRecordingTitle),
+      tsvEscape(r.featuredArtist),
+      tsvEscape(r.albumTitle),
+      tsvEscape(r.marketingLabel),
+    ].join("\t");
   });
   return [header, ...body].join("\n");
 }
 
-function csvEscape(value: string): string {
+/**
+ * Tab, CR, and LF are the only characters that can break TSV row / field
+ * boundaries. Collapse each to a single space so the file stays
+ * parseable even if a track title contains them (rare but possible).
+ */
+function tsvEscape(value: string): string {
   if (value.length === 0) return "";
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
+  return value.replace(/[\t\r\n]+/g, " ");
 }
 
-function downloadCsv(content: string, filename: string): void {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+function downloadTxt(content: string, filename: string): void {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
