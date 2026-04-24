@@ -39,11 +39,7 @@ function StripWidget({ config }: { config: WidgetConfig }) {
       ) : play === null ? (
         <StripEmpty />
       ) : (
-        <StripBody
-          artworkUrl={play.artworkUrl}
-          title={play.title}
-          artist={play.artist}
-        />
+        <StripBody artworkUrl={play.artworkUrl} title={play.title} artist={play.artist} />
       )}
       <StationBadge station={config.station} variant="inline" />
     </div>

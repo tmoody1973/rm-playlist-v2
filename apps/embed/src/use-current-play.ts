@@ -36,10 +36,7 @@ export function useCurrentPlay(station: StationSlug): PublicPlay | null | undefi
  * Subscribe to `plays.recentByStation` for a single station. Returns
  * `undefined` while loading, then a (possibly empty) array thereafter.
  */
-export function useRecentPlays(
-  station: StationSlug,
-  limit: number,
-): PublicPlay[] | undefined {
+export function useRecentPlays(station: StationSlug, limit: number): PublicPlay[] | undefined {
   const [plays, setPlays] = useState<PublicPlay[] | undefined>(undefined);
 
   useEffect(() => {

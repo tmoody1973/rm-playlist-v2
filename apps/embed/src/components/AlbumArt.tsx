@@ -50,7 +50,5 @@ export function AlbumArt({ src, alt, size }: AlbumArtProps) {
  */
 function materializeArtworkUrl(url: string, size: number): string {
   const pixelSize = String(size * 2);
-  return url
-    .replace(/\{w\}|%7Bw%7D/g, pixelSize)
-    .replace(/\{h\}|%7Bh%7D/g, pixelSize);
+  return url.replace(/\{w\}|%7Bw%7D/g, pixelSize).replace(/\{h\}|%7Bh%7D/g, pixelSize);
 }

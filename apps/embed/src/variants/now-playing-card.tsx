@@ -54,11 +54,7 @@ function CardWidget({ config }: { config: WidgetConfig }) {
               alignItems: "flex-start",
             }}
           >
-            <AlbumArt
-              src={play.artworkUrl}
-              alt={`${play.title} — ${play.artist}`}
-              size={88}
-            />
+            <AlbumArt src={play.artworkUrl} alt={`${play.title} — ${play.artist}`} size={88} />
             <div
               style={{
                 display: "flex",

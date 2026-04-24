@@ -65,8 +65,7 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
     showSearch: el.dataset.showSearch !== "false",
     showHeader: el.dataset.showHeader !== "false",
-    enablePreview:
-      el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
+    enablePreview: el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
   };
 }
 
