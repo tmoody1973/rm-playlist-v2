@@ -2,7 +2,7 @@ import { h } from "preact";
 import type { PublicPlay } from "../types";
 import { AlbumArt } from "./AlbumArt";
 import { PreviewButton } from "./PreviewButton";
-import { formatPlayedAt } from "../format";
+import { formatPlayedAtClock } from "../format";
 
 interface GridItemProps {
   readonly play: PublicPlay;
@@ -77,7 +77,7 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
             marginTop: "2px",
           }}
         >
-          {formatPlayedAt(play.playedAt)}
+          {formatPlayedAtClock(play.playedAt)}
         </time>
       </div>
     </li>
