@@ -32,12 +32,24 @@ export class DiscogsError extends Error {
   }
 }
 
-export interface SearchReleaseInput {
+/**
+ * Auth options. Either (`token`) OR (`consumerKey` + `consumerSecret`)
+ * — both raise the rate limit from 25/min to 60/min. `token` is a
+ * user personal access token; `consumerKey`/`consumerSecret` is an
+ * app-level OAuth 1.0a consumer pair used without a user grant
+ * (Discogs lets this work as a bare key/secret for server-to-server).
+ * Leave all empty for unauthenticated access.
+ */
+export interface DiscogsAuth {
+  readonly token?: string;
+  readonly consumerKey?: string;
+  readonly consumerSecret?: string;
+}
+
+export interface SearchReleaseInput extends DiscogsAuth {
   readonly artist: string;
   readonly album: string;
   readonly throttle: Throttle;
-  /** Optional personal token — raises rate limit from 25/min to 60/min. */
-  readonly token?: string;
   readonly signal?: AbortSignal;
   readonly fetch?: FetchLike;
 }
@@ -71,7 +83,12 @@ export async function searchRelease(input: SearchReleaseInput): Promise<Normaliz
     release_title: input.album,
     per_page: "5",
   });
-  if (input.token) params.set("token", input.token);
+  if (input.token) {
+    params.set("token", input.token);
+  } else if (input.consumerKey && input.consumerSecret) {
+    params.set("key", input.consumerKey);
+    params.set("secret", input.consumerSecret);
+  }
   const url = `${API_BASE}/database/search?${params.toString()}`;
 
   await input.throttle.acquire(input.signal);

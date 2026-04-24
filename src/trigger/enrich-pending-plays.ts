@@ -63,6 +63,9 @@ export interface EnrichBatchDeps {
   readonly discogsThrottle?: Throttle;
   /** Optional personal Discogs token (raises 25/min → 60/min). */
   readonly discogsToken?: string;
+  /** Consumer key+secret pair (same elevated rate, no user OAuth). */
+  readonly discogsConsumerKey?: string;
+  readonly discogsConsumerSecret?: string;
   /** Test seam — override `fetch` passed into enrichPlay. */
   readonly fetch?: FetchLike;
   /** Test seam — skip tasks.trigger() side-effect. */
@@ -115,6 +118,8 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
         deps.fetch,
         deps.discogsThrottle,
         deps.discogsToken,
+        deps.discogsConsumerKey,
+        deps.discogsConsumerSecret,
       );
     } catch (err) {
       summary.errored += 1;
@@ -149,6 +154,8 @@ export const enrichPendingPlays = schedules.task({
       throttle: createThrottle({ ratePerSec: MB_RATE_PER_SEC }),
       discogsThrottle: createThrottle({ ratePerSec: DISCOGS_RATE_PER_SEC }),
       discogsToken: process.env.DISCOGS_TOKEN,
+      discogsConsumerKey: process.env.DISCOGS_CONSUMER_KEY,
+      discogsConsumerSecret: process.env.DISCOGS_CONSUMER_SECRET,
       onTokenRefreshNeeded: async () => {
         logger.warn("Apple Music JWT cache empty or near-expiry — triggering refresh");
         await tasks.trigger("refresh-apple-music-token", {});
@@ -176,6 +183,8 @@ async function enrichOne(
   fetchOverride?: FetchLike,
   discogsThrottle?: Throttle,
   discogsToken?: string,
+  discogsConsumerKey?: string,
+  discogsConsumerSecret?: string,
 ): Promise<void> {
   const playId = play._id as Id<"plays">;
   const identity = { artist: play.artistRaw, title: play.titleRaw };
@@ -195,6 +204,8 @@ async function enrichOne(
       discogsThrottle,
       discogsToken,
       fetchOverride,
+      discogsConsumerKey,
+      discogsConsumerSecret,
     );
     await resolveBoth(client, playId, appleMusic, musicBrainz, resolvedLabel);
     summary.resolved += 1;
@@ -222,6 +233,8 @@ async function resolveRecordLabel(
   discogsThrottle: Throttle | undefined,
   discogsToken: string | undefined,
   fetchOverride: FetchLike | undefined,
+  discogsConsumerKey?: string,
+  discogsConsumerSecret?: string,
 ): Promise<string | undefined> {
   if (am.recordLabel && am.recordLabel.trim().length > 0) return am.recordLabel;
   if (!discogsThrottle) return undefined;
@@ -229,7 +242,13 @@ async function resolveRecordLabel(
 
   const result = await lookupDiscogs(
     { artist: am.artistName, album: am.albumName },
-    { throttle: discogsThrottle, token: discogsToken, fetch: fetchOverride },
+    {
+      throttle: discogsThrottle,
+      token: discogsToken,
+      consumerKey: discogsConsumerKey,
+      consumerSecret: discogsConsumerSecret,
+      fetch: fetchOverride,
+    },
   );
   return result.matched ? result.label : undefined;
 }

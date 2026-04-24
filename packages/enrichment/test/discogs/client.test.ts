@@ -99,6 +99,41 @@ describe("searchRelease", () => {
     expect(mock.calls[0]?.url).toContain("token=SECRET_TOKEN_123");
   });
 
+  test("appends key+secret query params when consumer pair provided", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchMiss });
+    await searchRelease({
+      artist: "x",
+      album: "y",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+      consumerKey: "MY_KEY",
+      consumerSecret: "MY_SECRET",
+    });
+    const url = mock.calls[0]?.url ?? "";
+    expect(url).toContain("key=MY_KEY");
+    expect(url).toContain("secret=MY_SECRET");
+    expect(url).not.toContain("token=");
+  });
+
+  test("token takes precedence when both token and consumer pair provided", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchMiss });
+    await searchRelease({
+      artist: "x",
+      album: "y",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+      token: "TOKEN_A",
+      consumerKey: "MY_KEY",
+      consumerSecret: "MY_SECRET",
+    });
+    const url = mock.calls[0]?.url ?? "";
+    expect(url).toContain("token=TOKEN_A");
+    expect(url).not.toContain("key=MY_KEY");
+    expect(url).not.toContain("secret=MY_SECRET");
+  });
+
   test("acquires throttle before HTTP call", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: searchMiss });

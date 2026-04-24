@@ -4,7 +4,11 @@ import { DiscogsError, type DiscogsErrorCode, searchRelease } from "./client";
 
 export interface LookupDiscogsDeps {
   readonly throttle: Throttle;
+  /** Personal access token auth (raises rate limit to 60 req/min). */
   readonly token?: string;
+  /** Consumer key+secret auth (same elevated limit, no user OAuth). */
+  readonly consumerKey?: string;
+  readonly consumerSecret?: string;
   readonly signal?: AbortSignal;
   readonly fetch?: FetchLike;
 }
@@ -36,6 +40,8 @@ export async function lookupDiscogs(
       album: input.album,
       throttle: deps.throttle,
       token: deps.token,
+      consumerKey: deps.consumerKey,
+      consumerSecret: deps.consumerSecret,
       signal: deps.signal,
       fetch: deps.fetch,
     });
