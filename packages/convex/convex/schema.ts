@@ -37,6 +37,15 @@ export default defineSchema({
     embedSlug: v.string(),
     /** Optional publicly displayed tagline. */
     tagline: v.optional(v.string()),
+    /**
+     * Station-branded fallback shown on widgets/dashboard when a play's
+     * track hasn't resolved artwork yet (414 Music's local catalog is
+     * the common case — most tracks never land in Apple Music so they
+     * stay artworkUrl-null forever). Widget's `AlbumArt` still treats
+     * absence as a rendered gray tile; this just swaps that default
+     * to something station-branded.
+     */
+    defaultArtworkUrl: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_org", ["orgId"])
