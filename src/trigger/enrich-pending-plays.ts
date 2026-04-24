@@ -3,7 +3,10 @@ import { ConvexHttpClient } from "convex/browser";
 import { enrichPlay } from "../../packages/enrichment/src";
 import { lookupDiscogs } from "../../packages/enrichment/src/discogs";
 import { searchArtistPrimaryLabel } from "../../packages/enrichment/src/discogs/client";
-import { lookupLabelByRecording } from "../../packages/enrichment/src/musicbrainz/client";
+import {
+  lookupCoverArtUrlByRecording,
+  lookupLabelByRecording,
+} from "../../packages/enrichment/src/musicbrainz/client";
 import { createThrottle, type Throttle } from "../../packages/enrichment/src/throttle";
 import type {
   AppleMusicResult,
@@ -263,7 +266,12 @@ async function enrichOne(
     return false;
   }
   if (mbHit && !amHit) {
-    await resolveMbOnly(client, playId, musicBrainz, appleMusic);
+    const coverArtUrl = await resolveCoverArtFromMb(
+      musicBrainz.recordingMbid,
+      throttle,
+      fetchOverride,
+    );
+    await resolveMbOnly(client, playId, musicBrainz, appleMusic, coverArtUrl);
     summary.partial += 1;
     return false;
   }
@@ -419,20 +427,56 @@ async function resolveMbOnly(
   playId: Id<"plays">,
   mb: MusicBrainzResult & { matched: true },
   am: AppleMusicResult,
+  coverArtUrl: string | null,
 ): Promise<void> {
   const artistId = (await client.mutation(api.enrichment.upsertArtistByMbid, {
     mbid: mb.artistMbid,
     displayName: mb.artistName,
   })) as Id<"artists">;
 
+  // When we have cover art from Cover Art Archive, create a minimal track
+  // row so `buildPublicPlay` can surface the artwork. upsertTrack dedups
+  // by trackKey when appleMusicSongId is absent, so repeated plays of the
+  // same MB-only song don't stack duplicate rows.
+  let canonicalTrackId: Id<"tracks"> | undefined;
+  if (coverArtUrl !== null) {
+    canonicalTrackId = (await client.mutation(api.enrichment.upsertTrack, {
+      artistId,
+      displayTitle: mb.title,
+      artworkUrl: coverArtUrl,
+    })) as Id<"tracks">;
+  }
+
   await client.mutation(api.enrichment.markPlayEnriched, {
     playId,
     canonicalArtistId: artistId,
+    canonicalTrackId,
     context: {
       mbScore: mb.score,
       appleMusicMissReason: am.matched === false ? am.reason : undefined,
+      coverArtSource: coverArtUrl ? "musicbrainz-caa" : undefined,
     },
   });
+}
+
+/**
+ * Never throws — CAA lookup failures coalesce to null, and the caller
+ * treats null as "no art available, station default will take over."
+ */
+async function resolveCoverArtFromMb(
+  recordingMbid: string,
+  throttle: Throttle,
+  fetchOverride: FetchLike | undefined,
+): Promise<string | null> {
+  try {
+    return await lookupCoverArtUrlByRecording({
+      recordingMbid,
+      throttle,
+      fetch: fetchOverride,
+    });
+  } catch {
+    return null;
+  }
 }
 
 async function markUnresolved(
