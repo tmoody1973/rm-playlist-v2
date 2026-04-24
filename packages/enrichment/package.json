@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",
+    "convex": "^1.17.0",
     "typescript": "^5.7.0"
   }
 }

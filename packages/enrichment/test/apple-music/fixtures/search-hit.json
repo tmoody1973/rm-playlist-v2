@@ -20,9 +20,7 @@
           },
           "relationships": {
             "artists": {
-              "data": [
-                { "id": "80254394", "type": "artists" }
-              ]
+              "data": [{ "id": "80254394", "type": "artists" }]
             }
           }
         }

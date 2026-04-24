@@ -68,7 +68,12 @@ describe("searchSong", () => {
   test("URL-encodes artist + title in query", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: searchMiss });
-    await searchSong({ artist: "Blood, Sweat & Tears", title: "And When I Die", token: "t", fetch: mock.fetch });
+    await searchSong({
+      artist: "Blood, Sweat & Tears",
+      title: "And When I Die",
+      token: "t",
+      fetch: mock.fetch,
+    });
     expect(mock.calls[0]?.url).toContain("Blood%2C%20Sweat%20%26%20Tears");
   });
 
@@ -106,7 +111,10 @@ describe("lookupAppleMusic adapter", () => {
   test("returns { matched: false, reason: 'no_results' } on miss", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: searchMiss });
-    const result = await lookupAppleMusic({ artist: "X", title: "Y" }, { token: "jwt", fetch: mock.fetch });
+    const result = await lookupAppleMusic(
+      { artist: "X", title: "Y" },
+      { token: "jwt", fetch: mock.fetch },
+    );
     expect(result.matched).toBe(false);
     if (!result.matched) expect(result.reason).toBe("no_results");
   });
@@ -114,7 +122,10 @@ describe("lookupAppleMusic adapter", () => {
   test("adapter never throws — 429 becomes { matched: false, reason: 'rate_limited' }", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 429, body: "slow down" });
-    const result = await lookupAppleMusic({ artist: "a", title: "b" }, { token: "jwt", fetch: mock.fetch });
+    const result = await lookupAppleMusic(
+      { artist: "a", title: "b" },
+      { token: "jwt", fetch: mock.fetch },
+    );
     expect(result.matched).toBe(false);
     if (!result.matched) expect(result.reason).toBe("rate_limited");
   });
@@ -122,7 +133,10 @@ describe("lookupAppleMusic adapter", () => {
   test("adapter never throws — 401 becomes { matched: false, reason: 'unauthorized' }", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 401, body: "bad token" });
-    const result = await lookupAppleMusic({ artist: "a", title: "b" }, { token: "jwt", fetch: mock.fetch });
+    const result = await lookupAppleMusic(
+      { artist: "a", title: "b" },
+      { token: "jwt", fetch: mock.fetch },
+    );
     expect(result.matched).toBe(false);
     if (!result.matched) expect(result.reason).toBe("unauthorized");
   });

@@ -45,7 +45,12 @@ describe("searchRelease", () => {
         ],
       },
     });
-    const r = await searchRelease({ artist: "x", album: "y", throttle: fastThrottle(), fetch: mock.fetch });
+    const r = await searchRelease({
+      artist: "x",
+      album: "y",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
     expect(r[0]?.labels).toEqual(["EMI", "EMI Records Ltd."]);
   });
 
@@ -61,7 +66,12 @@ describe("searchRelease", () => {
         ],
       },
     });
-    const r = await searchRelease({ artist: "x", album: "y", throttle: fastThrottle(), fetch: mock.fetch });
+    const r = await searchRelease({
+      artist: "x",
+      album: "y",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
     expect(r.length).toBe(1);
     expect(r[0]?.discogsReleaseId).toBe(3);
   });
@@ -143,7 +153,11 @@ describe("searchRelease", () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: searchMiss });
     let acquired = 0;
-    const counting = { acquire: async () => { acquired++; } };
+    const counting = {
+      acquire: async () => {
+        acquired++;
+      },
+    };
     await searchRelease({ artist: "x", album: "y", throttle: counting, fetch: mock.fetch });
     expect(acquired).toBe(1);
   });

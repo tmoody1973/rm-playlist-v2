@@ -57,10 +57,7 @@ export async function runSupervisor(config: SupervisorConfig): Promise<void> {
   logger.info("ingestion.lifecycle", { phase: "supervisor_stop" });
 }
 
-async function tick(
-  config: SupervisorConfig,
-  active: Map<string, ActiveSource>,
-): Promise<void> {
+async function tick(config: SupervisorConfig, active: Map<string, ActiveSource>): Promise<void> {
   let sources: IcySource[];
   try {
     sources = await config.gateway.listIcySources();

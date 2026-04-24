@@ -18,17 +18,17 @@ The single-tenant decision ([`docs/decisions/001-single-tenant-first.md`](docs/d
 
 ## Stack
 
-| Layer       | Tech                                                |
-| ----------- | --------------------------------------------------- |
-| DB + realtime | Convex (queries, mutations, HTTP actions)         |
-| Auth        | Clerk (users only; Organizations deferred)          |
-| Scheduling  | Trigger.dev (poll-all-sources, enrich-pending-plays, refresh-apple-music-token) |
-| Long-lived  | Fly.io (`@rm/icy-worker`)                           |
-| Dashboard   | Next.js 16.2 (Turbopack) + React 19 + Tailwind v4   |
-| Widgets     | Preact + Vite, `@rm/embed` deployed to Cloudflare Pages |
-| Enrichment  | Apple Music API (ES256 JWT), MusicBrainz, Discogs   |
-| Runtime     | Bun 1.3+ (workspaces, test runner)                  |
-| CI          | GitHub Actions                                      |
+| Layer         | Tech                                                                            |
+| ------------- | ------------------------------------------------------------------------------- |
+| DB + realtime | Convex (queries, mutations, HTTP actions)                                       |
+| Auth          | Clerk (users only; Organizations deferred)                                      |
+| Scheduling    | Trigger.dev (poll-all-sources, enrich-pending-plays, refresh-apple-music-token) |
+| Long-lived    | Fly.io (`@rm/icy-worker`)                                                       |
+| Dashboard     | Next.js 16.2 (Turbopack) + React 19 + Tailwind v4                               |
+| Widgets       | Preact + Vite, `@rm/embed` deployed to Cloudflare Pages                         |
+| Enrichment    | Apple Music API (ES256 JWT), MusicBrainz, Discogs                               |
+| Runtime       | Bun 1.3+ (workspaces, test runner)                                              |
+| CI            | GitHub Actions                                                                  |
 
 ## Monorepo layout
 
@@ -111,28 +111,28 @@ bun run test        # all workspaces — ~220 tests across enrichment, ingestion
 
 All secrets live in `.env.local` (gitignored) and `~/.gstack/secrets/` for the Apple Music `.p8` key. Run `scripts/sync-env.sh` to push a subset to Trigger.dev and Fly.
 
-| Variable                            | Used by                               | Required                    |
-| ----------------------------------- | ------------------------------------- | --------------------------- |
-| `NEXT_PUBLIC_CONVEX_URL`            | web dashboard, embed widgets          | yes                         |
-| `CONVEX_URL` / `CONVEX_DEPLOYMENT`  | Trigger tasks, scripts                | yes                         |
-| `CONVEX_SITE_URL`                   | Convex HTTP actions                   | yes                         |
-| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | web dashboard                         | yes                         |
-| `CLERK_SECRET_KEY`                  | web dashboard server side             | yes                         |
-| `TRIGGER_PROJECT_REF`               | Trigger.dev CLI + deploys             | yes                         |
-| `TRIGGER_SECRET_KEY`                | Trigger.dev CLI + deploys             | yes                         |
-| `SGMETADATA_API_KEY`                | SGmetadata polled adapter             | for HYFIN / Rhythm Lab      |
-| `HYFIN_SGMETADATA_SCRAPER_UUID`     | HYFIN source config                   | for HYFIN                   |
-| `RHYTHMLAB_SGMETADATA_SCRAPER_UUID` | Rhythm Lab source config              | for Rhythm Lab              |
-| `HYFIN_ICY_URL`                     | ICY worker (HYFIN future)             | optional                    |
-| `RHYTHMLAB_ICY_URL`                 | ICY worker                            | for Rhythm Lab stream       |
-| `APPLE_MUSIC_KEY_ID`                | Apple Music JWT signing               | yes (for enrichment)        |
-| `APPLE_MUSIC_TEAM_ID`               | Apple Music JWT signing               | yes                         |
-| `APPLE_MUSIC_PRIVATE_KEY` (or `_B64`) | Apple Music JWT signing             | yes                         |
-| `DISCOGS_CONSUMER_KEY`              | Discogs fallback label lookup         | recommended                 |
-| `DISCOGS_CONSUMER_SECRET`           | Discogs fallback label lookup         | recommended                 |
-| `SPOTIFY_CLIENT_ID` / `_SECRET`     | Spotify preview URL (future)          | optional                    |
-| `TICKETMASTER_CONSUMER_KEY` / `_SECRET` | Events ingestion (future)         | optional                    |
-| `CLOUDFLARE_ACCOUNT_ID` / `_API_TOKEN` | Embed widget deploys to Pages      | only for widget deploys     |
+| Variable                                | Used by                       | Required                |
+| --------------------------------------- | ----------------------------- | ----------------------- |
+| `NEXT_PUBLIC_CONVEX_URL`                | web dashboard, embed widgets  | yes                     |
+| `CONVEX_URL` / `CONVEX_DEPLOYMENT`      | Trigger tasks, scripts        | yes                     |
+| `CONVEX_SITE_URL`                       | Convex HTTP actions           | yes                     |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`     | web dashboard                 | yes                     |
+| `CLERK_SECRET_KEY`                      | web dashboard server side     | yes                     |
+| `TRIGGER_PROJECT_REF`                   | Trigger.dev CLI + deploys     | yes                     |
+| `TRIGGER_SECRET_KEY`                    | Trigger.dev CLI + deploys     | yes                     |
+| `SGMETADATA_API_KEY`                    | SGmetadata polled adapter     | for HYFIN / Rhythm Lab  |
+| `HYFIN_SGMETADATA_SCRAPER_UUID`         | HYFIN source config           | for HYFIN               |
+| `RHYTHMLAB_SGMETADATA_SCRAPER_UUID`     | Rhythm Lab source config      | for Rhythm Lab          |
+| `HYFIN_ICY_URL`                         | ICY worker (HYFIN future)     | optional                |
+| `RHYTHMLAB_ICY_URL`                     | ICY worker                    | for Rhythm Lab stream   |
+| `APPLE_MUSIC_KEY_ID`                    | Apple Music JWT signing       | yes (for enrichment)    |
+| `APPLE_MUSIC_TEAM_ID`                   | Apple Music JWT signing       | yes                     |
+| `APPLE_MUSIC_PRIVATE_KEY` (or `_B64`)   | Apple Music JWT signing       | yes                     |
+| `DISCOGS_CONSUMER_KEY`                  | Discogs fallback label lookup | recommended             |
+| `DISCOGS_CONSUMER_SECRET`               | Discogs fallback label lookup | recommended             |
+| `SPOTIFY_CLIENT_ID` / `_SECRET`         | Spotify preview URL (future)  | optional                |
+| `TICKETMASTER_CONSUMER_KEY` / `_SECRET` | Events ingestion (future)     | optional                |
+| `CLOUDFLARE_ACCOUNT_ID` / `_API_TOKEN`  | Embed widget deploys to Pages | only for widget deploys |
 
 ## Ingestion adapters
 

@@ -139,11 +139,13 @@ export const enrichmentProblemsGrouped = query({
       });
     }
 
-    return Array.from(groups.values())
-      // Drop groups where no song info was captured — these predate the
-      // context-field fix and render as "Unknown" otherwise, just noise.
-      .filter((g) => g.artistRaw !== undefined || g.titleRaw !== undefined)
-      .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
-      .slice(0, take);
+    return (
+      Array.from(groups.values())
+        // Drop groups where no song info was captured — these predate the
+        // context-field fix and render as "Unknown" otherwise, just noise.
+        .filter((g) => g.artistRaw !== undefined || g.titleRaw !== undefined)
+        .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+        .slice(0, take)
+    );
   },
 });

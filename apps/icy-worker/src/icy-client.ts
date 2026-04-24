@@ -60,7 +60,10 @@ export async function readIcyStream(options: ReadIcyStreamOptions): Promise<void
 
   const metaint = Number.parseInt(metaintRaw, 10);
   if (!Number.isInteger(metaint) || metaint <= 0) {
-    throw new IcyProtocolError("invalid_metaint", `upstream sent non-positive ${ICY_METAINT_HEADER}`);
+    throw new IcyProtocolError(
+      "invalid_metaint",
+      `upstream sent non-positive ${ICY_METAINT_HEADER}`,
+    );
   }
 
   if (response.body == null) {

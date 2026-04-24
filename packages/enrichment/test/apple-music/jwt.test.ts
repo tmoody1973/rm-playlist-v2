@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { createPrivateKey, createPublicKey, createVerify, generateKeyPairSync } from "node:crypto";
 import { base64UrlDecode, signDeveloperToken } from "../../src/apple-music/jwt";
 
-function generateEs256KeyPair(): { privateKeyPem: string; publicKey: ReturnType<typeof createPublicKey> } {
+function generateEs256KeyPair(): {
+  privateKeyPem: string;
+  publicKey: ReturnType<typeof createPublicKey>;
+} {
   const { privateKey } = generateKeyPairSync("ec", { namedCurve: "P-256" });
   const privateKeyPem = privateKey.export({ format: "pem", type: "pkcs8" }).toString();
   const publicKey = createPublicKey(createPrivateKey(privateKeyPem));

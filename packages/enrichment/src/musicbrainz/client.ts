@@ -104,14 +104,9 @@ export async function lookupLabelByRecording(input: {
   return null;
 }
 
-export async function searchRecording(
-  input: SearchRecordingInput,
-): Promise<NormalizedRecording[]> {
+export async function searchRecording(input: SearchRecordingInput): Promise<NormalizedRecording[]> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
-  const query = luceneQuery(
-    normalizeArtistForMb(input.artist),
-    normalizeTitleForMb(input.title),
-  );
+  const query = luceneQuery(normalizeArtistForMb(input.artist), normalizeTitleForMb(input.title));
   const url = `${API_BASE}/recording?fmt=json&limit=5&query=${encodeURIComponent(query)}`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -155,9 +150,7 @@ function escapeLucene(value: string): string {
  * credit.
  */
 export function normalizeArtistForMb(artist: string): string {
-  const first = artist
-    .split(/\s+feat\.?\s+|\s+featuring\s+|\s+with\s+|[,&]/i)[0]
-    ?.trim();
+  const first = artist.split(/\s+feat\.?\s+|\s+featuring\s+|\s+with\s+|[,&]/i)[0]?.trim();
   return first && first.length > 0 ? first : artist;
 }
 

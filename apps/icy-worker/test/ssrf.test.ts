@@ -116,7 +116,9 @@ describe("isAllowedIcyUrl — ports", () => {
   });
 
   test("accepts non-default port when allowlisted via option", () => {
-    const r = isAllowedIcyUrl("http://stream.example.com:8000/live", { allowedPortsEnv: "8000,8443" });
+    const r = isAllowedIcyUrl("http://stream.example.com:8000/live", {
+      allowedPortsEnv: "8000,8443",
+    });
     expect(r.allowed).toBe(true);
   });
 

@@ -76,7 +76,12 @@ describe("searchRecording", () => {
         acquired++;
       },
     };
-    await searchRecording({ artist: "a", title: "b", throttle: countingThrottle, fetch: mock.fetch });
+    await searchRecording({
+      artist: "a",
+      title: "b",
+      throttle: countingThrottle,
+      fetch: mock.fetch,
+    });
     expect(acquired).toBe(1);
   });
 
@@ -235,7 +240,11 @@ describe("lookupLabelByRecording", () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: { releases: [] } });
     let acquired = 0;
-    const counting = { acquire: async () => { acquired++; } };
+    const counting = {
+      acquire: async () => {
+        acquired++;
+      },
+    };
     await lookupLabelByRecording({
       recordingMbid: "m",
       throttle: counting,

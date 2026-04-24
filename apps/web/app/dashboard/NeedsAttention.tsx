@@ -33,10 +33,7 @@ export function NeedsAttention() {
   const [openEditKey, setOpenEditKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (
-    key: string,
-    fn: () => Promise<unknown>,
-  ): Promise<void> => {
+  const run = async (key: string, fn: () => Promise<unknown>): Promise<void> => {
     setBusyKey(key);
     setError(null);
     try {
@@ -89,10 +86,7 @@ export function NeedsAttention() {
         incomplete.length === 0 && (
           <p className="text-sm text-text-muted">
             Everything is clean.{" "}
-            <span
-              className="text-xs text-text-muted/70"
-              style={{ fontFamily: "var(--font-mono)" }}
-            >
+            <span className="text-xs text-text-muted/70" style={{ fontFamily: "var(--font-mono)" }}>
               Last 24h.
             </span>
           </p>
@@ -282,9 +276,7 @@ export function NeedsAttention() {
                         <SmallButton
                           disabled={busy}
                           onClick={() =>
-                            run(key, () =>
-                              reEnrich({ trackId: t.trackId as Id<"tracks"> }),
-                            )
+                            run(key, () => reEnrich({ trackId: t.trackId as Id<"tracks"> }))
                           }
                           title="Flip all plays of this track back to pending so enrichment re-runs with current sources"
                         >

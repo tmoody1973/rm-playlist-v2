@@ -190,9 +190,7 @@ export const upsertIcy = internalMutation({
     const existing = await ctx.db
       .query("ingestionSources")
       .withIndex("by_station", (q) => q.eq("stationId", station._id))
-      .filter((q) =>
-        q.and(q.eq(q.field("adapter"), "icy"), q.eq(q.field("role"), args.role)),
-      )
+      .filter((q) => q.and(q.eq(q.field("adapter"), "icy"), q.eq(q.field("role"), args.role)))
       .first();
 
     const config = { streamUrl: args.streamUrl };
