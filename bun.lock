@@ -6,6 +6,7 @@
       "name": "rm-playlist-v2",
       "dependencies": {
         "@trigger.dev/sdk": "4.4.4",
+        "convex": "^1.17.0",
       },
       "devDependencies": {
         "@trigger.dev/build": "4.4.4",
