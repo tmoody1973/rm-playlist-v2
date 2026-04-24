@@ -175,6 +175,148 @@ export const markPlayEnriched = mutation({
 });
 
 /**
+ * Operator action — fix the raw artist/title for an unresolved group
+ * and kick re-enrichment. Patches every matching unresolved play
+ * (by station + current artistRaw/titleRaw) with the new hints, then
+ * flips status back to `pending` so the next enrich cron tick picks
+ * them up with the better strings.
+ *
+ * Useful when the source feed delivered a typo or a misleading
+ * StreamTitle ("Metalica" → "Metallica", or "DJ Intro" → "Actual
+ * Artist — Actual Title").
+ *
+ * Audit via ingestionEvents.log using the existing `source_resumed`
+ * kind — reusing rather than expanding the union for session 3. A
+ * dedicated `override_applied` kind is a session-4 clean-up.
+ */
+// TODO(security): HMAC + user attribution. Session 3 security pass.
+export const overrideUnresolvedIdentity = mutation({
+  args: {
+    stationId: v.id("stations"),
+    fromArtistRaw: v.string(),
+    fromTitleRaw: v.string(),
+    toArtistRaw: v.string(),
+    toTitleRaw: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { stationId, fromArtistRaw, fromTitleRaw, toArtistRaw, toTitleRaw, limit },
+  ) => {
+    const nextArtist = toArtistRaw.trim();
+    const nextTitle = toTitleRaw.trim();
+    if (nextArtist.length === 0 || nextTitle.length === 0) {
+      throw new Error("override artist and title must both be non-empty");
+    }
+    if (nextArtist.length > 500 || nextTitle.length > 500) {
+      throw new Error("override values capped at 500 chars each");
+    }
+
+    const cap = Math.min(limit ?? 500, 1000);
+    const matching = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("enrichmentStatus"), "unresolved"),
+          q.eq(q.field("artistRaw"), fromArtistRaw),
+          q.eq(q.field("titleRaw"), fromTitleRaw),
+        ),
+      )
+      .take(cap);
+
+    let flipped = 0;
+    for (const p of matching) {
+      await ctx.db.patch(p._id, {
+        artistRaw: nextArtist,
+        titleRaw: nextTitle,
+        enrichmentStatus: "pending",
+      });
+      flipped += 1;
+    }
+
+    const firstPlay = matching[0];
+    if (flipped > 0 && firstPlay !== undefined) {
+      await ctx.runMutation(internal.ingestionEvents.log, {
+        orgId: firstPlay.orgId,
+        stationId,
+        sourceId: firstPlay.sourceId,
+        kind: "source_resumed",
+        message: `override: ${fromArtistRaw} — ${fromTitleRaw} → ${nextArtist} — ${nextTitle}`,
+        context: {
+          flipped,
+          from: { artistRaw: fromArtistRaw, titleRaw: fromTitleRaw },
+          to: { artistRaw: nextArtist, titleRaw: nextTitle },
+        },
+      });
+    }
+
+    return { flipped };
+  },
+});
+
+/**
+ * Operator action — patch SoundExchange-required fields on a canonical
+ * track when enrichment couldn't find them. Accepts partial updates so
+ * an operator supplying only the label doesn't have to re-type the
+ * ISRC.
+ *
+ * Values are trimmed; empty strings clear the field. ISRC is validated
+ * against the 12-character standard format (country + registrant +
+ * year + designation). Duration must be non-negative finite seconds;
+ * 0 clears.
+ *
+ * Separate from re-enrichment: this persists the operator's ground
+ * truth into the track. `reEnrichTrack` re-hits APIs instead.
+ */
+// TODO(security): HMAC + user attribution. Session 3 security pass.
+export const patchTrackMetadata = mutation({
+  args: {
+    trackId: v.id("tracks"),
+    recordLabel: v.optional(v.string()),
+    isrc: v.optional(v.string()),
+    durationSec: v.optional(v.number()),
+    albumDisplayName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const track = await ctx.db.get(args.trackId);
+    if (track === null) throw new Error(`Unknown track: ${args.trackId}`);
+
+    const patch: Partial<Doc<"tracks">> = {};
+    if (args.recordLabel !== undefined) {
+      const value = args.recordLabel.trim();
+      if (value.length > 200) throw new Error("recordLabel capped at 200 chars");
+      patch.recordLabel = value.length === 0 ? undefined : value;
+    }
+    if (args.isrc !== undefined) {
+      const value = args.isrc.trim().toUpperCase();
+      if (value.length > 0 && !/^[A-Z]{2}[A-Z0-9]{3}\d{7}$/.test(value)) {
+        throw new Error(
+          "ISRC must be 12 chars: 2 country + 3 registrant + 2 year + 5 designation",
+        );
+      }
+      patch.isrc = value.length === 0 ? undefined : value;
+    }
+    if (args.durationSec !== undefined) {
+      if (!Number.isFinite(args.durationSec) || args.durationSec < 0) {
+        throw new Error("durationSec must be a non-negative finite number");
+      }
+      patch.durationSec = args.durationSec === 0 ? undefined : Math.floor(args.durationSec);
+    }
+    if (args.albumDisplayName !== undefined) {
+      const value = args.albumDisplayName.trim();
+      if (value.length > 500) throw new Error("albumDisplayName capped at 500 chars");
+      patch.albumDisplayName = value.length === 0 ? undefined : value;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(args.trackId, patch);
+    }
+    return { patched: Object.keys(patch).length };
+  },
+});
+
+/**
  * Tracks that resolved but are missing SoundExchange-required fields.
  * Reports groups keyed by the canonical track so a popular song isn't
  * shown once per play. Primary use case: dashboard "metadata

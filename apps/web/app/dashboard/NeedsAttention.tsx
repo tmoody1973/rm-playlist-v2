@@ -8,41 +8,48 @@ import type { Id } from "@rm/convex/values";
 /**
  * Row 2 right panel — "Needs Attention" per DESIGN.md 002 section C.
  *
- * Shows enrichment failures grouped by (station × reason × song) over the
- * last 24h, with operator actions per row:
+ * Two sub-sections stacked vertically inside one panel:
  *
- *   Retry   flip matching unresolved plays back to `pending`. Useful
- *           after a normalization fix shipped (Discogs / MB query
- *           tightening) so old stuck misses re-run against the new
- *           logic.
- *   Ignore  flip matching plays to `ignored` — the schema's permanent
- *           terminal state. Station IDs, DJ tags, spots, promos land
- *           here and stop surfacing forever.
+ *   1. Enrichment failures — grouped by (station × reason × song).
+ *      Actions: Retry, Edit (manual resolve), Ignore.
+ *   2. Missing SoundExchange metadata — resolved tracks that still
+ *      lack recordLabel / ISRC / durationSec.
+ *      Actions: Edit (inline patch fields), Re-enrich.
  *
- * Manual-resolve (type in correct artist/title) is a separate session.
+ * One-at-a-time expansion state: clicking Edit on any row closes any
+ * other open editor so the panel stays visually calm.
  */
 export function NeedsAttention() {
   const groups = useQuery(api.ingestionEvents.enrichmentProblemsGrouped, { limitGroups: 8 });
   const incomplete = useQuery(api.enrichment.tracksMissingSoundExchangeFields, { limit: 8 });
+
   const retry = useMutation(api.enrichment.retryUnresolvedGroup);
   const ignore = useMutation(api.enrichment.ignoreUnresolvedGroup);
   const reEnrich = useMutation(api.enrichment.reEnrichTrack);
+  const overrideIdentity = useMutation(api.enrichment.overrideUnresolvedIdentity);
+  const patchMetadata = useMutation(api.enrichment.patchTrackMetadata);
+
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [openEditKey, setOpenEditKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const run = async (
     key: string,
-    fn: () => Promise<{ flipped: number }>,
+    fn: () => Promise<unknown>,
   ): Promise<void> => {
     setBusyKey(key);
+    setError(null);
     try {
       await fn();
+      setOpenEditKey(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
   };
 
-  const totalCount =
-    (groups?.length ?? 0) + (incomplete?.length ?? 0);
+  const totalCount = (groups?.length ?? 0) + (incomplete?.length ?? 0);
 
   return (
     <section
@@ -61,6 +68,12 @@ export function NeedsAttention() {
           </span>
         )}
       </header>
+
+      {error !== null && (
+        <p className="rounded-sm border border-status-error/50 bg-status-error/10 px-2 py-1 text-xs text-status-error">
+          {error}
+        </p>
+      )}
 
       {groups === undefined && (
         <div className="flex flex-col gap-2">
@@ -90,88 +103,117 @@ export function NeedsAttention() {
           <h4 className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
             Enrichment failures
           </h4>
-      <ul role="list" className="flex flex-col gap-1.5">
-          {groups.map((g) => {
-            const key = `${g.stationId}|${g.reason}|${g.artistRaw ?? ""}|${g.titleRaw ?? ""}`;
-            const busy = busyKey === key;
-            const canAct = g.artistRaw !== undefined && g.titleRaw !== undefined;
-            return (
-              <li
-                key={key}
-                className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
-              >
-                <div className="flex min-w-0 items-start gap-2">
-                  <SeverityDot reason={g.reason} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-text-primary">{displaySong(g)}</p>
-                    <p className="flex gap-2 text-text-muted">
-                      <span>{g.station}</span>
-                      <span aria-hidden>·</span>
-                      <span>{friendlyReason(g.reason)}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1">
-                  <div className="flex items-center gap-1.5">
-                    {g.count > 1 && (
-                      <span
-                        className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                        aria-label={`seen ${g.count} times`}
-                      >
-                        {g.count}×
-                      </span>
-                    )}
-                    <time
-                      dateTime={new Date(g.lastSeenAt).toISOString()}
-                      className="text-text-muted"
-                      style={{ fontFamily: "var(--font-mono)" }}
-                    >
-                      {formatRelative(g.lastSeenAt)}
-                    </time>
-                  </div>
-                  {canAct && (
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run(key, () =>
-                            retry({
-                              stationId: g.stationId as Id<"stations">,
-                              artistRaw: g.artistRaw ?? "",
-                              titleRaw: g.titleRaw ?? "",
-                            }),
-                          )
-                        }
-                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
-                      >
-                        Retry
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run(key, () =>
-                            ignore({
-                              stationId: g.stationId as Id<"stations">,
-                              artistRaw: g.artistRaw ?? "",
-                              titleRaw: g.titleRaw ?? "",
-                            }),
-                          )
-                        }
-                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-status-error hover:text-status-error disabled:opacity-50"
-                        title="Mark as station ID / spot / promo — hides future occurrences"
-                      >
-                        Ignore
-                      </button>
+          <ul role="list" className="flex flex-col gap-1.5">
+            {groups.map((g) => {
+              const key = `fail|${g.stationId}|${g.reason}|${g.artistRaw ?? ""}|${g.titleRaw ?? ""}`;
+              const busy = busyKey === key;
+              const canAct = g.artistRaw !== undefined && g.titleRaw !== undefined;
+              const isEditing = openEditKey === key;
+              return (
+                <li
+                  key={key}
+                  className="flex flex-col gap-1.5 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <SeverityDot reason={g.reason} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-text-primary">{displaySong(g)}</p>
+                        <p className="flex gap-2 text-text-muted">
+                          <span>{g.station}</span>
+                          <span aria-hidden>·</span>
+                          <span>{friendlyReason(g.reason)}</span>
+                        </p>
+                      </div>
                     </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex items-center gap-1.5">
+                        {g.count > 1 && (
+                          <span
+                            className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
+                            style={{ fontFamily: "var(--font-mono)" }}
+                            aria-label={`seen ${g.count} times`}
+                          >
+                            {g.count}×
+                          </span>
+                        )}
+                        <time
+                          dateTime={new Date(g.lastSeenAt).toISOString()}
+                          className="text-text-muted"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          {formatRelative(g.lastSeenAt)}
+                        </time>
+                      </div>
+                      {canAct && (
+                        <div className="flex gap-1">
+                          <SmallButton
+                            disabled={busy}
+                            onClick={() =>
+                              run(key, () =>
+                                retry({
+                                  stationId: g.stationId as Id<"stations">,
+                                  artistRaw: g.artistRaw ?? "",
+                                  titleRaw: g.titleRaw ?? "",
+                                }),
+                              )
+                            }
+                          >
+                            Retry
+                          </SmallButton>
+                          <SmallButton
+                            disabled={busy}
+                            onClick={() => {
+                              setError(null);
+                              setOpenEditKey(isEditing ? null : key);
+                            }}
+                            active={isEditing}
+                          >
+                            Edit
+                          </SmallButton>
+                          <SmallButton
+                            disabled={busy}
+                            onClick={() =>
+                              run(key, () =>
+                                ignore({
+                                  stationId: g.stationId as Id<"stations">,
+                                  artistRaw: g.artistRaw ?? "",
+                                  titleRaw: g.titleRaw ?? "",
+                                }),
+                              )
+                            }
+                            variant="danger"
+                            title="Mark as station ID / spot / promo — hides future occurrences"
+                          >
+                            Ignore
+                          </SmallButton>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing && canAct && (
+                    <OverrideForm
+                      currentArtist={g.artistRaw ?? ""}
+                      currentTitle={g.titleRaw ?? ""}
+                      busy={busy}
+                      onSubmit={(next) =>
+                        run(key, () =>
+                          overrideIdentity({
+                            stationId: g.stationId as Id<"stations">,
+                            fromArtistRaw: g.artistRaw ?? "",
+                            fromTitleRaw: g.titleRaw ?? "",
+                            toArtistRaw: next.artist,
+                            toTitleRaw: next.title,
+                          }),
+                        )
+                      }
+                      onCancel={() => setOpenEditKey(null)}
+                    />
                   )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
@@ -184,60 +226,88 @@ export function NeedsAttention() {
             {incomplete.map((t) => {
               const key = `inc|${t.trackId}`;
               const busy = busyKey === key;
+              const isEditing = openEditKey === key;
               return (
                 <li
                   key={key}
-                  className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
+                  className="flex flex-col gap-1.5 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
                 >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <span
-                      aria-hidden
-                      className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-status-info"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-text-primary">
-                        {t.artistDisplayName} — {t.displayTitle}
-                      </p>
-                      <p className="flex gap-2 text-text-muted">
-                        <span>{t.stationNames.join(", ")}</span>
-                        <span aria-hidden>·</span>
-                        <span>missing: {t.missingFields.join(", ")}</span>
-                      </p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span
+                        aria-hidden
+                        className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-status-info"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-text-primary">
+                          {t.artistDisplayName} — {t.displayTitle}
+                        </p>
+                        <p className="flex gap-2 text-text-muted">
+                          <span>{t.stationNames.join(", ")}</span>
+                          <span aria-hidden>·</span>
+                          <span>missing: {t.missingFields.join(", ")}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <div className="flex items-center gap-1.5">
+                        {t.playCount > 1 && (
+                          <span
+                            className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
+                            style={{ fontFamily: "var(--font-mono)" }}
+                            aria-label={`played ${t.playCount} times`}
+                          >
+                            {t.playCount}×
+                          </span>
+                        )}
+                        <time
+                          dateTime={new Date(t.lastPlayedAt).toISOString()}
+                          className="text-text-muted"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                        >
+                          {formatRelative(t.lastPlayedAt)}
+                        </time>
+                      </div>
+                      <div className="flex gap-1">
+                        <SmallButton
+                          disabled={busy}
+                          onClick={() => {
+                            setError(null);
+                            setOpenEditKey(isEditing ? null : key);
+                          }}
+                          active={isEditing}
+                        >
+                          Edit
+                        </SmallButton>
+                        <SmallButton
+                          disabled={busy}
+                          onClick={() =>
+                            run(key, () =>
+                              reEnrich({ trackId: t.trackId as Id<"tracks"> }),
+                            )
+                          }
+                          title="Flip all plays of this track back to pending so enrichment re-runs with current sources"
+                        >
+                          Re-enrich
+                        </SmallButton>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <div className="flex items-center gap-1.5">
-                      {t.playCount > 1 && (
-                        <span
-                          className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
-                          style={{ fontFamily: "var(--font-mono)" }}
-                          aria-label={`played ${t.playCount} times`}
-                        >
-                          {t.playCount}×
-                        </span>
-                      )}
-                      <time
-                        dateTime={new Date(t.lastPlayedAt).toISOString()}
-                        className="text-text-muted"
-                        style={{ fontFamily: "var(--font-mono)" }}
-                      >
-                        {formatRelative(t.lastPlayedAt)}
-                      </time>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
+                  {isEditing && (
+                    <MetadataForm
+                      missing={t.missingFields}
+                      busy={busy}
+                      onSubmit={(fields) =>
                         run(key, () =>
-                          reEnrich({ trackId: t.trackId as Id<"tracks"> }),
+                          patchMetadata({
+                            trackId: t.trackId as Id<"tracks">,
+                            ...fields,
+                          }),
                         )
                       }
-                      className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
-                      title="Flip all plays of this track back to pending so enrichment re-runs with current logic (Discogs, MB, etc)"
-                    >
-                      Re-enrich
-                    </button>
-                  </div>
+                      onCancel={() => setOpenEditKey(null)}
+                    />
+                  )}
                 </li>
               );
             })}
@@ -245,6 +315,168 @@ export function NeedsAttention() {
         </div>
       )}
     </section>
+  );
+}
+
+function OverrideForm(props: {
+  readonly currentArtist: string;
+  readonly currentTitle: string;
+  readonly busy: boolean;
+  readonly onSubmit: (next: { artist: string; title: string }) => void;
+  readonly onCancel: () => void;
+}) {
+  const [artist, setArtist] = useState(props.currentArtist);
+  const [title, setTitle] = useState(props.currentTitle);
+  const unchanged = artist.trim() === props.currentArtist && title.trim() === props.currentTitle;
+  const empty = artist.trim().length === 0 || title.trim().length === 0;
+  return (
+    <form
+      className="flex flex-col gap-1.5 border-t border-border pt-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        props.onSubmit({ artist: artist.trim(), title: title.trim() });
+      }}
+    >
+      <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+        Artist
+        <input
+          value={artist}
+          onChange={(e) => setArtist(e.target.value)}
+          className="rounded-sm border border-border bg-bg-elevated px-2 py-1 text-xs text-text-primary focus:border-text-primary focus:outline-none"
+          disabled={props.busy}
+        />
+      </label>
+      <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+        Title
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="rounded-sm border border-border bg-bg-elevated px-2 py-1 text-xs text-text-primary focus:border-text-primary focus:outline-none"
+          disabled={props.busy}
+        />
+      </label>
+      <div className="flex justify-end gap-1">
+        <SmallButton type="button" onClick={props.onCancel} disabled={props.busy}>
+          Cancel
+        </SmallButton>
+        <SmallButton type="submit" disabled={props.busy || unchanged || empty} active>
+          Save & retry
+        </SmallButton>
+      </div>
+    </form>
+  );
+}
+
+function MetadataForm(props: {
+  readonly missing: readonly string[];
+  readonly busy: boolean;
+  readonly onSubmit: (fields: {
+    recordLabel?: string;
+    isrc?: string;
+    durationSec?: number;
+  }) => void;
+  readonly onCancel: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const [isrc, setIsrc] = useState("");
+  const [durationSec, setDurationSec] = useState("");
+  const missingLabel = props.missing.includes("label");
+  const missingIsrc = props.missing.includes("ISRC");
+  const missingDuration = props.missing.includes("duration");
+  const anyInput =
+    (missingLabel && label.trim().length > 0) ||
+    (missingIsrc && isrc.trim().length > 0) ||
+    (missingDuration && durationSec.trim().length > 0);
+
+  return (
+    <form
+      className="flex flex-col gap-1.5 border-t border-border pt-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const fields: { recordLabel?: string; isrc?: string; durationSec?: number } = {};
+        if (missingLabel && label.trim().length > 0) fields.recordLabel = label.trim();
+        if (missingIsrc && isrc.trim().length > 0) fields.isrc = isrc.trim();
+        if (missingDuration && durationSec.trim().length > 0) {
+          const parsed = Number.parseInt(durationSec.trim(), 10);
+          if (Number.isFinite(parsed) && parsed > 0) fields.durationSec = parsed;
+        }
+        props.onSubmit(fields);
+      }}
+    >
+      {missingLabel && (
+        <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+          Record label
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Rough Trade"
+            className="rounded-sm border border-border bg-bg-elevated px-2 py-1 text-xs text-text-primary focus:border-text-primary focus:outline-none"
+            disabled={props.busy}
+          />
+        </label>
+      )}
+      {missingIsrc && (
+        <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+          ISRC
+          <input
+            value={isrc}
+            onChange={(e) => setIsrc(e.target.value)}
+            placeholder="USXXX0000000"
+            className="rounded-sm border border-border bg-bg-elevated px-2 py-1 text-xs uppercase text-text-primary focus:border-text-primary focus:outline-none"
+            disabled={props.busy}
+          />
+        </label>
+      )}
+      {missingDuration && (
+        <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
+          Duration (seconds)
+          <input
+            value={durationSec}
+            onChange={(e) => setDurationSec(e.target.value)}
+            inputMode="numeric"
+            placeholder="e.g. 240"
+            className="rounded-sm border border-border bg-bg-elevated px-2 py-1 text-xs text-text-primary focus:border-text-primary focus:outline-none"
+            disabled={props.busy}
+          />
+        </label>
+      )}
+      <div className="flex justify-end gap-1">
+        <SmallButton type="button" onClick={props.onCancel} disabled={props.busy}>
+          Cancel
+        </SmallButton>
+        <SmallButton type="submit" disabled={props.busy || !anyInput} active>
+          Save
+        </SmallButton>
+      </div>
+    </form>
+  );
+}
+
+function SmallButton(props: {
+  readonly children: React.ReactNode;
+  readonly disabled?: boolean;
+  readonly onClick?: () => void;
+  readonly type?: "button" | "submit";
+  readonly title?: string;
+  readonly active?: boolean;
+  readonly variant?: "default" | "danger";
+}) {
+  const variant = props.variant ?? "default";
+  const baseColor =
+    variant === "danger"
+      ? "hover:border-status-error hover:text-status-error"
+      : "hover:border-text-primary hover:text-text-primary";
+  const activeClass = props.active ? "border-text-primary text-text-primary" : "";
+  return (
+    <button
+      type={props.type ?? "button"}
+      disabled={props.disabled}
+      onClick={props.onClick}
+      title={props.title}
+      className={`rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors ${baseColor} ${activeClass} disabled:opacity-50`}
+    >
+      {props.children}
+    </button>
   );
 }
 
