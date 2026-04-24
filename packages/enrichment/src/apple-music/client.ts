@@ -36,6 +36,8 @@ export interface NormalizedSong {
   readonly songId: string;
   readonly name: string;
   readonly artistName: string;
+  /** Primary Apple Music artist ID (first entry from `relationships.artists.data`). */
+  readonly artistAppleMusicId?: string;
   readonly albumName?: string;
   readonly previewUrl?: string;
   readonly artworkUrl?: string;
@@ -49,9 +51,19 @@ interface SongAttributes {
   artwork?: { url?: string };
 }
 
+interface RelationshipArtistRef {
+  id: string;
+  type?: string;
+}
+
+interface SongRelationships {
+  artists?: { data?: RelationshipArtistRef[] };
+}
+
 interface SongResource {
   id: string;
   attributes?: SongAttributes;
+  relationships?: SongRelationships;
 }
 
 interface SearchResponse {
@@ -64,7 +76,10 @@ export async function searchSong(input: SearchSongInput): Promise<NormalizedSong
   const storefront = input.storefront ?? "us";
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const term = encodeURIComponent(`${input.artist} ${input.title}`);
-  const url = `${API_BASE}/catalog/${storefront}/search?term=${term}&types=songs&limit=1`;
+  // `include[songs]=artists` returns the song's artist relationship list
+  // inline, so we get the Apple Music artist ID (for deep-link + dedup)
+  // in the same response — no second round trip.
+  const url = `${API_BASE}/catalog/${storefront}/search?term=${term}&types=songs&limit=1&include%5Bsongs%5D=artists`;
 
   const res = await fetchImpl(url, {
     headers: {
@@ -84,10 +99,12 @@ export async function searchSong(input: SearchSongInput): Promise<NormalizedSong
 function normalize(resource: SongResource): NormalizedSong | null {
   const attrs = resource.attributes;
   if (!attrs) return null;
+  const primaryArtist = resource.relationships?.artists?.data?.[0];
   return {
     songId: resource.id,
     name: attrs.name,
     artistName: attrs.artistName,
+    artistAppleMusicId: primaryArtist?.id,
     albumName: attrs.albumName,
     previewUrl: attrs.previews?.[0]?.url,
     artworkUrl: attrs.artwork?.url,

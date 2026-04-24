@@ -19,8 +19,22 @@ describe("searchSong", () => {
     expect(song).not.toBeNull();
     expect(song?.songId).toBe("1440831078");
     expect(song?.artistName).toBe("D'Angelo");
+    expect(song?.artistAppleMusicId).toBe("80254394");
     expect(song?.previewUrl).toContain("audio-ssl.itunes.apple.com");
     expect(song?.artworkUrl).toContain("{w}x{h}");
+  });
+
+  test("request URL asks Apple for artist relationships inline", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchHit });
+    await searchSong({
+      artist: "x",
+      title: "y",
+      token: "jwt",
+      fetch: mock.fetch,
+    });
+    const decoded = decodeURIComponent(mock.calls[0]?.url ?? "");
+    expect(decoded).toContain("include[songs]=artists");
   });
 
   test("returns null on zero-result search (not an error)", async () => {

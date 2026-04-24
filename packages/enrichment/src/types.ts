@@ -21,6 +21,8 @@ export type MusicBrainzMissReason = SharedMissReason | "below_threshold";
 export interface AppleMusicMatch {
   readonly matched: true;
   readonly songId: string;
+  /** Primary Apple Music artist ID from the song's `relationships.artists` list. */
+  readonly artistAppleMusicId?: string;
   readonly artistName: string;
   readonly title: string;
   readonly albumName?: string;

@@ -1,5 +1,5 @@
 {
-  "_note": "Shape derived from Apple Music Catalog /v1/catalog/us/search?types=songs response. Real attributes retained; no per-storefront commerce fields.",
+  "_note": "Shape derived from Apple Music Catalog /v1/catalog/us/search?types=songs&include[songs]=artists response. `relationships.artists.data[0].id` carries the primary artist's Apple Music ID.",
   "results": {
     "songs": {
       "data": [
@@ -13,6 +13,13 @@
             "previews": [{ "url": "https://audio-ssl.itunes.apple.com/previews/example.m4a" }],
             "artwork": {
               "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/.../source/{w}x{h}bb.jpg"
+            }
+          },
+          "relationships": {
+            "artists": {
+              "data": [
+                { "id": "80254394", "type": "artists" }
+              ]
             }
           }
         }

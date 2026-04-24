@@ -201,6 +201,7 @@ async function resolveBoth(
   const artistId = (await client.mutation(api.enrichment.upsertArtistByMbid, {
     mbid: mb.artistMbid,
     displayName: mb.artistName,
+    appleMusicId: am.artistAppleMusicId,
   })) as Id<"artists">;
 
   const trackId = (await client.mutation(api.enrichment.upsertTrack, {

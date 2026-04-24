@@ -25,6 +25,7 @@ export async function lookupAppleMusic(
     return {
       matched: true,
       songId: song.songId,
+      artistAppleMusicId: song.artistAppleMusicId,
       artistName: song.artistName,
       title: song.name,
       albumName: song.albumName,
