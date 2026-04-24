@@ -39,24 +39,16 @@ jobs:
       - name: Typecheck
         run: bun --filter='@rm/embed' run typecheck
 
-      - name: Build widget bundle
-        run: bun --filter='@rm/embed' run build
-
-      - name: Enforce bundle size ceiling (25 KB gzip; eng review #2)
-        run: |
-          total_gz=0
-          for f in apps/embed/dist/v1/widget.js apps/embed/dist/v1/chunks/*.js; do
-            [ -f "$f" ] || continue
-            size=$(gzip -c "$f" | wc -c | tr -d ' ')
-            echo "::notice::$(basename "$f") gzipped=${size}B"
-            total_gz=$((total_gz + size))
-          done
-          echo "Total gzipped: ${total_gz} bytes"
-          CEILING=25600
-          if [ "$total_gz" -gt "$CEILING" ]; then
-            echo "::error::Bundle ${total_gz}B exceeds ${CEILING}B ceiling"
-            exit 1
-          fi
+      # VITE_CONVEX_URL is a public URL (appears in every widget bundle),
+      # not a secret. Hardcoded here so the build actually includes the
+      # Convex client; without it, Vite's static-replace + terser DCE
+      # strip the whole getConvexClient() path down to a throwing stub,
+      # the build "succeeds" but the widget is non-functional at runtime
+      # AND trivially under any size budget. See vite.config.ts comment.
+      - name: Build widget bundle + enforce size ceiling
+        run: bun --filter='@rm/embed' run build:check
+        env:
+          VITE_CONVEX_URL: https://precise-fish-444.convex.cloud
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

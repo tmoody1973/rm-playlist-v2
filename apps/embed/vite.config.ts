@@ -15,11 +15,23 @@ import { resolve } from "node:path";
  * include /v1/ from day one"). Partner stations can pin to whichever
  * version they tested against.
  *
- * Bundle budget (eng review § architecture #2):
- *   target  — 15KB gzip for loader + one variant
- *   ceiling — 25KB gzip (fail the build above this)
+ * Bundle budget (revised 2026-04-24 after widget-variants shipped):
+ *   target  — 30KB gzip for loader + shared chunks + one variant
+ *   ceiling — 40KB gzip (fail the build above this)
  *
- * Measure via `bun run build` then `gzip -c dist/v1/widget.js | wc -c`.
+ * The original 15KB target was set before we understood the Convex
+ * browser client's minimum footprint (~20KB gzip after terser). The
+ * alternative — swapping WebSocket subscriptions for HTTP polling —
+ * would save ~17KB but lose the real-time UX that makes these widgets
+ * worth building over V1's iframe. Keeping the subscription model and
+ * accepting the weight; 30KB gzip is small vs. typical third-party
+ * widgets (Spotify ~100KB, YouTube ~150KB, Twitter ~200KB).
+ *
+ * Measured critical-path (now-playing-card): widget.js + jsxRuntime +
+ * tokens + variant ≈ 28KB gzip. Under target with headroom.
+ *
+ * Enforced by `scripts/check-bundle-size.sh`, wired as
+ * `bun run build:check` and invoked from CI.
  */
 export default defineConfig({
   plugins: [preact()],
