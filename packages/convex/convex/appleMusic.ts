@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 /**
  * Apple Music developer token cache.
@@ -13,16 +13,18 @@ import { internalMutation, internalQuery } from "./_generated/server";
  * another 24h, otherwise `null` so the caller triggers a refresh.
  * `writeDeveloperToken` replaces the cached row.
  *
- * Minting (signing the JWT) happens in the Trigger.dev weekly cron task
- * (session 2), not here — Convex's mutation runtime can't use Node
- * crypto without `"use node"` pragma, and the JWT minter is a trivial
- * one-shot that doesn't need Convex scheduling. Keep Convex as pure
- * cache storage.
+ * Minting (signing the JWT) happens in the Trigger.dev weekly cron task,
+ * not here — Convex's mutation runtime can't use Node crypto without
+ * `"use node"` pragma. Convex stays pure cache storage.
  */
 
 const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
-export const getDeveloperToken = internalQuery({
+// TODO(security): unauthenticated public query — currently callable by
+// anyone with the Convex URL. The cached token is short-lived (30d) and
+// scoped to Apple Music catalog reads, but still a secret. Session 3
+// adds HMAC-signed requests from the Trigger worker so only it can read.
+export const getDeveloperToken = query({
   args: {},
   handler: async (ctx) => {
     const cached = await ctx.db.query("appleMusicTokenCache").order("desc").first();
@@ -32,7 +34,11 @@ export const getDeveloperToken = internalQuery({
   },
 });
 
-export const writeDeveloperToken = internalMutation({
+// TODO(security): unauthenticated public mutation — an attacker with
+// `CONVEX_URL` can replace the cached JWT with their own, causing
+// enrichment reads to point at their Apple Music account. Session 3
+// adds HMAC auth matching `plays.recordStreamPlay`.
+export const writeDeveloperToken = mutation({
   args: {
     token: v.string(),
     expiresAt: v.number(),

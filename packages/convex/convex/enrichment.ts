@@ -1,20 +1,24 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { type MutationCtx, mutation, query } from "./_generated/server";
 
 /**
  * Enrichment pipeline Convex surface.
  *
- * Called by a Trigger.dev task (session 2): fetch pending plays via
- * `pendingPlays`, run them through `@rm/enrichment` (Apple Music +
- * MusicBrainz in parallel), then persist matches via `upsert*` +
- * `markPlayEnriched`, or mark as unresolved with `markPlayUnresolved`.
+ * Called by the `enrich-pending-plays` Trigger.dev task (session 2):
+ * fetch pending plays via `pendingPlays`, run them through
+ * `@rm/enrichment` (Apple Music + MusicBrainz in parallel), then
+ * persist matches via `upsertArtist*` / `upsertTrack` / `markPlay*`.
  *
- * All functions are `internal*` — enrichment never talks to the public.
+ * TODO(security): every function here is unauthenticated public
+ * callable, mirroring the `plays.recordPolledPlays` pattern. Session 3
+ * adds HMAC-signed requests from the Trigger worker — the single-
+ * tenant RM shakedown is acceptable exposure; do NOT ship widgets that
+ * expose the Convex URL until auth lands.
  */
 
-export const pendingPlays = internalQuery({
+export const pendingPlays = query({
   args: {
     limit: v.optional(v.number()),
   },
@@ -37,7 +41,7 @@ export const pendingPlays = internalQuery({
   },
 });
 
-export const upsertArtistByMbid = internalMutation({
+export const upsertArtistByMbid = mutation({
   args: {
     mbid: v.string(),
     displayName: v.string(),
@@ -65,7 +69,7 @@ export const upsertArtistByMbid = internalMutation({
   },
 });
 
-export const upsertArtistByAppleMusicId = internalMutation({
+export const upsertArtistByAppleMusicId = mutation({
   args: {
     appleMusicId: v.string(),
     displayName: v.string(),
@@ -86,7 +90,7 @@ export const upsertArtistByAppleMusicId = internalMutation({
   },
 });
 
-export const upsertTrack = internalMutation({
+export const upsertTrack = mutation({
   args: {
     artistId: v.id("artists"),
     displayTitle: v.string(),
@@ -115,35 +119,45 @@ export const upsertTrack = internalMutation({
   },
 });
 
-export const markPlayEnriched = internalMutation({
+export const markPlayEnriched = mutation({
   args: {
     playId: v.id("plays"),
     canonicalArtistId: v.id("artists"),
-    canonicalTrackId: v.id("tracks"),
+    // Relaxed to optional in session 2 — an MB-only match produces a
+    // canonicalArtistId without a corresponding track (no Apple Music
+    // song ID to anchor one).
+    canonicalTrackId: v.optional(v.id("tracks")),
     context: v.optional(v.any()),
   },
   handler: async (ctx, { playId, canonicalArtistId, canonicalTrackId, context }) => {
     const play = await loadPlay(ctx, playId);
-    await ctx.db.patch(playId, {
+    const patch: Partial<Doc<"plays">> = {
       canonicalArtistId,
-      canonicalTrackId,
       enrichmentStatus: "resolved",
-    });
+    };
+    if (canonicalTrackId !== undefined) patch.canonicalTrackId = canonicalTrackId;
+    await ctx.db.patch(playId, patch);
     await ctx.runMutation(internal.ingestionEvents.log, {
       orgId: play.orgId,
       stationId: play.stationId,
       sourceId: play.sourceId,
       kind: "enrichment_ok",
-      message: "enriched via apple music + musicbrainz",
+      message:
+        canonicalTrackId !== undefined
+          ? "enriched via apple music + musicbrainz"
+          : "enriched via musicbrainz only (partial)",
       context,
     });
   },
 });
 
-export const markPlayUnresolved = internalMutation({
+export const markPlayUnresolved = mutation({
   args: {
     playId: v.id("plays"),
-    reason: v.string(),
+    // Constrained union — matches the `UnresolvedReason` type exported
+    // from `src/trigger/enrich-pending-plays.ts`. Prevents typo drift
+    // between caller and server.
+    reason: v.union(v.literal("mb_miss"), v.literal("no_match"), v.literal("other")),
     context: v.optional(v.any()),
   },
   handler: async (ctx, { playId, reason, context }) => {
@@ -187,11 +201,6 @@ function normalizeTrackKey(title: string, artistId: Id<"artists">): string {
   return `${artistId}::${slugify(title)}`;
 }
 
-// Apple Music artwork URLs look like
-//   https://is1-ssl.mzstatic.com/image/thumb/.../{w}x{h}bb.jpg
-// Reject anything else — the artwork URL flows into widget <img src>
-// attributes, so a tracking pixel or `javascript:` injection at the
-// upstream API boundary would poison every play that fell through here.
 function sanitizeArtworkUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   let url: URL;
