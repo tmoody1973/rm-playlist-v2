@@ -1,0 +1,115 @@
+/*
+ * rm-playlist-v2 widget tokens.
+ *
+ * These tokens are the shadow-DOM expression of DESIGN.md § Color / Type /
+ * Spacing / Motion. Every variant imports this file; host pages override
+ * `--rmke-*` custom properties on the host element to theme the widget
+ * without touching our internals. Brand-equity colors (CTA-red, LIVE-amber,
+ * status) are constant across modes — only surface tokens flip.
+ *
+ * Prefix all widget-facing tokens with `--rmke-` so we never clash with a
+ * host page's own CSS variables.
+ *
+ * Host override example (from DESIGN.md § Surface Modes):
+ *   <div data-rmke-widget
+ *        style="--rmke-font-display: 'Publico Headline', serif;
+ *               --rmke-accent-cta: #ef476f;"></div>
+ */
+
+:host {
+  /* ---------------------------------------------------------------- */
+  /* Surface tokens — LIGHT mode defaults (DESIGN.md § Color light).  */
+  /* Host can flip to dark by setting data-theme="dark" on the host,  */
+  /* which we mirror onto :host via [data-theme] selectors below.     */
+  /* ---------------------------------------------------------------- */
+  --rmke-bg-base: #f7f3ee;
+  --rmke-bg-surface: #ffffff;
+  --rmke-bg-elevated: #ffffff;
+  --rmke-bg-event-tinted: #fff6e0;
+  --rmke-border: #e8e5de;
+  --rmke-text-primary: #1a1a1a;
+  --rmke-text-secondary: #6b6e73;
+  --rmke-text-muted: #94989e;
+
+  /* Brand-equity colors — constant across modes. */
+  --rmke-accent-cta: #e84f2f;
+  --rmke-accent-cta-hover: #cc3f22;
+  --rmke-accent-live: #ffb81c;
+  --rmke-accent-live-hover: #e8a50f;
+  --rmke-status-ok: #34d399;
+  --rmke-status-warn: #fbbf24;
+  --rmke-status-error: #f87171;
+
+  /* Typography stack — falls back to host `inherit` so host pages can   */
+  /* pipe their own display/body fonts in without us hardcoding them.   */
+  /* The UA fallback (system-ui) is only hit if the host has no font at  */
+  /* all, which is defensive — DESIGN.md forbids system-ui as primary   */
+  /* but we never control the host's chain.                              */
+  --rmke-font-display: inherit;
+  --rmke-font-body: inherit;
+  --rmke-font-mono: ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  /* Spacing — 4px base (DESIGN.md § Spacing). */
+  --rmke-space-2xs: 2px;
+  --rmke-space-xs: 4px;
+  --rmke-space-sm: 8px;
+  --rmke-space-md: 16px;
+  --rmke-space-lg: 24px;
+  --rmke-space-xl: 32px;
+
+  /* Radius. Album art stays square (radius 0) per DESIGN.md. */
+  --rmke-radius-sm: 4px;
+  --rmke-radius-md: 8px;
+  --rmke-radius-lg: 12px;
+  --rmke-radius-full: 9999px;
+
+  /* Motion — aligned to DESIGN.md duration tokens. */
+  --rmke-dur-micro: 100ms;
+  --rmke-dur-short: 200ms;
+  --rmke-dur-medium: 300ms;
+
+  display: block;
+  color: var(--rmke-text-primary);
+  font-family: var(--rmke-font-body);
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum";
+}
+
+/* Dark mode — triggered by data-theme="dark" on the widget host.      */
+/* Host pages can also rely on prefers-color-scheme; we defer to host. */
+:host([data-theme="dark"]) {
+  --rmke-bg-base: #0e0f11;
+  --rmke-bg-surface: #16191d;
+  --rmke-bg-elevated: #1f242a;
+  --rmke-bg-event-tinted: #2a1f0a;
+  --rmke-border: #2a2f36;
+  --rmke-text-primary: #f1efeb;
+  --rmke-text-secondary: #8b9099;
+  --rmke-text-muted: #5c6168;
+}
+
+/* Auto theme — follow host's prefers-color-scheme when theme="auto"   */
+/* (default). Host pages with their own color-scheme opt-in get the    */
+/* matching surface tokens without any JS.                              */
+@media (prefers-color-scheme: dark) {
+  :host([data-theme="auto"]) {
+    --rmke-bg-base: #0e0f11;
+    --rmke-bg-surface: #16191d;
+    --rmke-bg-elevated: #1f242a;
+    --rmke-bg-event-tinted: #2a1f0a;
+    --rmke-border: #2a2f36;
+    --rmke-text-primary: #f1efeb;
+    --rmke-text-secondary: #8b9099;
+    --rmke-text-muted: #5c6168;
+  }
+}
+
+/* Reduced-motion contract from DESIGN.md § Motion. */
+@media (prefers-reduced-motion: reduce) {
+  :host {
+    --rmke-dur-micro: 0ms;
+    --rmke-dur-short: 0ms;
+    --rmke-dur-medium: 0ms;
+  }
+}
