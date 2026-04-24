@@ -267,10 +267,16 @@ export const recordPollFailure = mutation({
 });
 
 /**
- * Single most-recent non-deleted play for a station. Drives each station
- * card's now-playing row on the dashboard wall-of-status. Returns null
- * if the station has never had a play (fresh install) or only has
- * soft-deleted plays.
+ * Single most-recent non-deleted, non-ignored play for a station. Drives
+ * each station card's now-playing row AND the public embed widget's
+ * now-playing strip. Station IDs / promos / legal IDs get
+ * `enrichmentStatus: "ignored"` via the operator-curated ignore rules
+ * (see `enrichmentIgnoreRules` in schema.ts) and are skipped here so
+ * they never appear as "now playing" on radiomilwaukee.org.
+ *
+ * Walks a small window of recent plays rather than using `.first()` —
+ * if the literal most-recent play was ignored, we want the real song
+ * playing before it, not null.
  */
 export const currentByStation = query({
   args: {
@@ -288,14 +294,16 @@ export const currentByStation = query({
       .first();
     if (station === null) return null;
 
-    const latest = await ctx.db
+    const candidates = await ctx.db
       .query("plays")
       .withIndex("by_station_played_at", (q) => q.eq("stationId", station._id))
       .order("desc")
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .first();
+      .take(20);
 
-    if (latest === null) return null;
+    const latest = candidates.find(
+      (p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored",
+    );
+    if (latest === undefined) return null;
 
     return {
       _id: latest._id,
@@ -308,7 +316,13 @@ export const currentByStation = query({
 });
 
 /**
- * Public dashboard view: the most recent N plays per station.
+ * Public recent-plays view — drives both the dashboard wall and the
+ * embed widgets. Station IDs / promos / legal IDs (enrichmentStatus
+ * "ignored") are filtered out so they don't appear in the playlist
+ * on radiomilwaukee.org.
+ *
+ * Over-fetches ~50% beyond `limit` so that ignored rows don't shrink
+ * the returned set below what the caller asked for in most cases.
  */
 export const recentByStation = query({
   args: {
@@ -328,14 +342,16 @@ export const recentByStation = query({
     if (station === null) return [];
 
     const take = Math.min(limit ?? 20, 100);
+    const fetchMany = Math.min(Math.ceil(take * 1.5) + 5, 200);
     const plays = await ctx.db
       .query("plays")
       .withIndex("by_station_played_at", (q) => q.eq("stationId", station._id))
       .order("desc")
-      .take(take);
+      .take(fetchMany);
 
     return plays
-      .filter((p) => p.deletedAt === undefined)
+      .filter((p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored")
+      .slice(0, take)
       .map((p) => ({
         _id: p._id,
         artistRaw: p.artistRaw,
