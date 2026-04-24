@@ -186,13 +186,21 @@ export const markPlayUnresolved = mutation({
   handler: async (ctx, { playId, reason, context }) => {
     const play = await loadPlay(ctx, playId);
     await ctx.db.patch(playId, { enrichmentStatus: "unresolved" });
+    // Pack the source artist/title into context so the dashboard can show
+    // operators WHICH song failed, not just a cryptic reason code.
+    const enrichedContext = {
+      ...(context ?? {}),
+      playId,
+      artistRaw: play.artistRaw,
+      titleRaw: play.titleRaw,
+    };
     await ctx.runMutation(internal.ingestionEvents.log, {
       orgId: play.orgId,
       stationId: play.stationId,
       sourceId: play.sourceId,
       kind: "enrichment_error",
       message: reason,
-      context,
+      context: enrichedContext,
     });
   },
 });

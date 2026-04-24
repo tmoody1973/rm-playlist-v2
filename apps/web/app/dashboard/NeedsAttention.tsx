@@ -6,12 +6,13 @@ import { api } from "@rm/convex/api";
 /**
  * Row 2 right panel — "Needs Attention" per DESIGN.md 002 section C.
  *
- * Subscribes to `ingestionEvents.recentProblems`. Empty result is a
- * feature (operators see it most of the time) — the copy "Everything is
- * clean" is deliberate and not happy-talk.
+ * Shows enrichment failures grouped by (station × reason × song) over the
+ * last 24h. Grouping matters — a station ID that can't be resolved plays
+ * every 20 minutes, which would otherwise flood the panel with 70+
+ * identical rows. The count communicates pattern-vs-one-off at a glance.
  */
 export function NeedsAttention() {
-  const problems = useQuery(api.ingestionEvents.recentProblems, { limit: 8 });
+  const groups = useQuery(api.ingestionEvents.enrichmentProblemsGrouped, { limitGroups: 8 });
 
   return (
     <section
@@ -21,54 +22,69 @@ export function NeedsAttention() {
     >
       <header className="flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Needs Attention</h3>
-        {problems !== undefined && problems.length > 0 && (
+        {groups !== undefined && groups.length > 0 && (
           <span
             className="rounded-full bg-status-error/20 px-2 py-0.5 text-xs font-medium text-status-error"
             style={{ fontFamily: "var(--font-mono)" }}
           >
-            {problems.length}
+            {groups.length}
           </span>
         )}
       </header>
 
-      {problems === undefined && (
+      {groups === undefined && (
         <div className="flex flex-col gap-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-6 animate-pulse rounded-sm bg-bg-elevated" />
+            <div key={i} className="h-10 animate-pulse rounded-sm bg-bg-elevated" />
           ))}
         </div>
       )}
 
-      {problems !== undefined && problems.length === 0 && (
+      {groups !== undefined && groups.length === 0 && (
         <p className="text-sm text-text-muted">
           Everything is clean.{" "}
           <span className="text-xs text-text-muted/70" style={{ fontFamily: "var(--font-mono)" }}>
-            Last checked just now.
+            Last 24h.
           </span>
         </p>
       )}
 
-      {problems !== undefined && problems.length > 0 && (
+      {groups !== undefined && groups.length > 0 && (
         <ul role="list" className="flex flex-col gap-1.5">
-          {problems.map((p) => (
+          {groups.map((g, i) => (
             <li
-              key={p._id}
+              key={`${g.stationId}-${g.reason}-${g.artistRaw ?? ""}-${g.titleRaw ?? ""}-${i}`}
               className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
             >
               <div className="flex min-w-0 items-start gap-2">
-                <KindDot kind={p.kind} />
+                <SeverityDot reason={g.reason} />
                 <div className="min-w-0">
-                  <p className="truncate text-text-primary">{p.message}</p>
-                  <p className="text-text-muted">{p.station}</p>
+                  <p className="truncate text-sm text-text-primary">{displaySong(g)}</p>
+                  <p className="flex gap-2 text-text-muted">
+                    <span>{g.station}</span>
+                    <span aria-hidden>·</span>
+                    <span>{friendlyReason(g.reason)}</span>
+                  </p>
                 </div>
               </div>
-              <time
-                dateTime={new Date(p.createdAt).toISOString()}
-                className="shrink-0 text-text-muted"
-                style={{ fontFamily: "var(--font-mono)" }}
-              >
-                {formatRelative(p.createdAt)}
-              </time>
+              <div className="flex shrink-0 flex-col items-end gap-0.5">
+                {g.count > 1 && (
+                  <span
+                    className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                    aria-label={`seen ${g.count} times`}
+                  >
+                    {g.count}×
+                  </span>
+                )}
+                <time
+                  dateTime={new Date(g.lastSeenAt).toISOString()}
+                  className="text-text-muted"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  {formatRelative(g.lastSeenAt)}
+                </time>
+              </div>
             </li>
           ))}
         </ul>
@@ -77,8 +93,47 @@ export function NeedsAttention() {
   );
 }
 
-function KindDot({ kind }: { kind: string }) {
-  const severity = severityOf(kind);
+interface GroupRow {
+  readonly artistRaw?: string;
+  readonly titleRaw?: string;
+  readonly reason: string;
+  readonly station: string;
+  readonly count: number;
+  readonly lastSeenAt: number;
+  readonly stationId: string;
+}
+
+function displaySong(g: GroupRow): string {
+  if (!g.artistRaw && !g.titleRaw) return "Unknown (no artist/title captured)";
+  const artist = g.artistRaw?.trim() ?? "";
+  const title = g.titleRaw?.trim() ?? "";
+  if (artist && title) return `${artist} — ${title}`;
+  if (title) return title;
+  if (artist) return artist;
+  return "Unknown";
+}
+
+/**
+ * Translate internal reason codes into what a music director actually
+ * needs to understand. Keep copy tight — this shows in a narrow panel.
+ */
+function friendlyReason(reason: string): string {
+  switch (reason) {
+    case "mb_miss":
+      return "on Apple Music, not MusicBrainz";
+    case "no_match":
+      return "not found on either source";
+    case "other":
+      return "upstream error";
+    default:
+      return reason;
+  }
+}
+
+function SeverityDot({ reason }: { reason: string }) {
+  // mb_miss is low severity — Apple still identified the track, we just
+  // lack canonical MBID. no_match is the one worth actually looking at.
+  const severity: Severity = reason === "mb_miss" ? "warn" : "error";
   const bgClass: Record<Severity, string> = {
     error: "bg-status-error",
     warn: "bg-status-warn",
@@ -87,17 +142,12 @@ function KindDot({ kind }: { kind: string }) {
   return (
     <span
       aria-hidden
-      className={`mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${bgClass[severity]}`}
+      className={`mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full ${bgClass[severity]}`}
     />
   );
 }
 
 type Severity = "error" | "warn" | "info";
-function severityOf(kind: string): Severity {
-  if (kind === "poll_error" || kind === "enrichment_error") return "error";
-  if (kind === "drift_detected" || kind === "source_paused") return "warn";
-  return "info";
-}
 
 function formatRelative(epochMs: number): string {
   const ageSec = Math.floor((Date.now() - epochMs) / 1000);
