@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as appleMusic from "../appleMusic.js";
+import type * as enrichment from "../enrichment.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as plays from "../plays.js";
@@ -22,6 +24,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  appleMusic: typeof appleMusic;
+  enrichment: typeof enrichment;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
   plays: typeof plays;
