@@ -13,8 +13,8 @@
     "typecheck": "bun --filter='@rm/*' run typecheck",
     "test": "bun --filter='@rm/*' run test",
     "lint": "bun --filter='@rm/*' run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore",
-    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\" --ignore-path .gitignore"
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .prettierignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\" --ignore-path .prettierignore"
   },
   "devDependencies": {
     "@trigger.dev/build": "4.4.4",
