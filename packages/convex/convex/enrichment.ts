@@ -29,9 +29,19 @@ export const pendingPlays = query({
       .withIndex("by_enrichment_status", (q) => q.eq("enrichmentStatus", "pending"))
       .order("asc")
       .take(take);
+
+    // Resolve station slugs once — only 4 stations during shakedown, so
+    // one .collect() is cheaper than `ctx.db.get(stationId)` per play.
+    // The orchestrator needs the slug to apply station-specific fallbacks
+    // (e.g. default to "Self-released" for 414 Music when all label
+    // tiers miss — see project_stations memory).
+    const stations = await ctx.db.query("stations").collect();
+    const slugById = new Map(stations.map((s) => [s._id, s.slug]));
+
     return rows.map((p) => ({
       _id: p._id,
       stationId: p.stationId,
+      stationSlug: slugById.get(p.stationId),
       sourceId: p.sourceId,
       orgId: p.orgId,
       artistRaw: p.artistRaw,

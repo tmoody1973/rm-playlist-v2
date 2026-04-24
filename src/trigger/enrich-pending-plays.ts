@@ -44,6 +44,12 @@ export interface PendingPlay {
   readonly _id: string;
   readonly artistRaw: string;
   readonly titleRaw: string;
+  /**
+   * Undefined only during schema transition / unknown station. Present
+   * for every real play. Used by `resolveRecordLabel` to apply the
+   * 414-Music "Self-released" fallback.
+   */
+  readonly stationSlug?: string;
 }
 
 export interface BatchSummary {
@@ -250,6 +256,7 @@ async function enrichOne(
       fetchOverride,
       discogsConsumerKey,
       discogsConsumerSecret,
+      play.stationSlug,
     );
     await resolveBoth(client, playId, appleMusic, musicBrainz, resolvedLabel);
     summary.resolved += 1;
@@ -305,6 +312,10 @@ async function enrichOne(
  *       (artist may have switched labels), but gives SoundExchange
  *       a plausible value for single-label indie artists rather
  *       than nothing.
+ *   5.  Station-scoped default: 414 Music plays local self-released
+ *       artists whose catalogs aren't indexed by any of the above.
+ *       SoundExchange accepts "Self-released" as the label field for
+ *       these. See project_stations memory.
  */
 async function resolveRecordLabel(
   am: AppleMusicResult & { matched: true },
@@ -315,6 +326,7 @@ async function resolveRecordLabel(
   fetchOverride: FetchLike | undefined,
   discogsConsumerKey?: string,
   discogsConsumerSecret?: string,
+  stationSlug?: string,
 ): Promise<string | undefined> {
   // Tier 1 — Apple Music
   if (am.recordLabel && am.recordLabel.trim().length > 0) return am.recordLabel;
@@ -362,6 +374,9 @@ async function resolveRecordLabel(
       // non-fatal
     }
   }
+
+  // Tier 5 — 414 Music self-released default
+  if (stationSlug === "414music") return "Self-released";
 
   return undefined;
 }
