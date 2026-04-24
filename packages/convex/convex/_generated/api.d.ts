@@ -9,6 +9,7 @@
  */
 
 import type * as appleMusic from "../appleMusic.js";
+import type * as backfills from "../backfills.js";
 import type * as enrichment from "../enrichment.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
@@ -26,6 +27,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   appleMusic: typeof appleMusic;
+  backfills: typeof backfills;
   enrichment: typeof enrichment;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
