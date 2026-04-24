@@ -34,6 +34,12 @@ import { resolve } from "node:path";
  * `bun run build:check` and invoked from CI.
  */
 export default defineConfig({
+  // Relative base so dynamic chunk imports (`./chunks/playlist-*.js`) resolve
+  // against widget.js's own URL, not the host page's origin. Without this,
+  // Vite emits absolute paths ("/v1/chunks/..."), which 404 whenever a
+  // partner embeds the widget on their own domain — every production embed
+  // was broken until this flipped.
+  base: "./",
   plugins: [preact()],
   build: {
     outDir: "dist",
