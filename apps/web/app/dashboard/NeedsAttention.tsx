@@ -296,6 +296,7 @@ export function NeedsAttention() {
                   {isEditing && (
                     <MetadataForm
                       missing={t.missingFields}
+                      artistDisplayName={t.artistDisplayName}
                       busy={busy}
                       onSubmit={(fields) =>
                         run(key, () =>
@@ -369,6 +370,7 @@ function OverrideForm(props: {
 
 function MetadataForm(props: {
   readonly missing: readonly string[];
+  readonly artistDisplayName: string;
   readonly busy: boolean;
   readonly onSubmit: (fields: {
     recordLabel?: string;
@@ -405,7 +407,18 @@ function MetadataForm(props: {
     >
       {missingLabel && (
         <label className="flex flex-col gap-0.5 text-[10px] uppercase tracking-wide text-text-muted">
-          Record label
+          <span className="flex items-center justify-between">
+            <span>Record label</span>
+            <button
+              type="button"
+              disabled={props.busy}
+              onClick={() => setLabel(props.artistDisplayName)}
+              title="Fill with artist name — for local / self-released acts (common on 414 Music)"
+              className="text-[10px] normal-case text-text-muted underline decoration-dotted underline-offset-2 hover:text-text-primary disabled:opacity-50"
+            >
+              Use artist name (self-released)
+            </button>
+          </span>
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
