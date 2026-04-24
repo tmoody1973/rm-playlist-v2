@@ -1,97 +1,216 @@
-import { render as preactRender, h } from "preact";
-import type { WidgetConfig } from "../types";
+import { h, render as preactRender } from "preact";
+import { useState } from "preact/hooks";
+import type { PublicPlay, WidgetConfig } from "../types";
+import { ListItem } from "../components/ListItem";
+import { GridItem } from "../components/GridItem";
+import { StationBadge } from "../components/StationBadge";
+import { Skeleton } from "../components/Skeleton";
+import { useRecentPlays } from "../use-current-play";
+import tokensCss from "../tokens.css?inline";
 
 /**
- * Milestone 7 stub — the full `playlist` widget variant ships in Week 4+
- * per docs/implementation/001-week-1-2-scaffold.md. This stub exists so
- * that partner stations can put the <script> tag on their site today and
- * verify the end-to-end CDN path (DNS → Cloudflare Pages → loader
- * → variant chunk → shadow DOM → render).
+ * Playlist widget — V1 carry-forward in 4 chunks. This is CHUNK 1:
+ *   - core rendering in both list and grid layouts
+ *   - Load More pagination up to the underlying query's cap (100)
+ *   - station badge header
  *
- * The stub respects the same integration contract the real widget will:
- *   - receives a WidgetConfig
- *   - mounts into a shadow-DOM root supplied by the loader
- *   - inherits host-page typography + color via CSS custom properties
- *   - renders a visible-but-calm placeholder, not a broken-looking error
+ * Chunks 2-4 land next:
+ *   - Chunk 2: search box + date filter + remaining data-* attrs
+ *   - Chunk 3: tabs (Recent / Top 20 Songs / Top 20 30-days / About)
+ *   - Chunk 4: related-tracks carousel + concerts (events-blocked)
+ *
+ * Uses existing `plays.recentByStation` — no new Convex work in chunk 1.
+ * Subscription driven, so a new song replaces the top of the list in
+ * real time (same UX as the now-playing variants).
  */
+const INITIAL_PAGE = 20;
+const PAGE_INCREMENT = 20;
+// `plays.recentByStation` caps `take` at 100. Anything past this needs a
+// cursor-style query (chunk 2 or later).
+const PAGE_CEILING = 100;
 
-interface StubProps {
-  config: WidgetConfig;
+function PlaylistWidget({ config }: { config: WidgetConfig }) {
+  const layout = config.layout ?? "list";
+  const initial = config.maxItems ?? INITIAL_PAGE;
+  const [limit, setLimit] = useState<number>(Math.min(initial, PAGE_CEILING));
+
+  const plays = useRecentPlays(config.station, limit);
+  const enablePreview = config.enablePreview !== false;
+
+  const canLoadMore = plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
+  const onLoadMore = () => setLimit((prev) => Math.min(prev + PAGE_INCREMENT, PAGE_CEILING));
+
+  return (
+    <section
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--rmke-space-md)",
+        padding: "var(--rmke-space-lg)",
+        background: "var(--rmke-bg-surface)",
+        border: "1px solid var(--rmke-border)",
+        borderRadius: "var(--rmke-radius-md)",
+        color: "var(--rmke-text-primary)",
+      }}
+    >
+      {config.showHeader !== false && (
+        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: "14px",
+              fontFamily: "var(--rmke-font-display)",
+              fontWeight: 600,
+              letterSpacing: "0.02em",
+            }}
+          >
+            Recently played
+          </h3>
+          <StationBadge station={config.station} variant="inline" />
+        </header>
+      )}
+
+      {plays === undefined ? (
+        <PlaylistLoading layout={layout} />
+      ) : plays.length === 0 ? (
+        <PlaylistEmpty />
+      ) : (
+        <PlaylistItems plays={plays} layout={layout} enablePreview={enablePreview} />
+      )}
+
+      {canLoadMore && (
+        <button
+          type="button"
+          onClick={onLoadMore}
+          style={{
+            alignSelf: "center",
+            padding: "var(--rmke-space-sm) var(--rmke-space-lg)",
+            background: "transparent",
+            border: "1px solid var(--rmke-border)",
+            borderRadius: "var(--rmke-radius-sm)",
+            color: "var(--rmke-text-primary)",
+            fontSize: "12px",
+            fontFamily: "var(--rmke-font-mono)",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            cursor: "pointer",
+            transition: "border-color var(--rmke-dur-micro) ease-out",
+          }}
+        >
+          Load more
+        </button>
+      )}
+
+      <footer
+        style={{
+          borderTop: "1px solid var(--rmke-border)",
+          paddingTop: "var(--rmke-space-sm)",
+          fontSize: "11px",
+          color: "var(--rmke-text-muted)",
+          fontFamily: "var(--rmke-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
+        Powered by Radio Milwaukee
+      </footer>
+    </section>
+  );
 }
 
-function Stub({ config }: StubProps) {
+function PlaylistItems({
+  plays,
+  layout,
+  enablePreview,
+}: {
+  plays: readonly PublicPlay[];
+  layout: "list" | "grid";
+  enablePreview: boolean;
+}) {
+  if (layout === "grid") {
+    return (
+      <ol
+        style={{
+          listStyle: "none",
+          margin: 0,
+          padding: 0,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+          gap: "var(--rmke-space-md)",
+        }}
+      >
+        {plays.map((play) => (
+          <GridItem key={play._id} play={play} enablePreview={enablePreview} />
+        ))}
+      </ol>
+    );
+  }
   return (
-    <div class="rmke-stub">
-      <style>{STYLE}</style>
-      <span class="rmke-stub__badge">rm-playlist-v2 · preview</span>
-      <div class="rmke-stub__body">
-        <strong>{stationLabel(config.station)}</strong>
-        <span class="rmke-stub__variant">
-          {config.variant}
-          {config.variant === "playlist" ? ` (${config.layout ?? "list"})` : ""}
-        </span>
-      </div>
-      <span class="rmke-stub__note">Playlist widget goes live Week 4.</span>
+    <ol
+      style={{
+        listStyle: "none",
+        margin: 0,
+        padding: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {plays.map((play) => (
+        <ListItem key={play._id} play={play} enablePreview={enablePreview} />
+      ))}
+    </ol>
+  );
+}
+
+function PlaylistLoading({ layout }: { layout: "list" | "grid" }) {
+  const count = layout === "grid" ? 6 : 5;
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: layout === "grid" ? "row" : "column",
+        flexWrap: layout === "grid" ? "wrap" : "nowrap",
+        gap: "var(--rmke-space-md)",
+      }}
+    >
+      {Array.from({ length: count }).map((_, i) => (
+        <Skeleton
+          // Skeleton rows aren't content — position in the list is the only key.
+          key={i}
+          width={layout === "grid" ? "160px" : "100%"}
+          height={layout === "grid" ? "200px" : "60px"}
+        />
+      ))}
     </div>
   );
 }
 
-function stationLabel(slug: WidgetConfig["station"]): string {
-  return {
-    hyfin: "HYFIN",
-    "88nine": "88Nine",
-    "414music": "414 Music",
-    rhythmlab: "Rhythm Lab",
-  }[slug];
+function PlaylistEmpty() {
+  return (
+    <p
+      style={{
+        margin: 0,
+        padding: "var(--rmke-space-md) 0",
+        color: "var(--rmke-text-muted)",
+        fontSize: "14px",
+      }}
+    >
+      No plays yet on this station.
+    </p>
+  );
 }
 
-/**
- * Stub styles. Inside a shadow root so host-page CSS can't clobber us,
- * host `--rmke-*` custom properties can still pierce in for theming.
- * Matches DESIGN.md widget mode B (host-native, NPR-adjacent).
- */
-const STYLE = `
-  :host {
-    display: block;
-  }
-  .rmke-stub {
-    font-family: var(--rmke-font-body, inherit);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 16px 20px;
-    border: 1px solid var(--rmke-border, #e8e5de);
-    border-radius: 8px;
-    background: var(--rmke-bg, #f7f3ee);
-    color: var(--rmke-text, #1a1a1a);
-    max-width: 440px;
-  }
-  .rmke-stub__badge {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--rmke-muted, #94989e);
-  }
-  .rmke-stub__body {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-  .rmke-stub__body strong {
-    font-size: 16px;
-    font-weight: 600;
-  }
-  .rmke-stub__variant {
-    font-family: var(--rmke-font-mono, ui-monospace, monospace);
-    font-size: 12px;
-    color: var(--rmke-secondary, #6b6e73);
-  }
-  .rmke-stub__note {
-    font-size: 12px;
-    color: var(--rmke-muted, #94989e);
-  }
-`;
-
 export function render(mount: HTMLElement, config: WidgetConfig): void {
-  preactRender(h(Stub, { config }), mount);
+  injectTokens(mount);
+  preactRender(h(PlaylistWidget, { config }), mount);
+}
+
+function injectTokens(mount: HTMLElement): void {
+  const host = mount.getRootNode();
+  if (!(host instanceof ShadowRoot)) return;
+  if (host.querySelector("style[data-rmke-tokens]")) return;
+  const style = document.createElement("style");
+  style.setAttribute("data-rmke-tokens", "");
+  style.textContent = tokensCss;
+  host.prepend(style);
 }
