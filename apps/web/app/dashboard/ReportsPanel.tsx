@@ -197,6 +197,8 @@ function SummaryLine({
 
 // ---------- helpers ----------
 
+const MILWAUKEE_TIMEZONE = "America/Chicago";
+
 /**
  * Compute the previous calendar month in UTC as YYYY-MM-DD strings.
  * Default range for the date pickers — SoundExchange reports monthly
@@ -220,16 +222,67 @@ function toIsoDate(d: Date): string {
 
 /**
  * Parse the YYYY-MM-DD date inputs into an epoch range (startMs inclusive,
- * endMs exclusive) in UTC. Returns null if either parse fails or the range
- * is empty/reversed.
+ * endMs exclusive) interpreted as Milwaukee local midnight, NOT UTC
+ * midnight. An operator who picks "March 1 → March 31" means "all 31
+ * calendar days in America/Chicago" — using UTC midnight would shave
+ * off (or tack on) the 5-6h offset at each boundary and drop plays that
+ * happened in the first 5-6 hours of the last day of the month.
+ *
+ * Returns null if either date fails to parse or the range is
+ * empty/reversed.
  */
 function toEpochRange(startDate: string, endDate: string): { startMs: number; endMs: number } | null {
-  const startMs = Date.parse(`${startDate}T00:00:00.000Z`);
-  const endDayMs = Date.parse(`${endDate}T00:00:00.000Z`);
-  if (Number.isNaN(startMs) || Number.isNaN(endDayMs)) return null;
+  const startMs = milwaukeeMidnightEpoch(startDate);
+  const endDayMs = milwaukeeMidnightEpoch(endDate);
+  if (startMs === null || endDayMs === null) return null;
+  // endDate is inclusive in the picker; add 24h to make endMs exclusive.
+  // Note this ignores the rare DST-day boundary (23h or 25h); the
+  // resulting ±1h slop on the last day of March/November is
+  // acceptable for monthly reporting.
   const endMs = endDayMs + 24 * 60 * 60 * 1000;
   if (endMs <= startMs) return null;
   return { startMs, endMs };
+}
+
+/**
+ * Convert a YYYY-MM-DD string to the epoch-ms of that calendar day's
+ * midnight in America/Chicago. Strategy: parse the date as UTC midnight
+ * and then add the timezone offset that America/Chicago was observing
+ * on that moment (−5h during CDT, −6h during CST).
+ */
+function milwaukeeMidnightEpoch(ymd: string): number | null {
+  const utcMidnight = Date.parse(`${ymd}T00:00:00.000Z`);
+  if (Number.isNaN(utcMidnight)) return null;
+  const offsetMinutes = chicagoOffsetMinutes(utcMidnight);
+  if (offsetMinutes === null) return null;
+  // America/Chicago midnight occurs |offsetMinutes| later than UTC midnight.
+  // offsetMinutes is negative for west-of-UTC zones, so subtract to add.
+  return utcMidnight - offsetMinutes * 60 * 1000;
+}
+
+const OFFSET_FMT = new Intl.DateTimeFormat("en-US", {
+  timeZone: MILWAUKEE_TIMEZONE,
+  timeZoneName: "shortOffset",
+});
+
+/**
+ * Return America/Chicago's UTC offset in minutes at the given instant.
+ * Negative for CST (−360) or CDT (−300). Returns null only if the Intl
+ * engine fails to emit a parseable offset — which shouldn't happen on
+ * any modern browser we support.
+ */
+function chicagoOffsetMinutes(atEpochMs: number): number | null {
+  const parts = OFFSET_FMT.formatToParts(new Date(atEpochMs));
+  const raw = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+  // Shapes: "GMT-5", "GMT-05:30", "GMT" (for UTC). America/Chicago emits
+  // "GMT-5" or "GMT-6"; handle the :mm case defensively.
+  const match = raw.match(/^GMT(?:([+-]\d{1,2})(?::(\d{2}))?)?$/);
+  if (match === null) return null;
+  if (match[1] === undefined) return 0;
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
+  const sign = hours < 0 ? -1 : 1;
+  return hours * 60 + sign * minutes;
 }
 
 interface PlaylistRow {
@@ -242,8 +295,6 @@ interface PlaylistRow {
   isrc: string;
   durationSec: number | null;
 }
-
-const MILWAUKEE_TIMEZONE = "America/Chicago";
 
 const PLAYLIST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
   timeZone: MILWAUKEE_TIMEZONE,
