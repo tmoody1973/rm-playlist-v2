@@ -1,0 +1,72 @@
+name: Convex deploy
+
+# Auto-syncs the `precise-fish-444` Convex deployment with `main` whenever
+# Convex-relevant files change. Prevents the class of outage we hit on
+# 2026-04-24 where a stale `convex codegen` from a feature branch pushed
+# a pre-preview-audio `upsertTrack` validator to the shared deployment,
+# then `main` advanced past it; the trigger worker's calls started
+# failing `ArgumentValidationError` on every play (every row errored,
+# artwork stopped appearing on widgets, enrichment fell 71 min behind).
+#
+# Triggered on `workflow_run` after CI (ci.yml) succeeds on main, so we
+# only deploy passing code. Path filtering is intentionally omitted — CI
+# is the gate, and any main push that changes tsconfig / bun.lock /
+# dependencies can transitively affect Convex functions even without
+# touching `packages/convex/**`.
+#
+# Requires `CONVEX_DEPLOY_KEY` repo secret (generate from the Convex
+# dashboard for the `precise-fish-444` deployment; Project → Settings
+# → Deploy Keys).
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual trigger from the Actions UI if needed
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize deploys — Convex handles concurrent deploys safely but
+  # cancelling in-progress reduces confusion if several commits land fast.
+  group: convex-deploy-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Convex functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only run when CI succeeded (or when manually dispatched).
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run defaults to the HEAD of the default branch, but
+          # pin the SHA of the triggering run explicitly so we deploy the
+          # exact commit that passed CI — not any later commits that may
+          # have landed during this workflow's queue time.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Deploy to Convex
+        working-directory: packages/convex
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          if [ -z "${CONVEX_DEPLOY_KEY}" ]; then
+            echo "::error::CONVEX_DEPLOY_KEY secret is not set. Generate a deploy key from the Convex dashboard (Project → Settings → Deploy Keys) and add it to the repo secrets, then re-run."
+            exit 1
+          fi
+          bunx convex deploy --yes
