@@ -2,6 +2,7 @@ import { logger, schedules, tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { enrichPlay } from "../../packages/enrichment/src";
 import { lookupDiscogs } from "../../packages/enrichment/src/discogs";
+import { searchArtistPrimaryLabel } from "../../packages/enrichment/src/discogs/client";
 import { lookupLabelByRecording } from "../../packages/enrichment/src/musicbrainz/client";
 import { createThrottle, type Throttle } from "../../packages/enrichment/src/throttle";
 import type {
@@ -233,19 +234,26 @@ async function enrichOne(
  */
 /**
  * Record-label resolution priority (each tier only runs if the previous
- * tier produced no value):
- *   1. Apple Music's recordLabel — free, already fetched
- *   2. Discogs release search by (artist, album) — label on release row
- *   3. MusicBrainz release lookup by recording MBID — uses the MBID we
- *      already hold from the primary MB recording search, asks for the
- *      release containing it with its label-info array. Catches
- *      releases Discogs doesn't index well (N.W.A. — "Express Yourself"
- *      is Ruthless/Priority Records on MB; Discogs missed the album
- *      title variant).
+ * tier produced no value). Every Apple-resolved track goes through
+ * this chain — missing `recordLabel` is the biggest SoundExchange gap.
  *
- * Each tier is a separate API call on its own throttle. Worst case per
- * play: 1 Apple + 1 Discogs + 1 MB-label (MB-recording search already
- * happened upstream in enrichPlay so we don't double-count).
+ *   1.  Apple Music's recordLabel attribute — free, already fetched
+ *       during the primary search.
+ *   2a. Discogs release search by (artist, album).
+ *   2b. Discogs release search with "(Deluxe Edition)" / "(Remastered)"
+ *       style suffixes stripped from the album — catches canonical
+ *       releases Discogs' full-title match doesn't hit. Handled
+ *       inside searchRelease — orchestrator sees one call.
+ *   3.  MusicBrainz release lookup by recordingMbid with inc=labels.
+ *       Uses the MBID we already hold from enrichPlay's recording
+ *       search — one extra MB request. Catches releases Discogs
+ *       doesn't index well (N.W.A. "Express Yourself" is
+ *       Ruthless/Priority on MB).
+ *   4.  Discogs artist-only search — take the first label across the
+ *       artist's discography. Less precise than album-matched labels
+ *       (artist may have switched labels), but gives SoundExchange
+ *       a plausible value for single-label indie artists rather
+ *       than nothing.
  */
 async function resolveRecordLabel(
   am: AppleMusicResult & { matched: true },
@@ -257,8 +265,10 @@ async function resolveRecordLabel(
   discogsConsumerKey?: string,
   discogsConsumerSecret?: string,
 ): Promise<string | undefined> {
+  // Tier 1 — Apple Music
   if (am.recordLabel && am.recordLabel.trim().length > 0) return am.recordLabel;
 
+  // Tier 2a + 2b — Discogs release search (variant retry inside)
   if (discogsThrottle && am.albumName && am.albumName.trim().length > 0) {
     const discogs = await lookupDiscogs(
       { artist: am.artistName, album: am.albumName },
@@ -273,6 +283,7 @@ async function resolveRecordLabel(
     if (discogs.matched) return discogs.label;
   }
 
+  // Tier 3 — MB release lookup via MBID
   try {
     const mbLabel = await lookupLabelByRecording({
       recordingMbid: mb.recordingMbid,
@@ -281,10 +292,24 @@ async function resolveRecordLabel(
     });
     if (mbLabel && mbLabel.length > 0) return mbLabel;
   } catch {
-    // MB failure here isn't fatal — we just end up with no label,
-    // same outcome as if MB had no release data. The primary MB
-    // recording search already succeeded or we wouldn't be in
-    // resolveBoth.
+    // non-fatal — track resolves without a label, same as no release data
+  }
+
+  // Tier 4 — Discogs artist-only (last-resort approximate)
+  if (discogsThrottle) {
+    try {
+      const artistLabel = await searchArtistPrimaryLabel({
+        artist: am.artistName,
+        throttle: discogsThrottle,
+        token: discogsToken,
+        consumerKey: discogsConsumerKey,
+        consumerSecret: discogsConsumerSecret,
+        fetch: fetchOverride,
+      });
+      if (artistLabel && artistLabel.length > 0) return artistLabel;
+    } catch {
+      // non-fatal
+    }
   }
 
   return undefined;

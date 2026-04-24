@@ -76,11 +76,103 @@ interface DiscogsSearchResponse {
 }
 
 export async function searchRelease(input: SearchReleaseInput): Promise<NormalizedRelease[]> {
+  const first = await runReleaseSearch(input, input.album);
+  if (first.length > 0) return first;
+
+  // Variant retry: strip trailing "(Deluxe Edition)" / "(Remastered)"
+  // style suffixes and re-query. Discogs' search often doesn't match
+  // "Sympathy for Life (Deluxe Edition)" against the canonical
+  // "Sympathy for Life" release row.
+  const stripped = normalizeAlbumForDiscogs(input.album);
+  if (stripped !== input.album && stripped.length > 0) {
+    return runReleaseSearch(input, stripped);
+  }
+  return [];
+}
+
+/**
+ * Search Discogs for releases by this artist alone — no album filter —
+ * and return the first label we can see. Used as a last-resort fallback
+ * when both album-based searches (tiers 2a + 2b) and the MB release
+ * lookup (tier 3) miss. Less accurate than album-matched labels — the
+ * artist may have been on several labels — but usually produces
+ * something SoundExchange-acceptable for a single-label artist.
+ */
+export async function searchArtistPrimaryLabel(input: {
+  readonly artist: string;
+  readonly throttle: Throttle;
+  readonly token?: string;
+  readonly consumerKey?: string;
+  readonly consumerSecret?: string;
+  readonly signal?: AbortSignal;
+  readonly fetch?: FetchLike;
+}): Promise<string | null> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const params = new URLSearchParams({
     type: "release",
     artist: input.artist,
-    release_title: input.album,
+    per_page: "10",
+  });
+  if (input.token) {
+    params.set("token", input.token);
+  } else if (input.consumerKey && input.consumerSecret) {
+    params.set("key", input.consumerKey);
+    params.set("secret", input.consumerSecret);
+  }
+  const url = `${API_BASE}/database/search?${params.toString()}`;
+
+  await input.throttle.acquire(input.signal);
+  const res = await fetchImpl(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": USER_AGENT,
+    },
+    signal: input.signal,
+  });
+  if (!res.ok) throw classifyError(res.status, await safeText(res));
+
+  const json = (await res.json()) as DiscogsSearchResponse;
+  for (const r of json.results ?? []) {
+    if (r.type !== "release") continue;
+    const label = Array.isArray(r.label) ? r.label.find((l) => l && l.trim().length > 0) : null;
+    if (label) return label.trim();
+  }
+  return null;
+}
+
+/**
+ * Strip trailing parenthetical suffixes Discogs' search indexes don't
+ * usually carry. Leaves mid-title parens alone — those often ARE the
+ * canonical title ("Title (Subtitle)"). Exported for testing.
+ */
+export function normalizeAlbumForDiscogs(album: string): string {
+  const suffixPatterns: readonly RegExp[] = [
+    /\s*\(deluxe[^)]*\)\s*$/i,
+    /\s*\(remaster(?:ed)?[^)]*\)\s*$/i,
+    /\s*\(expanded[^)]*\)\s*$/i,
+    /\s*\(bonus[^)]*\)\s*$/i,
+    /\s*\([^)]*anniversary[^)]*\)\s*$/i,
+    /\s*\(special edition\)\s*$/i,
+    /\s*\(radio edit\)\s*$/i,
+    /\s*\(live\)\s*$/i,
+    /\s*\(ep\)\s*$/i,
+  ];
+  let out = album;
+  for (const rx of suffixPatterns) {
+    out = out.replace(rx, "");
+  }
+  return out.trim();
+}
+
+async function runReleaseSearch(
+  input: SearchReleaseInput,
+  albumTerm: string,
+): Promise<NormalizedRelease[]> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const params = new URLSearchParams({
+    type: "release",
+    artist: input.artist,
+    release_title: albumTerm,
     per_page: "5",
   });
   if (input.token) {

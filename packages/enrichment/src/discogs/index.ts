@@ -78,5 +78,10 @@ function mapErrorToReason(code: DiscogsErrorCode): DiscogsMissReason {
   }
 }
 
-export { DiscogsError, searchRelease } from "./client";
+export {
+  DiscogsError,
+  normalizeAlbumForDiscogs,
+  searchArtistPrimaryLabel,
+  searchRelease,
+} from "./client";
 export type { NormalizedRelease, SearchReleaseInput } from "./client";

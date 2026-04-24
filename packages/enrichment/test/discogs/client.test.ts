@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { DiscogsError, searchRelease } from "../../src/discogs/client";
+import {
+  DiscogsError,
+  normalizeAlbumForDiscogs,
+  searchArtistPrimaryLabel,
+  searchRelease,
+} from "../../src/discogs/client";
 import { lookupDiscogs } from "../../src/discogs";
 import { createThrottle } from "../../src/throttle";
 import { createMockFetch } from "../fetch-mock";
@@ -218,6 +223,121 @@ describe("lookupDiscogs", () => {
     );
     expect(r.matched).toBe(false);
     if (!r.matched) expect(r.reason).toBe("no_results");
+  });
+});
+
+describe("normalizeAlbumForDiscogs", () => {
+  test.each([
+    ["Sympathy for Life (Deluxe Edition)", "Sympathy for Life"],
+    ["Brown Sugar (Special Edition)", "Brown Sugar"],
+    ["Album (Remastered)", "Album"],
+    ["Album (Remaster)", "Album"],
+    ["Album (Expanded Edition)", "Album"],
+    ["Album (Bonus Tracks)", "Album"],
+    ["Album (20th Anniversary Edition)", "Album"],
+    ["Album (EP)", "Album"],
+    ["Album (Live)", "Album"],
+    ["Album (Radio Edit)", "Album"],
+    ["Plain Title", "Plain Title"],
+    ["Title With (Middle) Still There", "Title With (Middle) Still There"],
+    ["", ""],
+  ])("%s → %s", (input, expected) => {
+    expect(normalizeAlbumForDiscogs(input)).toBe(expected);
+  });
+});
+
+describe("searchRelease variant retry", () => {
+  test("retries with stripped album when first search returns empty", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchMiss });
+    mock.enqueue({ status: 200, body: searchHit });
+    const r = await searchRelease({
+      artist: "D'Angelo",
+      album: "Brown Sugar (Deluxe Edition)",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(r.length).toBeGreaterThan(0);
+    expect(mock.calls.length).toBe(2);
+    const firstDecoded = decodeURIComponent(mock.calls[0]?.url ?? "");
+    const secondDecoded = decodeURIComponent(mock.calls[1]?.url ?? "");
+    expect(firstDecoded).toContain("release_title=Brown+Sugar+(Deluxe+Edition)");
+    expect(secondDecoded).toContain("release_title=Brown+Sugar");
+  });
+
+  test("does not retry when first search already returned results", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchHit });
+    await searchRelease({
+      artist: "x",
+      album: "Album (Deluxe Edition)",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(mock.calls.length).toBe(1);
+  });
+
+  test("does not retry when album had nothing strippable", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: searchMiss });
+    await searchRelease({
+      artist: "x",
+      album: "Plain Album",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(mock.calls.length).toBe(1);
+  });
+});
+
+describe("searchArtistPrimaryLabel", () => {
+  test("returns first non-empty label across the artist's releases", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({
+      status: 200,
+      body: {
+        results: [
+          { id: 1, type: "artist", title: "D'Angelo" },
+          { id: 2, type: "release", title: "…", label: [""] },
+          { id: 3, type: "release", title: "Brown Sugar", label: ["Virgin Records"] },
+        ],
+      },
+    });
+    const label = await searchArtistPrimaryLabel({
+      artist: "D'Angelo",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(label).toBe("Virgin Records");
+  });
+
+  test("returns null when no releases carry labels", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({
+      status: 200,
+      body: { results: [{ id: 1, type: "release", title: "x", label: [] }] },
+    });
+    const label = await searchArtistPrimaryLabel({
+      artist: "x",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(label).toBeNull();
+  });
+
+  test("passes consumer key+secret through", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: { results: [] } });
+    await searchArtistPrimaryLabel({
+      artist: "x",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+      consumerKey: "KEY",
+      consumerSecret: "SECRET",
+    });
+    const url = mock.calls[0]?.url ?? "";
+    expect(url).toContain("key=KEY");
+    expect(url).toContain("secret=SECRET");
   });
 });
 
