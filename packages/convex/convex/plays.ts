@@ -20,11 +20,61 @@ async function loadSourceOrThrow(
 }
 
 /**
+ * Cross-source dedup window. Rhythm Lab runs SG + ICY in parallel; the two
+ * sources report the same song change with ~0–2s of clock drift between them,
+ * so exact-ms `(stationId, playedAt)` lets duplicates through. ±5s covers
+ * observed drift while staying well below the shortest realistic song length.
+ */
+const DEDUP_WINDOW_MS = 5_000;
+
+function normalizeForDedup(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * Look for an existing non-deleted play on this station within ±5s of
+ * `playedAt` that matches the same (artistRaw, titleRaw) after trim+lowercase.
+ * Returns the first match, or null.
+ *
+ * Uses the `by_station_played_at` compound index for the range scan —
+ * songs are 3+ minutes apart on a real station, so the window almost
+ * always contains 0 or 1 rows.
+ */
+async function findDuplicatePlay(
+  ctx: MutationCtx,
+  stationId: Id<"stations">,
+  play: { artistRaw: string; titleRaw: string; playedAt: number },
+): Promise<Doc<"plays"> | null> {
+  const artistKey = normalizeForDedup(play.artistRaw);
+  const titleKey = normalizeForDedup(play.titleRaw);
+
+  const candidates = await ctx.db
+    .query("plays")
+    .withIndex("by_station_played_at", (q) =>
+      q
+        .eq("stationId", stationId)
+        .gte("playedAt", play.playedAt - DEDUP_WINDOW_MS)
+        .lte("playedAt", play.playedAt + DEDUP_WINDOW_MS),
+    )
+    .collect();
+
+  for (const row of candidates) {
+    if (row.deletedAt !== undefined) continue;
+    if (normalizeForDedup(row.artistRaw) !== artistKey) continue;
+    if (normalizeForDedup(row.titleRaw) !== titleKey) continue;
+    return row;
+  }
+  return null;
+}
+
+/**
  * Record a batch of normalized plays from a single adapter poll.
  *
  * The adapter produces NormalizedPlay[] — this mutation maps them into
- * `plays` rows and dedups against (stationId, playedAt) within a small
- * window so that rapid re-polls don't create duplicate rows.
+ * `plays` rows and dedups against any existing play on the same station
+ * with the same (artistRaw, titleRaw) within ±5s, so that rapid re-polls
+ * AND a parallel ICY/SG source writing the same song-change don't create
+ * duplicate rows. See `findDuplicatePlay` for the full window rationale.
  *
  * Also logs a `poll_ok` ingestionEvent and updates the source's
  * `lastSuccessAt`. On empty input (the source returned nothing — valid),
@@ -55,13 +105,7 @@ export const recordPolledPlays = mutation({
     let skipped = 0;
 
     for (const play of incoming) {
-      // Dedup: same station, same playedAt (ms), not soft-deleted
-      const dup = await ctx.db
-        .query("plays")
-        .withIndex("by_station_played_at", (q) =>
-          q.eq("stationId", source.stationId).eq("playedAt", play.playedAt),
-        )
-        .first();
+      const dup = await findDuplicatePlay(ctx, source.stationId, play);
       if (dup !== null) {
         skipped++;
         continue;
@@ -106,7 +150,9 @@ export const recordPolledPlays = mutation({
  * change (~every 3 min per station). Logging a Convex event for every tick
  * would flood `ingestionEvents`. So this mutation:
  *
- *   - Dedups by `(stationId, playedAt)` exactly like the batch version.
+ *   - Dedups by `(stationId, artistRaw, titleRaw)` within ±5s, which
+ *     catches both rapid re-reads and the parallel SG+ICY writes that
+ *     Rhythm Lab produces. See `findDuplicatePlay`.
  *   - Does NOT write an ingestionEvent on success (too noisy).
  *   - Does NOT update `lastSuccessAt` here — a session-3 heartbeat mutation
  *     or ingestion-events kind extension will own that path.
@@ -138,12 +184,7 @@ export const recordStreamPlay = mutation({
   handler: async (ctx, { sourceId, play }) => {
     const source = await loadSourceOrThrow(ctx, sourceId);
 
-    const dup = await ctx.db
-      .query("plays")
-      .withIndex("by_station_played_at", (q) =>
-        q.eq("stationId", source.stationId).eq("playedAt", play.playedAt),
-      )
-      .first();
+    const dup = await findDuplicatePlay(ctx, source.stationId, play);
     if (dup !== null) {
       return { inserted: false as const, reason: "duplicate" as const };
     }
