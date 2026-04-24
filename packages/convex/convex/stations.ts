@@ -1,4 +1,5 @@
-import { query } from "./_generated/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 /**
  * Return all four stations for the RM org, ordered alphabetically by slug
@@ -18,6 +19,58 @@ export const list = query({
         name: s.name,
         embedSlug: s.embedSlug,
         tagline: s.tagline,
+        defaultArtworkUrl: s.defaultArtworkUrl,
       }));
+  },
+});
+
+/**
+ * Set (or clear) a station's fallback artwork URL. Surfaced as a public
+ * mutation so a later dashboard admin panel can call it, but today the
+ * expected caller is a one-off CLI invocation:
+ *
+ *   bunx convex run stations:setDefaultArtwork \
+ *     '{"stationSlug":"414music","defaultArtworkUrl":"https://..."}'
+ *
+ * Pass `null` for `defaultArtworkUrl` to clear. URLs must be `https://`
+ * — widgets render inside secure embeds so `http://` images would be
+ * mixed-content blocked by browsers.
+ */
+// TODO(security): same HMAC + admin-role check as the other operator
+// mutations (session 3). Today this is admin-only by discipline, not
+// enforcement.
+export const setDefaultArtwork = mutation({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    defaultArtworkUrl: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, { stationSlug, defaultArtworkUrl }) => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) throw new Error(`Unknown station slug: ${stationSlug}`);
+
+    if (defaultArtworkUrl !== null) {
+      let parsed: URL;
+      try {
+        parsed = new URL(defaultArtworkUrl);
+      } catch {
+        throw new Error(`defaultArtworkUrl is not a valid URL: ${defaultArtworkUrl}`);
+      }
+      if (parsed.protocol !== "https:") {
+        throw new Error("defaultArtworkUrl must be https:// (widgets run in secure embeds)");
+      }
+    }
+
+    await ctx.db.patch(station._id, {
+      defaultArtworkUrl: defaultArtworkUrl ?? undefined,
+    });
+    return { stationSlug, defaultArtworkUrl: defaultArtworkUrl ?? null };
   },
 });

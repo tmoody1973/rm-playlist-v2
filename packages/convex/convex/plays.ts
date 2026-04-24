@@ -291,7 +291,11 @@ export const recordPollFailure = mutation({
  * `null` today so the now-playing-card scaffolding can reserve space for
  * the LIVE row (DESIGN.md § B tertiary tier) without a schema change later.
  */
-async function buildPublicPlay(ctx: QueryCtx, play: Doc<"plays">): Promise<PublicPlay> {
+async function buildPublicPlay(
+  ctx: QueryCtx,
+  play: Doc<"plays">,
+  station?: Doc<"stations"> | null,
+): Promise<PublicPlay> {
   const [track, artist] = await Promise.all([
     play.canonicalTrackId ? ctx.db.get(play.canonicalTrackId) : Promise.resolve(null),
     play.canonicalArtistId ? ctx.db.get(play.canonicalArtistId) : Promise.resolve(null),
@@ -307,7 +311,9 @@ async function buildPublicPlay(ctx: QueryCtx, play: Doc<"plays">): Promise<Publi
     album: track?.albumDisplayName ?? play.albumRaw ?? null,
     label: track?.recordLabel ?? play.labelRaw ?? null,
     durationSec: track?.durationSec ?? play.durationSec ?? null,
-    artworkUrl: track?.artworkUrl ?? null,
+    // Fallback to the station's branded placeholder (stations.defaultArtworkUrl)
+    // so 414 Music / pre-enrichment rows don't render an empty gray tile.
+    artworkUrl: track?.artworkUrl ?? station?.defaultArtworkUrl ?? null,
     spotifyTrackId: track?.spotifyTrackId ?? null,
     appleMusicSongId: track?.appleMusicSongId ?? null,
     previewUrl: track?.previewUrl ?? null,
@@ -360,7 +366,7 @@ export const currentByStation = query({
     );
     if (latest === undefined) return null;
 
-    return buildPublicPlay(ctx, latest);
+    return buildPublicPlay(ctx, latest, station);
   },
 });
 
@@ -402,6 +408,6 @@ export const recentByStation = query({
       .filter((p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored")
       .slice(0, take);
 
-    return Promise.all(visible.map((p) => buildPublicPlay(ctx, p)));
+    return Promise.all(visible.map((p) => buildPublicPlay(ctx, p, station)));
   },
 });
