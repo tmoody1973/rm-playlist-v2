@@ -1,0 +1,16 @@
+{
+  "_note": "Match below the 90-score threshold — should become `below_threshold`.",
+  "created": "2026-04-24T00:00:00.000Z",
+  "count": 1,
+  "offset": 0,
+  "recordings": [
+    {
+      "id": "a0000000-0000-0000-0000-000000000000",
+      "score": 55,
+      "title": "Something Different",
+      "artist-credit": [
+        { "name": "Other Artist", "artist": { "id": "a1111111-1111-1111-1111-111111111111", "name": "Other Artist" } }
+      ]
+    }
+  ]
+}

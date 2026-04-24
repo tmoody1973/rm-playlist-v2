@@ -1,0 +1,22 @@
+{
+  "_note": "Shape derived from Apple Music Catalog /v1/catalog/us/search?types=songs response. Real attributes retained; no per-storefront commerce fields.",
+  "results": {
+    "songs": {
+      "data": [
+        {
+          "id": "1440831078",
+          "type": "songs",
+          "attributes": {
+            "name": "She's Always in My Hair",
+            "artistName": "D'Angelo",
+            "albumName": "Brown Sugar (Deluxe Edition)",
+            "previews": [{ "url": "https://audio-ssl.itunes.apple.com/previews/example.m4a" }],
+            "artwork": {
+              "url": "https://is1-ssl.mzstatic.com/image/thumb/Music/.../source/{w}x{h}bb.jpg"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
