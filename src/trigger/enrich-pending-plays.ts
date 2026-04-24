@@ -2,6 +2,7 @@ import { logger, schedules, tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { enrichPlay } from "../../packages/enrichment/src";
 import { lookupDiscogs } from "../../packages/enrichment/src/discogs";
+import { lookupLabelByRecording } from "../../packages/enrichment/src/musicbrainz/client";
 import { createThrottle, type Throttle } from "../../packages/enrichment/src/throttle";
 import type {
   AppleMusicResult,
@@ -201,6 +202,8 @@ async function enrichOne(
   if (mbHit && amHit) {
     const resolvedLabel = await resolveRecordLabel(
       appleMusic,
+      musicBrainz,
+      throttle,
       discogsThrottle,
       discogsToken,
       fetchOverride,
@@ -228,8 +231,26 @@ async function enrichOne(
  * Never throws — missing label just means the track row stays
  * recordLabel-null until a future play provides better data.
  */
+/**
+ * Record-label resolution priority (each tier only runs if the previous
+ * tier produced no value):
+ *   1. Apple Music's recordLabel — free, already fetched
+ *   2. Discogs release search by (artist, album) — label on release row
+ *   3. MusicBrainz release lookup by recording MBID — uses the MBID we
+ *      already hold from the primary MB recording search, asks for the
+ *      release containing it with its label-info array. Catches
+ *      releases Discogs doesn't index well (N.W.A. — "Express Yourself"
+ *      is Ruthless/Priority Records on MB; Discogs missed the album
+ *      title variant).
+ *
+ * Each tier is a separate API call on its own throttle. Worst case per
+ * play: 1 Apple + 1 Discogs + 1 MB-label (MB-recording search already
+ * happened upstream in enrichPlay so we don't double-count).
+ */
 async function resolveRecordLabel(
   am: AppleMusicResult & { matched: true },
+  mb: MusicBrainzResult & { matched: true },
+  mbThrottle: Throttle,
   discogsThrottle: Throttle | undefined,
   discogsToken: string | undefined,
   fetchOverride: FetchLike | undefined,
@@ -237,20 +258,36 @@ async function resolveRecordLabel(
   discogsConsumerSecret?: string,
 ): Promise<string | undefined> {
   if (am.recordLabel && am.recordLabel.trim().length > 0) return am.recordLabel;
-  if (!discogsThrottle) return undefined;
-  if (!am.albumName || am.albumName.trim().length === 0) return undefined;
 
-  const result = await lookupDiscogs(
-    { artist: am.artistName, album: am.albumName },
-    {
-      throttle: discogsThrottle,
-      token: discogsToken,
-      consumerKey: discogsConsumerKey,
-      consumerSecret: discogsConsumerSecret,
+  if (discogsThrottle && am.albumName && am.albumName.trim().length > 0) {
+    const discogs = await lookupDiscogs(
+      { artist: am.artistName, album: am.albumName },
+      {
+        throttle: discogsThrottle,
+        token: discogsToken,
+        consumerKey: discogsConsumerKey,
+        consumerSecret: discogsConsumerSecret,
+        fetch: fetchOverride,
+      },
+    );
+    if (discogs.matched) return discogs.label;
+  }
+
+  try {
+    const mbLabel = await lookupLabelByRecording({
+      recordingMbid: mb.recordingMbid,
+      throttle: mbThrottle,
       fetch: fetchOverride,
-    },
-  );
-  return result.matched ? result.label : undefined;
+    });
+    if (mbLabel && mbLabel.length > 0) return mbLabel;
+  } catch {
+    // MB failure here isn't fatal — we just end up with no label,
+    // same outcome as if MB had no release data. The primary MB
+    // recording search already succeeded or we wouldn't be in
+    // resolveBoth.
+  }
+
+  return undefined;
 }
 
 async function resolveBoth(

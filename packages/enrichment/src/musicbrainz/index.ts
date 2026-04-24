@@ -66,5 +66,5 @@ function mapErrorToReason(code: MusicBrainzErrorCode): MusicBrainzMissReason {
   }
 }
 
-export { MusicBrainzError, searchRecording } from "./client";
+export { MusicBrainzError, lookupLabelByRecording, searchRecording } from "./client";
 export type { NormalizedRecording, SearchRecordingInput } from "./client";

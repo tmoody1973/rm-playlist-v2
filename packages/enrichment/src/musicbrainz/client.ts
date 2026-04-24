@@ -59,6 +59,51 @@ interface MbSearchResponse {
   recordings?: MbRecording[];
 }
 
+/**
+ * Given a recording MBID, fetch the first release that contains it
+ * along with its label credits. Returns the first label name found
+ * across the release's `label-info` array. Used as a 3rd-tier label
+ * fallback AFTER Apple Music's `recordLabel` and Discogs' release
+ * search both miss — we already have the recordingMbid from the
+ * primary recording search, so this is one extra MB request.
+ *
+ * Returns null (not throws) when no release / no labels are attached.
+ * Throws MusicBrainzError on upstream issues so the caller can choose
+ * whether to swallow (current orchestrator policy).
+ */
+export async function lookupLabelByRecording(input: {
+  readonly recordingMbid: string;
+  readonly throttle: Throttle;
+  readonly signal?: AbortSignal;
+  readonly fetch?: FetchLike;
+}): Promise<string | null> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const url = `${API_BASE}/release?recording=${encodeURIComponent(input.recordingMbid)}&inc=labels&limit=5&fmt=json`;
+
+  await input.throttle.acquire(input.signal);
+  const res = await fetchImpl(url, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": USER_AGENT,
+    },
+    signal: input.signal,
+  });
+  if (!res.ok) throw classifyError(res.status, await safeText(res));
+
+  const json = (await res.json()) as {
+    releases?: Array<{
+      "label-info"?: Array<{ label?: { name?: string } }>;
+    }>;
+  };
+  for (const release of json.releases ?? []) {
+    for (const li of release["label-info"] ?? []) {
+      const name = li.label?.name?.trim();
+      if (name && name.length > 0) return name;
+    }
+  }
+  return null;
+}
+
 export async function searchRecording(
   input: SearchRecordingInput,
 ): Promise<NormalizedRecording[]> {

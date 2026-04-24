@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   MusicBrainzError,
+  lookupLabelByRecording,
   normalizeArtistForMb,
   normalizeTitleForMb,
   searchRecording,
@@ -165,6 +166,82 @@ describe("MusicBrainzError", () => {
     expect(err.code).toBe("rate_limited");
     expect(err.status).toBe(429);
     expect(err.name).toBe("MusicBrainzError");
+  });
+});
+
+describe("lookupLabelByRecording", () => {
+  test("returns the first label name from the first release with labels", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({
+      status: 200,
+      body: {
+        releases: [
+          { "label-info": [] },
+          {
+            "label-info": [
+              { label: { name: "Ruthless Records" } },
+              { label: { name: "Priority Records" } },
+            ],
+          },
+        ],
+      },
+    });
+    const label = await lookupLabelByRecording({
+      recordingMbid: "aaaabbbb-cccc-dddd-eeee-ffff00001111",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(label).toBe("Ruthless Records");
+    const url = mock.calls[0]?.url ?? "";
+    expect(url).toContain("/release?recording=aaaabbbb-cccc-dddd-eeee-ffff00001111");
+    expect(url).toContain("inc=labels");
+  });
+
+  test("returns null when no release has a label", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: { releases: [{ "label-info": [] }] } });
+    const label = await lookupLabelByRecording({
+      recordingMbid: "m",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(label).toBeNull();
+  });
+
+  test("returns null when no releases at all", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: {} });
+    const label = await lookupLabelByRecording({
+      recordingMbid: "m",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(label).toBeNull();
+  });
+
+  test("throws MusicBrainzError on upstream 5xx", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 502, body: "upstream" });
+    await expect(
+      lookupLabelByRecording({
+        recordingMbid: "m",
+        throttle: fastThrottle(),
+        fetch: mock.fetch,
+      }),
+    ).rejects.toMatchObject({ name: "MusicBrainzError", code: "upstream_5xx" });
+  });
+
+  test("acquires throttle before HTTP call", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: { releases: [] } });
+    let acquired = 0;
+    const counting = { acquire: async () => { acquired++; } };
+    await lookupLabelByRecording({
+      recordingMbid: "m",
+      throttle: counting,
+      fetch: mock.fetch,
+    });
+    expect(acquired).toBe(1);
   });
 });
 
