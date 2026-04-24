@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalQuery } from "./_generated/server";
+import { action, internalQuery, mutation } from "./_generated/server";
 
 /**
  * Operator-invoked backfills for tracks that landed with incomplete
@@ -9,11 +9,15 @@ import { action, internalQuery } from "./_generated/server";
  * the concerns separate — this file is "fix the data we already have",
  * enrichment.ts is "resolve new plays."
  *
- * Current backfill:
+ * Current backfills:
  *   - fillMissingDurationsFromApple: for every track with an
  *     `appleMusicSongId` set but no `durationSec`, fetch
  *     `/v1/catalog/us/songs/{id}` and patch. Addresses the NPR export
  *     gap where a missing End Time causes row rejection.
+ *   - reEnrichMbOnlyPlays: flip plays that resolved via the MB-only
+ *     path (artist-matched, no track row, no artworkUrl) back to
+ *     `pending` so the next enrich cron tick re-runs them through
+ *     the new CAA cover-art fallback.
  */
 
 /** Apple Music's max quota is generous but the docs recommend pacing. */
@@ -171,3 +175,58 @@ function sleep(ms: number): Promise<void> {
 // Reference types retained so the candidate shape stays close to the
 // `tracks` table. If the shape drifts, TS will catch this import.
 type _CandidateTypeCheck = Doc<"tracks">;
+
+/**
+ * Retroactive backfill for plays that resolved via the MB-only path
+ * before the Cover Art Archive fallback shipped (PR #16). Those plays
+ * have `canonicalArtistId` set, `canonicalTrackId` undefined, and the
+ * widget falls back to the station-default logo because there's no
+ * track row carrying an `artworkUrl`.
+ *
+ * Flipping them to `enrichmentStatus: "pending"` makes them eligible
+ * for the next 60s enrich cron tick, which will run through the new
+ * CAA path and upsert a track row with real album art when available.
+ * For plays where CAA also misses, the second pass produces no track
+ * and the row re-resolves to the same artist-only shape as before —
+ * net: no regression, recovery on best-effort.
+ *
+ * Invoke via:
+ *
+ *   bunx convex run backfills:reEnrichMbOnlyPlays '{}'
+ *   bunx convex run backfills:reEnrichMbOnlyPlays '{"limit": 50}'
+ *
+ * Returns `{ flipped, scanned }`. Safe to invoke multiple times —
+ * once a play has a canonicalTrackId, it's skipped.
+ */
+// TODO(security): HMAC + admin-role check. Session 3 security pass.
+export const reEnrichMbOnlyPlays = mutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }): Promise<{ flipped: number; scanned: number }> => {
+    const cap = Math.min(Math.max(limit ?? 200, 1), 2000);
+    let scanned = 0;
+    let flipped = 0;
+
+    // Scan recent-resolved plays (by status index) — MB-only rows are rare
+    // enough that the whole candidate set for RM fits in one pass well
+    // under the cap. If we grow to multi-station scale later, convert to
+    // a paginator.
+    for await (const play of ctx.db
+      .query("plays")
+      .withIndex("by_enrichment_status", (q) => q.eq("enrichmentStatus", "resolved"))) {
+      scanned += 1;
+      if (scanned >= cap) break;
+      if (play.canonicalTrackId !== undefined) continue;
+      if (play.canonicalArtistId === undefined) continue; // defensive
+      await ctx.db.patch(play._id, {
+        enrichmentStatus: "pending",
+        // Clear canonicalArtistId too so enrichPlay re-resolves fresh
+        // and upsertArtistByMbid returns the same (idempotent) row —
+        // keeps the eventual markPlayEnriched contract clean.
+        canonicalArtistId: undefined,
+      });
+      flipped += 1;
+    }
+
+    return { flipped, scanned };
+  },
+});
