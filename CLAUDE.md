@@ -9,6 +9,34 @@ Authoritative companion docs in `docs/design/`:
 - `003-responsive-accessibility.md` — viewport breakpoints, keyboard nav, ARIA, contrast, motion
 - `004-unresolved-decisions.md` — design decisions still open + recommended defaults
 
+# Convex Deployment Sync (READ BEFORE running convex dev/codegen)
+
+The `precise-fish-444` Convex deployment is **shared** across every worktree and every developer. It is not version-controlled — whatever was last pushed wins. Running `bunx convex codegen` or `bunx convex dev` from a stale branch silently pushes that branch's functions + schema validators, overwriting whatever was live.
+
+This caused a real outage on 2026-04-24: a `convex codegen` from a feature branch that pre-dated the `previewUrl`-on-`upsertTrack` change pushed the old validator. Main kept advancing; the deployed trigger worker called the new signature; every enrichment run failed `ArgumentValidationError`. Enrichment fell 71 min behind and every widget stopped showing artwork.
+
+## Authoritative sync path
+
+`.github/workflows/convex-deploy.yml` runs `bunx convex deploy` after CI passes on `main`, using the `CONVEX_DEPLOY_KEY` repo secret. **That workflow is the source of truth** for what's live.
+
+## If you must run Convex commands manually
+
+- **`bunx convex dev` (watch mode)** — ONLY from a worktree you're confident is in sync with `main`, i.e. the clock-time between your last `git pull` and your dev command should be under a minute. If another PR has merged since your last pull, STOP and rebase first.
+- **`bunx convex codegen`** — same caveat. Codegen pushes functions as a side effect; it is not the pure "regenerate TypeScript bindings" command its name implies.
+- **`bunx convex run`** — safe, read-only query/action invocation. No push.
+- **`bunx convex data`** — safe, read-only table inspection. No push.
+
+## If the deployment drifts
+
+Symptoms: enrich-pending-plays cron shows `errored:N, resolved:0` in its summary; widgets stop showing fresh artwork; `Needs Attention` panel accumulates pending rows.
+
+Recovery, in order of preference:
+
+1. Trigger the `Convex deploy` workflow manually (GitHub → Actions → Convex deploy → Run workflow) — picks up current `main`, pushes cleanly
+2. From a freshly-pulled `main` checkout locally: `cd packages/convex && bunx convex dev --once` — pushes the current commit's functions
+
+Never run recovery from a feature branch — you'll just re-introduce the drift.
+
 # Clean Code Standards
 
 All code produced in this project must follow these clean code principles. These are non-negotiable defaults — not suggestions.
