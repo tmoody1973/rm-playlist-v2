@@ -175,6 +175,125 @@ export const markPlayEnriched = mutation({
 });
 
 /**
+ * Tracks that resolved but are missing SoundExchange-required fields.
+ * Reports groups keyed by the canonical track so a popular song isn't
+ * shown once per play. Primary use case: dashboard "metadata
+ * incomplete" surface that tells a music director WHICH SoundExchange
+ * fields are still blank before SOR filing.
+ */
+export const tracksMissingSoundExchangeFields = query({
+  args: {
+    limit: v.optional(v.number()),
+    windowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit, windowMs }) => {
+    const take = Math.min(limit ?? 15, 50);
+    const window = windowMs ?? 7 * 24 * 60 * 60 * 1000;
+    const since = Date.now() - window;
+
+    const recentPlays = await ctx.db
+      .query("plays")
+      .withIndex("by_enrichment_status", (q) => q.eq("enrichmentStatus", "resolved"))
+      .order("desc")
+      .take(1000);
+
+    const stations = await ctx.db.query("stations").collect();
+    const stationNameById = new Map(stations.map((s) => [s._id, s.name]));
+    const trackCache = new Map<string, Doc<"tracks"> | null>();
+    const artistCache = new Map<string, Doc<"artists"> | null>();
+
+    interface Group {
+      trackId: string;
+      displayTitle: string;
+      artistDisplayName: string;
+      albumDisplayName?: string;
+      missingFields: string[];
+      playCount: number;
+      stationNames: string[];
+      lastPlayedAt: number;
+    }
+    const groups = new Map<string, Group>();
+
+    for (const play of recentPlays) {
+      if (play.playedAt < since) continue;
+      if (play.canonicalTrackId === undefined) continue;
+      const tid = play.canonicalTrackId as string;
+      let track = trackCache.get(tid);
+      if (track === undefined) {
+        track = await ctx.db.get(play.canonicalTrackId);
+        trackCache.set(tid, track);
+      }
+      if (track === null) continue;
+
+      const missing: string[] = [];
+      if (!track.recordLabel || track.recordLabel.trim().length === 0) missing.push("label");
+      if (!track.isrc || track.isrc.trim().length === 0) missing.push("ISRC");
+      if (typeof track.durationSec !== "number" || track.durationSec <= 0) missing.push("duration");
+      if (missing.length === 0) continue;
+
+      const existing = groups.get(tid);
+      const station = stationNameById.get(play.stationId) ?? "?";
+      if (existing !== undefined) {
+        existing.playCount += 1;
+        if (!existing.stationNames.includes(station)) existing.stationNames.push(station);
+        if (play.playedAt > existing.lastPlayedAt) existing.lastPlayedAt = play.playedAt;
+        continue;
+      }
+      const artistIdStr = track.artistId as string;
+      let artist = artistCache.get(artistIdStr);
+      if (artist === undefined) {
+        artist = await ctx.db.get(track.artistId);
+        artistCache.set(artistIdStr, artist);
+      }
+      groups.set(tid, {
+        trackId: tid,
+        displayTitle: track.displayTitle,
+        artistDisplayName: artist?.displayName ?? "Unknown artist",
+        albumDisplayName: track.albumDisplayName,
+        missingFields: missing,
+        playCount: 1,
+        stationNames: [station],
+        lastPlayedAt: play.playedAt,
+      });
+    }
+
+    return Array.from(groups.values())
+      .sort((a, b) => b.lastPlayedAt - a.lastPlayedAt)
+      .slice(0, take);
+  },
+});
+
+/**
+ * Operator action — flip every resolved play pointing at a track back
+ * to `pending` so the next enrich cron tick re-runs the Apple+Discogs
+ * lookups. `upsertTrack`'s patch branch fills in any fields that
+ * weren't present before. Use when new enrichment sources shipped
+ * after the track was first resolved (session 3 MB label fallback
+ * will be a common trigger).
+ */
+// TODO(security): same HMAC plan. Session 3.
+export const reEnrichTrack = mutation({
+  args: {
+    trackId: v.id("tracks"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { trackId, limit }) => {
+    const cap = Math.min(limit ?? 200, 1000);
+    const matching = await ctx.db
+      .query("plays")
+      .withIndex("by_canonical_track", (q) => q.eq("canonicalTrackId", trackId))
+      .filter((q) => q.eq(q.field("enrichmentStatus"), "resolved"))
+      .take(cap);
+    let flipped = 0;
+    for (const p of matching) {
+      await ctx.db.patch(p._id, { enrichmentStatus: "pending" });
+      flipped += 1;
+    }
+    return { flipped };
+  },
+});
+
+/**
  * Operator action — retry every unresolved play whose
  * (stationId, artistRaw, titleRaw) matches the supplied tuple by flipping
  * them back to `enrichmentStatus: "pending"`. The enrich cron picks them

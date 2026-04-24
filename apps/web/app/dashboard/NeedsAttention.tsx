@@ -23,8 +23,10 @@ import type { Id } from "@rm/convex/values";
  */
 export function NeedsAttention() {
   const groups = useQuery(api.ingestionEvents.enrichmentProblemsGrouped, { limitGroups: 8 });
+  const incomplete = useQuery(api.enrichment.tracksMissingSoundExchangeFields, { limit: 8 });
   const retry = useMutation(api.enrichment.retryUnresolvedGroup);
   const ignore = useMutation(api.enrichment.ignoreUnresolvedGroup);
+  const reEnrich = useMutation(api.enrichment.reEnrichTrack);
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const run = async (
@@ -39,6 +41,9 @@ export function NeedsAttention() {
     }
   };
 
+  const totalCount =
+    (groups?.length ?? 0) + (incomplete?.length ?? 0);
+
   return (
     <section
       role="region"
@@ -47,12 +52,12 @@ export function NeedsAttention() {
     >
       <header className="flex items-center justify-between">
         <h3 className="text-sm font-semibold tracking-tight">Needs Attention</h3>
-        {groups !== undefined && groups.length > 0 && (
+        {totalCount > 0 && (
           <span
             className="rounded-full bg-status-error/20 px-2 py-0.5 text-xs font-medium text-status-error"
             style={{ fontFamily: "var(--font-mono)" }}
           >
-            {groups.length}
+            {totalCount}
           </span>
         )}
       </header>
@@ -65,17 +70,27 @@ export function NeedsAttention() {
         </div>
       )}
 
-      {groups !== undefined && groups.length === 0 && (
-        <p className="text-sm text-text-muted">
-          Everything is clean.{" "}
-          <span className="text-xs text-text-muted/70" style={{ fontFamily: "var(--font-mono)" }}>
-            Last 24h.
-          </span>
-        </p>
-      )}
+      {groups !== undefined &&
+        groups.length === 0 &&
+        incomplete !== undefined &&
+        incomplete.length === 0 && (
+          <p className="text-sm text-text-muted">
+            Everything is clean.{" "}
+            <span
+              className="text-xs text-text-muted/70"
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              Last 24h.
+            </span>
+          </p>
+        )}
 
       {groups !== undefined && groups.length > 0 && (
-        <ul role="list" className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5">
+          <h4 className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+            Enrichment failures
+          </h4>
+      <ul role="list" className="flex flex-col gap-1.5">
           {groups.map((g) => {
             const key = `${g.stationId}|${g.reason}|${g.artistRaw ?? ""}|${g.titleRaw ?? ""}`;
             const busy = busyKey === key;
@@ -157,6 +172,77 @@ export function NeedsAttention() {
             );
           })}
         </ul>
+        </div>
+      )}
+
+      {incomplete !== undefined && incomplete.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <h4 className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+            Missing SoundExchange metadata
+          </h4>
+          <ul role="list" className="flex flex-col gap-1.5">
+            {incomplete.map((t) => {
+              const key = `inc|${t.trackId}`;
+              const busy = busyKey === key;
+              return (
+                <li
+                  key={key}
+                  className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span
+                      aria-hidden
+                      className="mt-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-status-info"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-text-primary">
+                        {t.artistDisplayName} — {t.displayTitle}
+                      </p>
+                      <p className="flex gap-2 text-text-muted">
+                        <span>{t.stationNames.join(", ")}</span>
+                        <span aria-hidden>·</span>
+                        <span>missing: {t.missingFields.join(", ")}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <div className="flex items-center gap-1.5">
+                      {t.playCount > 1 && (
+                        <span
+                          className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
+                          style={{ fontFamily: "var(--font-mono)" }}
+                          aria-label={`played ${t.playCount} times`}
+                        >
+                          {t.playCount}×
+                        </span>
+                      )}
+                      <time
+                        dateTime={new Date(t.lastPlayedAt).toISOString()}
+                        className="text-text-muted"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                      >
+                        {formatRelative(t.lastPlayedAt)}
+                      </time>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        run(key, () =>
+                          reEnrich({ trackId: t.trackId as Id<"tracks"> }),
+                        )
+                      }
+                      className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
+                      title="Flip all plays of this track back to pending so enrichment re-runs with current logic (Discogs, MB, etc)"
+                    >
+                      Re-enrich
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </section>
   );
