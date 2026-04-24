@@ -13,6 +13,7 @@ import type * as enrichment from "../enrichment.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as plays from "../plays.js";
+import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as stations from "../stations.js";
 import type * as users from "../users.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
   plays: typeof plays;
+  reports: typeof reports;
   seed: typeof seed;
   stations: typeof stations;
   users: typeof users;

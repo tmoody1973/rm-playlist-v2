@@ -2,7 +2,8 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "@rm/convex/api";
 import { StationCard } from "./StationCard";
 import { NeedsAttention } from "./NeedsAttention";
-import { ReportsPanel, UpcomingFromRotation } from "./Placeholders";
+import { ReportsPanel } from "./ReportsPanel";
+import { UpcomingFromRotation } from "./Placeholders";
 
 /**
  * Milestone 5 — dashboard wall-of-status (the CEO-plan Week 1-2 deliverable).
