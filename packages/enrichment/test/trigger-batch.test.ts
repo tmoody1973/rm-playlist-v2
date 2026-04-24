@@ -277,6 +277,72 @@ describe("enrichBatch — token refresh", () => {
   });
 });
 
+describe("enrichBatch — transient Apple errors (defer, don't mark unresolved)", () => {
+  test("Apple 401 → deferred, batch aborts, onTokenRefreshNeeded fires", async () => {
+    const mock = createMockFetch();
+    // Play 1: Apple 401, MB miss → deferred, abort batch
+    mock.enqueue({ status: 401, body: { errors: [{ status: 401 }] } });
+    mock.enqueue({ status: 200, body: mbMiss });
+    // Play 2 is in the batch but should never hit the network because
+    // the Apple 401 aborts the loop.
+    const client = new FakeConvexClient();
+    let refreshed = 0;
+
+    const summary = await enrichBatch({
+      client: fake(client) as never,
+      pending: [play("p_401_1"), play("p_401_2")],
+      appleMusicToken: "jwt",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+      onTokenRefreshNeeded: () => {
+        refreshed += 1;
+      },
+    });
+
+    expect(refreshed).toBe(1);
+    expect(summary.deferred).toBe(2);
+    expect(summary.unresolved).toBe(0);
+    expect(summary.reason).toBe("token_expired_mid_batch");
+
+    // Critical: do NOT write markPlayUnresolved for transient errors.
+    expect(client.mutationCalls("enrichment:markPlayUnresolved").length).toBe(0);
+    // Play 2 must not have triggered any network call (batch aborted).
+    const apple2Calls = mock.calls.filter((c) => c.url.includes("api.music.apple.com"));
+    expect(apple2Calls.length).toBe(1);
+  });
+
+  test("Apple 429 + MB miss → deferred (no markUnresolved), but batch continues", async () => {
+    const mock = createMockFetch();
+    // Play 1: Apple 429 rate_limited + MB miss → defer (no abort, no refresh)
+    mock.enqueue({ status: 429, body: { errors: [{ status: 429 }] } });
+    mock.enqueue({ status: 200, body: mbMiss });
+    // Play 2: both succeed
+    mock.enqueue({ status: 200, body: appleHit });
+    mock.enqueue({ status: 200, body: mbHit });
+    const client = new FakeConvexClient();
+    client.scriptMutation("enrichment:upsertArtistByMbid", "artist_ok");
+    client.scriptMutation("enrichment:upsertTrack", "track_ok");
+    let refreshed = 0;
+
+    const summary = await enrichBatch({
+      client: fake(client) as never,
+      pending: [play("p_429"), play("p_ok")],
+      appleMusicToken: "jwt",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+      onTokenRefreshNeeded: () => {
+        refreshed += 1;
+      },
+    });
+
+    expect(refreshed).toBe(0);
+    expect(summary.deferred).toBe(1);
+    expect(summary.resolved).toBe(1);
+    expect(summary.unresolved).toBe(0);
+    expect(client.mutationCalls("enrichment:markPlayUnresolved").length).toBe(0);
+  });
+});
+
 describe("enrichBatch — error isolation", () => {
   test("per-play upsert failure does not abort batch", async () => {
     const mock = createMockFetch();

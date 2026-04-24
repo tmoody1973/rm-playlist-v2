@@ -52,8 +52,24 @@ export interface BatchSummary {
   partial: number;
   unresolved: number;
   errored: number;
+  /**
+   * Plays left as `pending` because the upstream failure was transient
+   * (Apple 401/429/5xx, etc.). They'll be re-tried on the next cron tick
+   * after token refresh / backoff, instead of polluting `Needs Attention`.
+   */
+  deferred: number;
   skipped?: boolean;
   reason?: string;
+}
+
+/**
+ * Apple reason codes that indicate a retryable upstream condition rather
+ * than an actual "this song does not exist on Apple Music" answer. Plays
+ * that hit one of these should stay `pending` so the next tick retries,
+ * NOT get marked unresolved.
+ */
+function isTransientAppleReason(reason: string): boolean {
+  return reason === "unauthorized" || reason === "rate_limited" || reason === "upstream_5xx";
 }
 
 export interface EnrichBatchDeps {
@@ -85,7 +101,7 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
   const log = deps.log ?? (() => undefined);
 
   if (deps.pending.length === 0) {
-    return { total: 0, resolved: 0, partial: 0, unresolved: 0, errored: 0 };
+    return { total: 0, resolved: 0, partial: 0, unresolved: 0, errored: 0, deferred: 0 };
   }
 
   if (deps.appleMusicToken === null) {
@@ -96,6 +112,7 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
       partial: 0,
       unresolved: 0,
       errored: 0,
+      deferred: deps.pending.length,
       skipped: true,
       reason: "token_refresh",
     };
@@ -107,11 +124,18 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
     partial: 0,
     unresolved: 0,
     errored: 0,
+    deferred: 0,
   };
 
+  let tokenAbort = false;
   for (const play of deps.pending) {
+    if (tokenAbort) {
+      // Every remaining play stays pending — next tick (post-refresh) retries.
+      summary.deferred += 1;
+      continue;
+    }
     try {
-      await enrichOne(
+      const unauthorized = await enrichOne(
         deps.client,
         play,
         deps.appleMusicToken,
@@ -123,11 +147,22 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
         deps.discogsConsumerKey,
         deps.discogsConsumerSecret,
       );
+      if (unauthorized) {
+        // Token dead mid-batch — trigger refresh once, abort the rest so we
+        // don't burn Apple quota (or mark plays unresolved) with a bad JWT.
+        tokenAbort = true;
+        log(`[${play._id}] apple 401 — aborting batch, triggering token refresh`);
+        await deps.onTokenRefreshNeeded?.();
+      }
     } catch (err) {
       summary.errored += 1;
       const message = err instanceof Error ? err.message : String(err);
       log(`[${play._id}] enrichment crashed: ${message}`);
     }
+  }
+
+  if (tokenAbort && summary.reason === undefined) {
+    summary.reason = "token_expired_mid_batch";
   }
 
   return summary;
@@ -169,13 +204,18 @@ export const enrichPendingPlays = schedules.task({
       logger.log(`Skipped batch: ${summary.reason}`);
     } else if (summary.total > 0) {
       logger.log(
-        `Enriched ${summary.resolved} resolved, ${summary.partial} partial, ${summary.unresolved} unresolved, ${summary.errored} errored (total ${summary.total})`,
+        `Enriched ${summary.resolved} resolved, ${summary.partial} partial, ${summary.unresolved} unresolved, ${summary.deferred} deferred, ${summary.errored} errored (total ${summary.total})${summary.reason ? ` [${summary.reason}]` : ""}`,
       );
     }
     return summary;
   },
 });
 
+/**
+ * Enrich a single play. Returns `true` iff Apple Music returned 401 —
+ * batch caller uses this to abort and trigger a token refresh rather
+ * than continuing to burn quota with a dead JWT.
+ */
 async function enrichOne(
   client: ConvexHttpClient,
   play: PendingPlay,
@@ -187,7 +227,7 @@ async function enrichOne(
   discogsToken?: string,
   discogsConsumerKey?: string,
   discogsConsumerSecret?: string,
-): Promise<void> {
+): Promise<boolean> {
   const playId = play._id as Id<"plays">;
   const identity = { artist: play.artistRaw, title: play.titleRaw };
   const result = await enrichPlay(identity, {
@@ -213,16 +253,27 @@ async function enrichOne(
     );
     await resolveBoth(client, playId, appleMusic, musicBrainz, resolvedLabel);
     summary.resolved += 1;
-    return;
+    return false;
   }
   if (mbHit && !amHit) {
     await resolveMbOnly(client, playId, musicBrainz, appleMusic);
     summary.partial += 1;
-    return;
+    return false;
+  }
+
+  // Both sides missed. If Apple's miss was transient (401/429/5xx), leave
+  // the play pending — the next tick retries once the token is refreshed
+  // or the rate-limit window passes. Only persistent "not found" misses
+  // earn a markUnresolved write (which surfaces in Needs Attention).
+  const amTransient = !amHit && isTransientAppleReason(appleMusic.reason);
+  if (amTransient) {
+    summary.deferred += 1;
+    return appleMusic.reason === "unauthorized";
   }
 
   await markUnresolved(client, playId, result);
   summary.unresolved += 1;
+  return false;
 }
 
 /**
