@@ -1,13 +1,20 @@
 # rm-playlist-v2
 
-Radio Milwaukee's playlist platform, v2 — a single-tenant operator dashboard plus embeddable widgets for HYFIN, 88Nine, Rhythm Lab, and 414 Music. Single-tenant first (see [`docs/decisions/001-single-tenant-first.md`](docs/decisions/001-single-tenant-first.md)), architected so multi-tenant activation doesn't require a schema rewrite.
+Radio Milwaukee's playlist platform, v2 — a single-tenant operator dashboard plus embeddable widgets for HYFIN, 88Nine, Rhythm Lab, and 414 Music.
 
-## What's in here
+## What we're building, and why
 
-- **Operator dashboard** — live wall-of-status per station, `Needs Attention` panel with manual triage (Retry / Ignore / Edit / Re-enrich), per-station SoundExchange coverage stat.
-- **Ingestion** — Spinitron + SGmetadata polled adapters, plus a persistent ICY worker on Fly for in-band Shoutcast/Icecast metadata.
-- **Enrichment** — 4-tier record-label waterfall (Apple Music → Discogs release w/ variant retry → MusicBrainz release-by-MBID → Discogs artist-only), plus SoundExchange-required ISRC / duration capture. Station-aware fallback: 414 Music defaults to `Self-released` when all tiers miss.
-- **Embed widgets** — Preact bundle shipped via Cloudflare Pages; `playlist`, `now-playing-strip`, `now-playing-card` variants.
+Radio Milwaukee is a four-stream public radio organization. **88Nine** is the flagship adult-alternative channel. **HYFIN** carries diaspora and global Black music on commercial labels. **Rhythm Lab** is Jordan Lee's long-running electronic / hip-hop / soul curation — a mix of big releases and deep cuts. **414 Music** is the wild card: it plays local Milwaukee artists, most of them self-released or on micro-labels that no commercial music database indexes.
+
+Across those four streams, the station logs tens of thousands of plays per quarter, and every single one has to resolve into a compliant record — right artist, title, album, ISRC, duration, and record label — before SoundExchange will accept the usage report that lets Radio Milwaukee keep broadcasting music. V1 of the playlist platform (live at `playlist.radiomilwaukee.org`) handled the public-facing "what's on now" display well enough, but it left the operational half of the job unsolved. When an SGmetadata feed drifted, when an ICY stream went dark, when Apple Music returned a song with a `null` recordLabel, DJs and compliance staff had nowhere to see it and no single place to fix it. Every quarter turned into a spreadsheet rodeo.
+
+rm-playlist-v2 is that missing layer. It's three things in one repo:
+
+1. **An operator dashboard.** Live wall-of-status for all four stations with a `Needs Attention` panel that surfaces enrichment failures and missing SoundExchange fields. Every row has one-click actions — retry, ignore (persistently, so the next "WYMS Legal ID" tick doesn't come back), override artist/title, edit label/ISRC/duration inline. Per-station coverage stats let a DJ see at a glance whether their stream's metadata is healthy, with 414 Music's chronically-low label coverage marked as expected rather than broken.
+2. **An ingestion + enrichment backbone.** Trigger.dev crons poll SGmetadata every minute. A Fly-deployed ICY worker holds the Rhythm Lab stream open 24/7 and parses in-band Shoutcast metadata as it streams. Every resolved play runs through a four-tier record-label waterfall (Apple Music → Discogs release with deluxe/remaster variant retry → MusicBrainz release-by-MBID → Discogs artist-only) with station-specific logic baked in — 414 Music defaults to `Self-released` when all four tiers miss, because that's what SoundExchange accepts for a local unsigned act.
+3. **Embeddable widgets.** The same canonical play data ships to Cloudflare Pages as a small Preact bundle. Any page on radiomilwaukee.org (or a partner site later) can drop in a `<script>` tag and render a live playlist, now-playing strip, or now-playing card. The embed shim preserves V1's URL shape so existing widgets keep working while v2 grows underneath them.
+
+The single-tenant decision ([`docs/decisions/001-single-tenant-first.md`](docs/decisions/001-single-tenant-first.md)) is deliberate. Everything is scoped to Radio Milwaukee today, but every table carries `orgId` + `stationId` so a partner station can be stood up later without a migration. Done looks like: SoundExchange quarterly exports take minutes instead of days, DJs never ask "why isn't my song showing up," and the embed widgets outlive every platform rewrite that comes after this one.
 
 ## Stack
 
