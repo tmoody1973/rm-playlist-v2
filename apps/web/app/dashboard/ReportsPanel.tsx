@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useConvex } from "convex/react";
+import { useAction, useQuery, useConvex } from "convex/react";
 import { api } from "@rm/convex/api";
 
 type StationSlug = "hyfin" | "88nine" | "414music" | "rhythmlab";
@@ -38,6 +38,9 @@ export function ReportsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const convex = useConvex();
+  const fillDurations = useAction(api.backfills.fillMissingDurationsFromApple);
+  const [backfillStatus, setBackfillStatus] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
   const range = useMemo(() => toEpochRange(startDate, endDate), [startDate, endDate]);
 
   const summary = useQuery(
@@ -47,6 +50,34 @@ export function ReportsPanel() {
 
   const rangeValid = range !== null;
   const hasData = summary !== undefined && summary.resolvedPlays > 0;
+  const missingDurationCount = summary?.missingDuration ?? 0;
+
+  const onBackfillDurations = async () => {
+    setBackfilling(true);
+    setBackfillStatus(null);
+    setError(null);
+    try {
+      const result = await fillDurations({ limit: 100 });
+      if (result.tokenMissing === true) {
+        setError(
+          "Apple Music token not cached — trigger the refresh-apple-music-token task first.",
+        );
+        return;
+      }
+      const bits = [
+        `filled ${result.filled}/${result.attempted}`,
+        result.skippedNoDuration > 0
+          ? `${result.skippedNoDuration} had no duration from Apple`
+          : null,
+        result.failed.length > 0 ? `${result.failed.length} failed` : null,
+      ].filter((b): b is string => b !== null);
+      setBackfillStatus(bits.join(" · "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const onDownload = async () => {
     if (range === null) return;
@@ -123,6 +154,34 @@ export function ReportsPanel() {
       </div>
 
       <SummaryLine summary={summary} rangeValid={rangeValid} />
+
+      {missingDurationCount > 0 && (
+        <div className="flex flex-col gap-1 rounded-sm border border-status-warn/40 bg-status-warn/5 px-2 py-1.5">
+          <p className="text-[10px] text-status-warn">
+            {missingDurationCount} resolved {missingDurationCount === 1 ? "track is" : "tracks are"}{" "}
+            missing duration — those rows will be rejected by NPR. Most can be auto-filled from the
+            Apple Music songId already on the track.
+          </p>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onBackfillDurations}
+              disabled={backfilling}
+              className="rounded-sm border border-status-warn/50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-status-warn transition-colors hover:border-status-warn hover:text-status-warn disabled:opacity-50"
+            >
+              {backfilling ? "Filling…" : "Auto-fill from Apple Music"}
+            </button>
+            {backfillStatus !== null && (
+              <span
+                className="text-[10px] text-text-muted"
+                style={{ fontFamily: "var(--font-mono)" }}
+              >
+                {backfillStatus}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {error !== null && (
         <p className="rounded-sm border border-status-error/50 bg-status-error/10 px-2 py-1 text-xs text-status-error">
