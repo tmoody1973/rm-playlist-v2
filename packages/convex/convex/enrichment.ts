@@ -750,6 +750,17 @@ function normalizeTrackKey(title: string, artistId: Id<"artists">): string {
   return `${artistId}::${slugify(title)}`;
 }
 
+/**
+ * HTTPS + allowlisted-host check. Widget embeds run in secure contexts
+ * so http:// images would be mixed-content blocked, and we only want to
+ * store URLs from sources we trust not to rotate paths on us.
+ *
+ * Allowed hosts:
+ *   - `*.mzstatic.com`         — Apple Music CDN
+ *   - `coverartarchive.org`    — MusicBrainz's Cover Art Archive
+ *     (canonical URLs that 307-redirect to archive.org CDN; browsers
+ *     follow transparently — we just need the CAA URL in the DB)
+ */
 function sanitizeArtworkUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   let url: URL;
@@ -759,6 +770,8 @@ function sanitizeArtworkUrl(raw: string | undefined): string | undefined {
     return undefined;
   }
   if (url.protocol !== "https:") return undefined;
-  if (!url.hostname.endsWith(".mzstatic.com")) return undefined;
-  return url.toString();
+  const host = url.hostname;
+  if (host.endsWith(".mzstatic.com")) return url.toString();
+  if (host === "coverartarchive.org") return url.toString();
+  return undefined;
 }

@@ -210,21 +210,43 @@ export const reEnrichMbOnlyPlays = mutation({
     // enough that the whole candidate set for RM fits in one pass well
     // under the cap. If we grow to multi-station scale later, convert to
     // a paginator.
+    const trackCache = new Map<Id<"tracks">, Doc<"tracks"> | null>();
     for await (const play of ctx.db
       .query("plays")
       .withIndex("by_enrichment_status", (q) => q.eq("enrichmentStatus", "resolved"))) {
       scanned += 1;
       if (scanned >= cap) break;
-      if (play.canonicalTrackId !== undefined) continue;
       if (play.canonicalArtistId === undefined) continue; // defensive
-      await ctx.db.patch(play._id, {
-        enrichmentStatus: "pending",
-        // Clear canonicalArtistId too so enrichPlay re-resolves fresh
-        // and upsertArtistByMbid returns the same (idempotent) row —
-        // keeps the eventual markPlayEnriched contract clean.
-        canonicalArtistId: undefined,
-      });
-      flipped += 1;
+
+      // Two shapes to flip:
+      // (1) Pre-PR#16 MB-only resolution: no track row at all.
+      // (2) Post-PR#16 MB-only with a track, but the track is missing
+      //     artwork — happens when sanitizeArtworkUrl stripped a CAA
+      //     URL during the pre-sanitizer-fix window. Clearing the
+      //     track on the play lets the next cron re-run upsertTrack
+      //     (trackKey dedup patches the existing row with art).
+      let shouldFlip = false;
+      if (play.canonicalTrackId === undefined) {
+        shouldFlip = true;
+      } else {
+        let track = trackCache.get(play.canonicalTrackId);
+        if (track === undefined) {
+          track = await ctx.db.get(play.canonicalTrackId);
+          trackCache.set(play.canonicalTrackId, track);
+        }
+        if (track !== null && !track.appleMusicSongId && !track.artworkUrl) {
+          shouldFlip = true;
+        }
+      }
+
+      if (shouldFlip) {
+        await ctx.db.patch(play._id, {
+          enrichmentStatus: "pending",
+          canonicalArtistId: undefined,
+          canonicalTrackId: undefined,
+        });
+        flipped += 1;
+      }
     }
 
     return { flipped, scanned };
