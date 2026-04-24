@@ -12,19 +12,24 @@
  * Usage patterns (DESIGN.md integration modes):
  *
  *   <!-- 1. Script-attribute shorthand — the most common partner case -->
- *   <script src="https://embed.radiomilwaukee.org/v1/widget.js"
+ *   <script type="module"
+ *           src="https://embed.radiomilwaukee.org/v1/widget.js"
  *           data-station="hyfin"
- *           data-variant="now-playing-card"
- *           async></script>
+ *           data-variant="now-playing-card"></script>
  *
  *   <!-- 2. Declarative div + one script per page -->
  *   <div data-rmke-widget
  *        data-station="rhythmlab"
  *        data-variant="playlist"
  *        data-layout="list"></div>
- *   <script src=".../v1/widget.js" async></script>
+ *   <script type="module" src=".../v1/widget.js"></script>
  *
  *   <!-- 3. Programmatic API (wired in Week 4+, not in Milestone 7) -->
+ *
+ * `type="module"` is REQUIRED. The loader uses ES dynamic imports with
+ * `import.meta.url` for base-URL resolution of the code-split chunks, so
+ * a classic `<script>` tag would fail to parse. Modules are also implicit-
+ * async, so the `async` attribute is redundant and omitted.
  */
 
 import type { WidgetConfig } from "./types";
