@@ -112,6 +112,13 @@ describe("enrichBatch — happy paths", () => {
     expect(markedCalls.length).toBe(1);
     expect(markedCalls[0]?.canonicalArtistId).toBe("artist_123");
     expect(markedCalls[0]?.canonicalTrackId).toBe("track_456");
+
+    const trackCalls = client.mutationCalls("enrichment:upsertTrack");
+    expect(trackCalls.length).toBe(1);
+    expect(trackCalls[0]?.recordLabel).toBe("Virgin Records");
+    expect(trackCalls[0]?.isrc).toBe("USVR29500142");
+    expect(trackCalls[0]?.durationSec).toBe(290);
+    expect(trackCalls[0]?.albumDisplayName).toBe("Brown Sugar (Deluxe Edition)");
   });
 
   test("MB hit, AM miss → upsertArtistByMbid + markPlayEnriched WITHOUT canonicalTrackId", async () => {

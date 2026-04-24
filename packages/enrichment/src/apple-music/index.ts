@@ -29,6 +29,9 @@ export async function lookupAppleMusic(
       artistName: song.artistName,
       title: song.name,
       albumName: song.albumName,
+      recordLabel: song.recordLabel,
+      isrc: song.isrc,
+      durationSec: song.durationSec,
       previewUrl: song.previewUrl,
       artworkUrl: song.artworkUrl,
     };

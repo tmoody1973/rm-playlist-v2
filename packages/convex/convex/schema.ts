@@ -181,6 +181,9 @@ export default defineSchema({
     displayTitle: v.string(),
     artistId: v.id("artists"),
     albumDisplayName: v.optional(v.string()),
+    /** Record label — required for SoundExchange compliance. Apple Music
+     *  frequently omits this; MusicBrainz label lookup is session-3 work. */
+    recordLabel: v.optional(v.string()),
     isrc: v.optional(v.string()),
     durationSec: v.optional(v.number()),
     spotifyTrackId: v.optional(v.string()),

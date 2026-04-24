@@ -26,6 +26,10 @@ export interface AppleMusicMatch {
   readonly artistName: string;
   readonly title: string;
   readonly albumName?: string;
+  /** Apple Music-supplied record label (often null). SoundExchange may require MB fallback. */
+  readonly recordLabel?: string;
+  readonly isrc?: string;
+  readonly durationSec?: number;
   readonly previewUrl?: string;
   /** Template URL with `{w}x{h}` placeholders Apple wants the consumer to fill. */
   readonly artworkUrl?: string;

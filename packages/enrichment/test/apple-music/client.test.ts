@@ -20,6 +20,10 @@ describe("searchSong", () => {
     expect(song?.songId).toBe("1440831078");
     expect(song?.artistName).toBe("D'Angelo");
     expect(song?.artistAppleMusicId).toBe("80254394");
+    expect(song?.albumName).toBe("Brown Sugar (Deluxe Edition)");
+    expect(song?.recordLabel).toBe("Virgin Records");
+    expect(song?.isrc).toBe("USVR29500142");
+    expect(song?.durationSec).toBe(290);
     expect(song?.previewUrl).toContain("audio-ssl.itunes.apple.com");
     expect(song?.artworkUrl).toContain("{w}x{h}");
   });

@@ -39,6 +39,11 @@ export interface NormalizedSong {
   /** Primary Apple Music artist ID (first entry from `relationships.artists.data`). */
   readonly artistAppleMusicId?: string;
   readonly albumName?: string;
+  /** Apple Music often omits this; kept for SoundExchange compliance where present. */
+  readonly recordLabel?: string;
+  readonly isrc?: string;
+  /** Seconds, derived from Apple's `durationInMillis`. */
+  readonly durationSec?: number;
   readonly previewUrl?: string;
   readonly artworkUrl?: string;
 }
@@ -47,6 +52,9 @@ interface SongAttributes {
   name: string;
   artistName: string;
   albumName?: string;
+  recordLabel?: string;
+  isrc?: string;
+  durationInMillis?: number;
   previews?: Array<{ url?: string }>;
   artwork?: { url?: string };
 }
@@ -100,12 +108,19 @@ function normalize(resource: SongResource): NormalizedSong | null {
   const attrs = resource.attributes;
   if (!attrs) return null;
   const primaryArtist = resource.relationships?.artists?.data?.[0];
+  const durationMs = attrs.durationInMillis;
   return {
     songId: resource.id,
     name: attrs.name,
     artistName: attrs.artistName,
     artistAppleMusicId: primaryArtist?.id,
     albumName: attrs.albumName,
+    recordLabel: attrs.recordLabel,
+    isrc: attrs.isrc,
+    durationSec:
+      typeof durationMs === "number" && Number.isFinite(durationMs)
+        ? Math.floor(durationMs / 1000)
+        : undefined,
     previewUrl: attrs.previews?.[0]?.url,
     artworkUrl: attrs.artwork?.url,
   };

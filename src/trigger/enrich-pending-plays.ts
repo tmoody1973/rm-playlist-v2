@@ -209,6 +209,9 @@ async function resolveBoth(
     displayTitle: am.title,
     appleMusicSongId: am.songId,
     albumDisplayName: am.albumName,
+    recordLabel: am.recordLabel,
+    isrc: am.isrc,
+    durationSec: am.durationSec,
     artworkUrl: am.artworkUrl,
   })) as Id<"tracks">;
 

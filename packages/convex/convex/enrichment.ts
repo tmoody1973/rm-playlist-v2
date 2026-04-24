@@ -96,23 +96,46 @@ export const upsertTrack = mutation({
     displayTitle: v.string(),
     appleMusicSongId: v.optional(v.string()),
     albumDisplayName: v.optional(v.string()),
+    recordLabel: v.optional(v.string()),
+    isrc: v.optional(v.string()),
+    durationSec: v.optional(v.number()),
     artworkUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const artworkUrl = sanitizeArtworkUrl(args.artworkUrl);
     if (args.appleMusicSongId) {
       const existing = await ctx.db
         .query("tracks")
         .withIndex("by_apple_music", (q) => q.eq("appleMusicSongId", args.appleMusicSongId))
         .first();
-      if (existing !== null) return existing._id;
+      if (existing !== null) {
+        // Backfill SoundExchange-relevant fields on older rows that were
+        // upserted before these fields were captured. Only patch when the
+        // new arg is defined AND the existing row is empty for that field.
+        const patch: Partial<Doc<"tracks">> = {};
+        if (args.albumDisplayName && !existing.albumDisplayName) {
+          patch.albumDisplayName = args.albumDisplayName;
+        }
+        if (args.recordLabel && !existing.recordLabel) {
+          patch.recordLabel = args.recordLabel;
+        }
+        if (args.isrc && !existing.isrc) patch.isrc = args.isrc;
+        if (args.durationSec && !existing.durationSec) patch.durationSec = args.durationSec;
+        if (artworkUrl && !existing.artworkUrl) patch.artworkUrl = artworkUrl;
+        if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch);
+        return existing._id;
+      }
     }
     return await ctx.db.insert("tracks", {
       trackKey: normalizeTrackKey(args.displayTitle, args.artistId),
       displayTitle: args.displayTitle,
       artistId: args.artistId,
       albumDisplayName: args.albumDisplayName,
+      recordLabel: args.recordLabel,
+      isrc: args.isrc,
+      durationSec: args.durationSec,
       appleMusicSongId: args.appleMusicSongId,
-      artworkUrl: sanitizeArtworkUrl(args.artworkUrl),
+      artworkUrl,
       verified: false,
       createdAt: Date.now(),
     });
