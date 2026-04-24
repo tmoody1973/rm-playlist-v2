@@ -58,6 +58,29 @@ export interface MusicBrainzMiss {
 
 export type MusicBrainzResult = MusicBrainzMatch | MusicBrainzMiss;
 
+export interface DiscogsMatch {
+  readonly matched: true;
+  readonly releaseId: number;
+  readonly label: string;
+  readonly labels: readonly string[];
+  readonly year?: string;
+  readonly country?: string;
+}
+
+export type DiscogsMissReason =
+  | "no_album_hint"
+  | "no_results"
+  | "rate_limited"
+  | "upstream_5xx"
+  | "other";
+
+export interface DiscogsMiss {
+  readonly matched: false;
+  readonly reason: DiscogsMissReason;
+}
+
+export type DiscogsResult = DiscogsMatch | DiscogsMiss;
+
 export interface EnrichmentResult {
   readonly appleMusic: AppleMusicResult;
   readonly musicBrainz: MusicBrainzResult;

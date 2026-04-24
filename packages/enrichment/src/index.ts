@@ -43,6 +43,7 @@ export async function enrichPlay(
 
 export { lookupAppleMusic } from "./apple-music";
 export { lookupMusicBrainz } from "./musicbrainz";
+export { lookupDiscogs } from "./discogs";
 export { createThrottle } from "./throttle";
 export { signDeveloperToken } from "./apple-music/jwt";
 export type { Throttle, ThrottleConfig } from "./throttle";
@@ -50,6 +51,10 @@ export type {
   AppleMusicMatch,
   AppleMusicMiss,
   AppleMusicResult,
+  DiscogsMatch,
+  DiscogsMiss,
+  DiscogsMissReason,
+  DiscogsResult,
   EnrichmentResult,
   MusicBrainzMatch,
   MusicBrainzMiss,

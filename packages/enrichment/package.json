@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./apple-music": "./src/apple-music/index.ts",
     "./musicbrainz": "./src/musicbrainz/index.ts",
+    "./discogs": "./src/discogs/index.ts",
     "./throttle": "./src/throttle.ts"
   },
   "scripts": {

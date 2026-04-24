@@ -14,6 +14,7 @@ import appleHit from "./apple-music/fixtures/search-hit.json";
 import appleMiss from "./apple-music/fixtures/search-miss.json";
 import mbHit from "./musicbrainz/fixtures/recording-hit.json";
 import mbMiss from "./musicbrainz/fixtures/recording-miss.json";
+import discogsHit from "./discogs/fixtures/search-hit.json";
 
 /**
  * In-memory fake of ConvexHttpClient. Records each mutation/query call
@@ -119,6 +120,57 @@ describe("enrichBatch — happy paths", () => {
     expect(trackCalls[0]?.isrc).toBe("USVR29500142");
     expect(trackCalls[0]?.durationSec).toBe(290);
     expect(trackCalls[0]?.albumDisplayName).toBe("Brown Sugar (Deluxe Edition)");
+  });
+
+  test("falls back to Discogs label when Apple returns no recordLabel", async () => {
+    const mock = createMockFetch();
+    // AM response without recordLabel — simulate Apple's common null case
+    const appleNoLabel = structuredClone(appleHit);
+    // @ts-expect-error Known fixture shape
+    delete appleNoLabel.results.songs.data[0].attributes.recordLabel;
+    mock.enqueue({ status: 200, body: appleNoLabel });
+    mock.enqueue({ status: 200, body: mbHit });
+    mock.enqueue({ status: 200, body: discogsHit });
+
+    const client = new FakeConvexClient();
+    client.scriptMutation("enrichment:upsertArtistByMbid", "artist_d");
+    client.scriptMutation("enrichment:upsertTrack", "track_d");
+
+    const summary = await enrichBatch({
+      client: fake(client) as never,
+      pending: [play("p_disc")],
+      appleMusicToken: "jwt",
+      throttle: fastThrottle(),
+      discogsThrottle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+
+    expect(summary.resolved).toBe(1);
+    const trackCalls = client.mutationCalls("enrichment:upsertTrack");
+    expect(trackCalls[0]?.recordLabel).toBe("EMI");
+  });
+
+  test("does not call Discogs when Apple already supplied recordLabel", async () => {
+    const mock = createMockFetch();
+    mock.enqueue({ status: 200, body: appleHit });
+    mock.enqueue({ status: 200, body: mbHit });
+    // Intentionally no Discogs response queued — calling it would throw "mock exhausted"
+    const client = new FakeConvexClient();
+    client.scriptMutation("enrichment:upsertArtistByMbid", "artist_a");
+    client.scriptMutation("enrichment:upsertTrack", "track_a");
+
+    const summary = await enrichBatch({
+      client: fake(client) as never,
+      pending: [play("p_nodiscogs")],
+      appleMusicToken: "jwt",
+      throttle: fastThrottle(),
+      discogsThrottle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+
+    expect(summary.resolved).toBe(1);
+    const discogsCalls = mock.calls.filter((c) => c.url.includes("discogs.com"));
+    expect(discogsCalls.length).toBe(0);
   });
 
   test("MB hit, AM miss → upsertArtistByMbid + markPlayEnriched WITHOUT canonicalTrackId", async () => {

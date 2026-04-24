@@ -1,6 +1,7 @@
 import { logger, schedules, tasks } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { enrichPlay } from "../../packages/enrichment/src";
+import { lookupDiscogs } from "../../packages/enrichment/src/discogs";
 import { createThrottle, type Throttle } from "../../packages/enrichment/src/throttle";
 import type {
   AppleMusicResult,
@@ -35,6 +36,7 @@ export type UnresolvedReason = "mb_miss" | "no_match" | "other";
 
 const PENDING_BATCH = 20;
 const MB_RATE_PER_SEC = 1;
+const DISCOGS_RATE_PER_SEC = 1;
 
 export interface PendingPlay {
   readonly _id: string;
@@ -57,6 +59,10 @@ export interface EnrichBatchDeps {
   readonly pending: PendingPlay[];
   readonly appleMusicToken: string | null;
   readonly throttle: Throttle;
+  /** Separate throttle for Discogs — its 25-60 req/min limit is independent of MB's 1 req/sec. */
+  readonly discogsThrottle?: Throttle;
+  /** Optional personal Discogs token (raises 25/min → 60/min). */
+  readonly discogsToken?: string;
   /** Test seam — override `fetch` passed into enrichPlay. */
   readonly fetch?: FetchLike;
   /** Test seam — skip tasks.trigger() side-effect. */
@@ -107,6 +113,8 @@ export async function enrichBatch(deps: EnrichBatchDeps): Promise<BatchSummary> 
         deps.throttle,
         summary,
         deps.fetch,
+        deps.discogsThrottle,
+        deps.discogsToken,
       );
     } catch (err) {
       summary.errored += 1;
@@ -139,6 +147,8 @@ export const enrichPendingPlays = schedules.task({
       pending,
       appleMusicToken: tokenRow?.token ?? null,
       throttle: createThrottle({ ratePerSec: MB_RATE_PER_SEC }),
+      discogsThrottle: createThrottle({ ratePerSec: DISCOGS_RATE_PER_SEC }),
+      discogsToken: process.env.DISCOGS_TOKEN,
       onTokenRefreshNeeded: async () => {
         logger.warn("Apple Music JWT cache empty or near-expiry — triggering refresh");
         await tasks.trigger("refresh-apple-music-token", {});
@@ -164,6 +174,8 @@ async function enrichOne(
   throttle: Throttle,
   summary: BatchSummary,
   fetchOverride?: FetchLike,
+  discogsThrottle?: Throttle,
+  discogsToken?: string,
 ): Promise<void> {
   const playId = play._id as Id<"plays">;
   const identity = { artist: play.artistRaw, title: play.titleRaw };
@@ -178,7 +190,13 @@ async function enrichOne(
   const amHit = appleMusic.matched;
 
   if (mbHit && amHit) {
-    await resolveBoth(client, playId, appleMusic, musicBrainz);
+    const resolvedLabel = await resolveRecordLabel(
+      appleMusic,
+      discogsThrottle,
+      discogsToken,
+      fetchOverride,
+    );
+    await resolveBoth(client, playId, appleMusic, musicBrainz, resolvedLabel);
     summary.resolved += 1;
     return;
   }
@@ -192,11 +210,36 @@ async function enrichOne(
   summary.unresolved += 1;
 }
 
+/**
+ * Apple Music frequently returns `recordLabel: null` even on well-known
+ * tracks. For SoundExchange compliance we fall back to Discogs'
+ * release label when Apple's is empty and we have an album hint.
+ * Never throws — missing label just means the track row stays
+ * recordLabel-null until a future play provides better data.
+ */
+async function resolveRecordLabel(
+  am: AppleMusicResult & { matched: true },
+  discogsThrottle: Throttle | undefined,
+  discogsToken: string | undefined,
+  fetchOverride: FetchLike | undefined,
+): Promise<string | undefined> {
+  if (am.recordLabel && am.recordLabel.trim().length > 0) return am.recordLabel;
+  if (!discogsThrottle) return undefined;
+  if (!am.albumName || am.albumName.trim().length === 0) return undefined;
+
+  const result = await lookupDiscogs(
+    { artist: am.artistName, album: am.albumName },
+    { throttle: discogsThrottle, token: discogsToken, fetch: fetchOverride },
+  );
+  return result.matched ? result.label : undefined;
+}
+
 async function resolveBoth(
   client: ConvexHttpClient,
   playId: Id<"plays">,
   am: AppleMusicResult & { matched: true },
   mb: MusicBrainzResult & { matched: true },
+  resolvedLabel: string | undefined,
 ): Promise<void> {
   const artistId = (await client.mutation(api.enrichment.upsertArtistByMbid, {
     mbid: mb.artistMbid,
@@ -209,7 +252,7 @@ async function resolveBoth(
     displayTitle: am.title,
     appleMusicSongId: am.songId,
     albumDisplayName: am.albumName,
-    recordLabel: am.recordLabel,
+    recordLabel: resolvedLabel,
     isrc: am.isrc,
     durationSec: am.durationSec,
     artworkUrl: am.artworkUrl,
