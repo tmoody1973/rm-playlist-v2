@@ -6,7 +6,6 @@ docs
 .context
 apps/web
 apps/embed
-packages/convex
 packages/enrichment
 v1-reference
 *.log

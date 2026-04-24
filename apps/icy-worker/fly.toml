@@ -14,7 +14,7 @@ app = "rm-playlist-v2-icy-worker"
 primary_region = "ord"
 
 [build]
-  dockerfile = "apps/icy-worker/Dockerfile"
+  dockerfile = "Dockerfile"
 
 [env]
   NODE_ENV = "production"
