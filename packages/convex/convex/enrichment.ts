@@ -114,32 +114,38 @@ export const upsertTrack = mutation({
   },
   handler: async (ctx, args) => {
     const artworkUrl = sanitizeArtworkUrl(args.artworkUrl);
+
+    // Dedup path A: matched on Apple Music → guaranteed-unique songId.
     if (args.appleMusicSongId) {
       const existing = await ctx.db
         .query("tracks")
         .withIndex("by_apple_music", (q) => q.eq("appleMusicSongId", args.appleMusicSongId))
         .first();
       if (existing !== null) {
-        // Backfill SoundExchange-relevant fields on older rows that were
-        // upserted before these fields were captured. Only patch when the
-        // new arg is defined AND the existing row is empty for that field.
-        const patch: Partial<Doc<"tracks">> = {};
-        if (args.albumDisplayName && !existing.albumDisplayName) {
-          patch.albumDisplayName = args.albumDisplayName;
-        }
-        if (args.recordLabel && !existing.recordLabel) {
-          patch.recordLabel = args.recordLabel;
-        }
-        if (args.isrc && !existing.isrc) patch.isrc = args.isrc;
-        if (args.durationSec && !existing.durationSec) patch.durationSec = args.durationSec;
-        if (artworkUrl && !existing.artworkUrl) patch.artworkUrl = artworkUrl;
-        if (args.previewUrl && !existing.previewUrl) patch.previewUrl = args.previewUrl;
-        if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch);
+        await patchMissingFields(ctx, existing, args, artworkUrl);
         return existing._id;
       }
     }
+
+    // Dedup path B: MB-only enrichment (no Apple songId) — match by the
+    // normalized `trackKey` so repeated plays of the same song don't
+    // stack up duplicate rows. Also catches the progressive-upgrade case
+    // where an earlier MB-only play created a rudimentary row, then a
+    // later Apple hit arrives with richer fields (songId, ISRC, preview).
+    const trackKey = normalizeTrackKey(args.displayTitle, args.artistId);
+    const existingByKey = await ctx.db
+      .query("tracks")
+      .withIndex("by_track_key", (q) => q.eq("trackKey", trackKey))
+      .first();
+    if (existingByKey !== null) {
+      await patchMissingFields(ctx, existingByKey, args, artworkUrl, {
+        appleMusicSongId: args.appleMusicSongId,
+      });
+      return existingByKey._id;
+    }
+
     return await ctx.db.insert("tracks", {
-      trackKey: normalizeTrackKey(args.displayTitle, args.artistId),
+      trackKey,
       displayTitle: args.displayTitle,
       artistId: args.artistId,
       albumDisplayName: args.albumDisplayName,
@@ -154,6 +160,41 @@ export const upsertTrack = mutation({
     });
   },
 });
+
+/**
+ * Only patch fields that the existing row is missing — never overwrite
+ * existing values. Enrichment data is additive; an earlier pass that
+ * found a higher-quality label shouldn't be clobbered by a later pass
+ * that returned a weaker one. Handles the Apple-songId-upgrade case via
+ * the optional `upgrade` arg.
+ */
+async function patchMissingFields(
+  ctx: MutationCtx,
+  existing: Doc<"tracks">,
+  args: {
+    albumDisplayName?: string;
+    recordLabel?: string;
+    isrc?: string;
+    durationSec?: number;
+    previewUrl?: string;
+  },
+  artworkUrl: string | undefined,
+  upgrade?: { appleMusicSongId?: string },
+): Promise<void> {
+  const patch: Partial<Doc<"tracks">> = {};
+  if (args.albumDisplayName && !existing.albumDisplayName) {
+    patch.albumDisplayName = args.albumDisplayName;
+  }
+  if (args.recordLabel && !existing.recordLabel) patch.recordLabel = args.recordLabel;
+  if (args.isrc && !existing.isrc) patch.isrc = args.isrc;
+  if (args.durationSec && !existing.durationSec) patch.durationSec = args.durationSec;
+  if (artworkUrl && !existing.artworkUrl) patch.artworkUrl = artworkUrl;
+  if (args.previewUrl && !existing.previewUrl) patch.previewUrl = args.previewUrl;
+  if (upgrade?.appleMusicSongId && !existing.appleMusicSongId) {
+    patch.appleMusicSongId = upgrade.appleMusicSongId;
+  }
+  if (Object.keys(patch).length > 0) await ctx.db.patch(existing._id, patch);
+}
 
 export const markPlayEnriched = mutation({
   args: {

@@ -104,6 +104,68 @@ export async function lookupLabelByRecording(input: {
   return null;
 }
 
+/**
+ * MusicBrainz cover art is hosted at coverartarchive.org, keyed by release
+ * MBID. This helper walks `/release?recording=...` (same call shape as
+ * `lookupLabelByRecording`), then HEAD-probes
+ * `https://coverartarchive.org/release/{mbid}/front-500` for each release
+ * until one returns 200. Returns the probed URL (browsers follow the CAA
+ * redirect transparently when rendering) or `null` if no release in the
+ * list has front cover art.
+ *
+ * Motivation: when Apple Music misses a track but MusicBrainz hits,
+ * `resolveMbOnly` previously upserted only the artist row — the play
+ * showed up in widgets with no album art (station-default fallback). For
+ * the ~6% of plays on Rhythm Lab that land this way, CAA usually has
+ * real art we can surface instead.
+ *
+ * Never throws — all upstream failures coalesce to `null` so the
+ * enrichment pipeline treats "no cover art" uniformly regardless of
+ * whether it was a 404, 503, or network hiccup.
+ */
+export async function lookupCoverArtUrlByRecording(input: {
+  readonly recordingMbid: string;
+  readonly throttle: Throttle;
+  readonly signal?: AbortSignal;
+  readonly fetch?: FetchLike;
+}): Promise<string | null> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const url = `${API_BASE}/release?recording=${encodeURIComponent(input.recordingMbid)}&inc=labels&limit=5&fmt=json`;
+
+  await input.throttle.acquire(input.signal);
+  let releaseIds: string[];
+  try {
+    const res = await fetchImpl(url, {
+      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+      signal: input.signal,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { releases?: Array<{ id?: string }> };
+    releaseIds = (json.releases ?? [])
+      .map((r) => r.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    return null;
+  }
+
+  // CAA is a separate origin and has its own (more lenient) rate limit; the
+  // MB throttle covers the /release query above.
+  for (const releaseMbid of releaseIds) {
+    const coverUrl = `https://coverartarchive.org/release/${encodeURIComponent(releaseMbid)}/front-500`;
+    try {
+      const probe = await fetchImpl(coverUrl, {
+        method: "HEAD",
+        redirect: "follow",
+        signal: input.signal,
+      });
+      if (probe.ok) return coverUrl;
+    } catch {
+      // Network error on this release — try the next one.
+    }
+  }
+  return null;
+}
+
 export async function searchRecording(input: SearchRecordingInput): Promise<NormalizedRecording[]> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const query = luceneQuery(normalizeArtistForMb(input.artist), normalizeTitleForMb(input.title));
