@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type MutationCtx, mutation, query } from "./_generated/server";
+import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 
 /**
  * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
@@ -278,6 +278,59 @@ export const recordPollFailure = mutation({
  * if the literal most-recent play was ignored, we want the real song
  * playing before it, not null.
  */
+/**
+ * Enriched payload for public consumers (dashboard + embed widgets).
+ *
+ * Raw fields (`artistRaw`, `titleRaw`, `albumRaw`) stay on the shape for
+ * backward compat — `apps/web/app/dashboard/StationCard.tsx` still reads
+ * them. Resolved fields collapse to raw fallbacks when enrichment hasn't
+ * landed yet, so the widget never shows a blank row while we wait for the
+ * Apple Music / Discogs waterfall.
+ *
+ * `liveEvent` is a frozen slot for the events-ingestion milestone — always
+ * `null` today so the now-playing-card scaffolding can reserve space for
+ * the LIVE row (DESIGN.md § B tertiary tier) without a schema change later.
+ */
+async function buildPublicPlay(ctx: QueryCtx, play: Doc<"plays">): Promise<PublicPlay> {
+  const [track, artist] = await Promise.all([
+    play.canonicalTrackId ? ctx.db.get(play.canonicalTrackId) : Promise.resolve(null),
+    play.canonicalArtistId ? ctx.db.get(play.canonicalArtistId) : Promise.resolve(null),
+  ]);
+  return {
+    _id: play._id,
+    artistRaw: play.artistRaw,
+    titleRaw: play.titleRaw,
+    albumRaw: play.albumRaw,
+    playedAt: play.playedAt,
+    artist: artist?.displayName ?? play.artistRaw,
+    title: track?.displayTitle ?? play.titleRaw,
+    album: track?.albumDisplayName ?? play.albumRaw ?? null,
+    label: track?.recordLabel ?? play.labelRaw ?? null,
+    durationSec: track?.durationSec ?? play.durationSec ?? null,
+    artworkUrl: track?.artworkUrl ?? null,
+    spotifyTrackId: track?.spotifyTrackId ?? null,
+    appleMusicSongId: track?.appleMusicSongId ?? null,
+    liveEvent: null,
+  };
+}
+
+export interface PublicPlay {
+  readonly _id: Id<"plays">;
+  readonly artistRaw: string;
+  readonly titleRaw: string;
+  readonly albumRaw: string | undefined;
+  readonly playedAt: number;
+  readonly artist: string;
+  readonly title: string;
+  readonly album: string | null;
+  readonly label: string | null;
+  readonly durationSec: number | null;
+  readonly artworkUrl: string | null;
+  readonly spotifyTrackId: string | null;
+  readonly appleMusicSongId: string | null;
+  readonly liveEvent: null;
+}
+
 export const currentByStation = query({
   args: {
     stationSlug: v.union(
@@ -287,7 +340,7 @@ export const currentByStation = query({
       v.literal("rhythmlab"),
     ),
   },
-  handler: async (ctx, { stationSlug }) => {
+  handler: async (ctx, { stationSlug }): Promise<PublicPlay | null> => {
     const station = await ctx.db
       .query("stations")
       .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
@@ -305,13 +358,7 @@ export const currentByStation = query({
     );
     if (latest === undefined) return null;
 
-    return {
-      _id: latest._id,
-      artistRaw: latest.artistRaw,
-      titleRaw: latest.titleRaw,
-      albumRaw: latest.albumRaw,
-      playedAt: latest.playedAt,
-    };
+    return buildPublicPlay(ctx, latest);
   },
 });
 
@@ -334,7 +381,7 @@ export const recentByStation = query({
     ),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, { stationSlug, limit }) => {
+  handler: async (ctx, { stationSlug, limit }): Promise<PublicPlay[]> => {
     const station = await ctx.db
       .query("stations")
       .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
@@ -349,15 +396,10 @@ export const recentByStation = query({
       .order("desc")
       .take(fetchMany);
 
-    return plays
+    const visible = plays
       .filter((p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored")
-      .slice(0, take)
-      .map((p) => ({
-        _id: p._id,
-        artistRaw: p.artistRaw,
-        titleRaw: p.titleRaw,
-        albumRaw: p.albumRaw,
-        playedAt: p.playedAt,
-      }));
+      .slice(0, take);
+
+    return Promise.all(visible.map((p) => buildPublicPlay(ctx, p)));
   },
 });

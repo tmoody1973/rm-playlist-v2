@@ -28,18 +28,20 @@
  */
 
 import type { WidgetConfig } from "./types";
-import type * as PlaylistVariant from "./variants/playlist";
 
 type Variant = WidgetConfig["variant"];
+type VariantModule = { render: (mount: HTMLElement, config: WidgetConfig) => void };
 
-/** Lazy chunk map. Vite code-splits each import() into its own chunk. */
-const VARIANT_LOADERS: Record<Variant, () => Promise<typeof PlaylistVariant>> = {
+/**
+ * Lazy chunk map. Vite code-splits each import() into its own chunk so a
+ * partner loading the now-playing-strip never ships the playlist chunk's
+ * search + tabs + carousel code. `playlist` still points at the stub —
+ * the V1 carry-forward lands in a separate milestone.
+ */
+const VARIANT_LOADERS: Record<Variant, () => Promise<VariantModule>> = {
   playlist: () => import("./variants/playlist"),
-  // "now-playing-card" and "now-playing-strip" land in Week 4. For
-  // Milestone 7 we only ship the playlist stub so partners can verify
-  // their embed reaches the CDN.
-  "now-playing-card": () => import("./variants/playlist"),
-  "now-playing-strip": () => import("./variants/playlist"),
+  "now-playing-card": () => import("./variants/now-playing-card"),
+  "now-playing-strip": () => import("./variants/now-playing-strip"),
 };
 
 function parseConfig(el: HTMLElement): WidgetConfig | null {
@@ -63,6 +65,8 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
     showSearch: el.dataset.showSearch !== "false",
     showHeader: el.dataset.showHeader !== "false",
+    enablePreview:
+      el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
   };
 }
 
@@ -87,6 +91,8 @@ function findMounts(): HTMLElement[] {
       "maxItems",
       "showSearch",
       "showHeader",
+      "enablePreview",
+      "enableYoutube",
     ]) {
       const v = current.dataset[key];
       if (v != null) host.dataset[key] = v;
@@ -101,6 +107,12 @@ function findMounts(): HTMLElement[] {
 async function mountOne(host: HTMLElement): Promise<void> {
   const config = parseConfig(host);
   if (!config) return;
+
+  // Always reflect the resolved theme onto the host so the shadow's
+  // `:host([data-theme="..."])` selectors match — the config defaults to
+  // "auto" when the partner omits `data-theme`, so we must set it
+  // explicitly here rather than relying on attribute presence.
+  host.dataset.theme = config.theme ?? "auto";
 
   // Shadow DOM isolates our CSS from the host page. Host-page theming
   // still pierces via CSS custom properties — see DESIGN.md widget mode B.

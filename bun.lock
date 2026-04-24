@@ -21,6 +21,7 @@
       "name": "@rm/embed",
       "version": "0.0.0",
       "dependencies": {
+        "@rm/convex": "workspace:*",
         "convex": "^1.17.0",
         "preact": "^10.24.3",
       },

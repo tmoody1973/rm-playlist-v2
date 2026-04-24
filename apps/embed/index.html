@@ -30,20 +30,10 @@
     </style>
   </head>
   <body>
-    <h1>Widget local test harness (4 stations × playlist stub)</h1>
+    <h1>Widget local test harness — now-playing variants</h1>
 
     <section class="mock-station-page">
-      <h2>HYFIN · data-variant="playlist" · list layout</h2>
-      <div
-        data-rmke-widget
-        data-station="hyfin"
-        data-variant="playlist"
-        data-layout="list"
-      ></div>
-    </section>
-
-    <section class="mock-station-page">
-      <h2>88Nine · data-variant="now-playing-card"</h2>
+      <h2>88Nine · now-playing-card · theme=auto</h2>
       <div
         data-rmke-widget
         data-station="88nine"
@@ -52,21 +42,41 @@
     </section>
 
     <section class="mock-station-page">
-      <h2>Rhythm Lab · data-variant="playlist" · grid layout</h2>
+      <h2>HYFIN · now-playing-strip · theme=auto</h2>
+      <div
+        data-rmke-widget
+        data-station="hyfin"
+        data-variant="now-playing-strip"
+      ></div>
+    </section>
+
+    <section class="mock-station-page" style="background: #0e0f11; padding: 1.5rem; border-radius: 8px;">
+      <h2 style="color: #8b9099;">Rhythm Lab · now-playing-card · theme=dark (forced)</h2>
       <div
         data-rmke-widget
         data-station="rhythmlab"
-        data-variant="playlist"
-        data-layout="grid"
+        data-variant="now-playing-card"
+        data-theme="dark"
       ></div>
     </section>
 
     <section class="mock-station-page">
-      <h2>414 Music · data-variant="now-playing-strip"</h2>
+      <h2>414 Music · now-playing-strip · host font override (Georgia)</h2>
       <div
         data-rmke-widget
         data-station="414music"
         data-variant="now-playing-strip"
+        style="--rmke-font-display: Georgia, serif; --rmke-font-body: Georgia, serif;"
+      ></div>
+    </section>
+
+    <section class="mock-station-page">
+      <h2>HYFIN · playlist stub (V1 carry-forward lands later)</h2>
+      <div
+        data-rmke-widget
+        data-station="hyfin"
+        data-variant="playlist"
+        data-layout="list"
       ></div>
     </section>
 
