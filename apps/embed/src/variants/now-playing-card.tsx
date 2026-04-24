@@ -116,6 +116,7 @@ function CardWidget({ config }: { config: WidgetConfig }) {
                 {config.enablePreview !== false && (
                   <PreviewButton
                     appleMusicSongId={play.appleMusicSongId}
+                    previewUrl={play.previewUrl}
                     trackLabel={`${play.title} by ${play.artist}`}
                   />
                 )}

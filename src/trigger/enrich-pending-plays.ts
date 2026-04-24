@@ -403,6 +403,7 @@ async function resolveBoth(
     isrc: am.isrc,
     durationSec: am.durationSec,
     artworkUrl: am.artworkUrl,
+    previewUrl: am.previewUrl,
   })) as Id<"tracks">;
 
   await client.mutation(api.enrichment.markPlayEnriched, {
