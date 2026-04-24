@@ -1,18 +1,43 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@rm/convex/api";
+import type { Id } from "@rm/convex/values";
 
 /**
  * Row 2 right panel — "Needs Attention" per DESIGN.md 002 section C.
  *
  * Shows enrichment failures grouped by (station × reason × song) over the
- * last 24h. Grouping matters — a station ID that can't be resolved plays
- * every 20 minutes, which would otherwise flood the panel with 70+
- * identical rows. The count communicates pattern-vs-one-off at a glance.
+ * last 24h, with operator actions per row:
+ *
+ *   Retry   flip matching unresolved plays back to `pending`. Useful
+ *           after a normalization fix shipped (Discogs / MB query
+ *           tightening) so old stuck misses re-run against the new
+ *           logic.
+ *   Ignore  flip matching plays to `ignored` — the schema's permanent
+ *           terminal state. Station IDs, DJ tags, spots, promos land
+ *           here and stop surfacing forever.
+ *
+ * Manual-resolve (type in correct artist/title) is a separate session.
  */
 export function NeedsAttention() {
   const groups = useQuery(api.ingestionEvents.enrichmentProblemsGrouped, { limitGroups: 8 });
+  const retry = useMutation(api.enrichment.retryUnresolvedGroup);
+  const ignore = useMutation(api.enrichment.ignoreUnresolvedGroup);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const run = async (
+    key: string,
+    fn: () => Promise<{ flipped: number }>,
+  ): Promise<void> => {
+    setBusyKey(key);
+    try {
+      await fn();
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
   return (
     <section
@@ -51,42 +76,86 @@ export function NeedsAttention() {
 
       {groups !== undefined && groups.length > 0 && (
         <ul role="list" className="flex flex-col gap-1.5">
-          {groups.map((g, i) => (
-            <li
-              key={`${g.stationId}-${g.reason}-${g.artistRaw ?? ""}-${g.titleRaw ?? ""}-${i}`}
-              className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
-            >
-              <div className="flex min-w-0 items-start gap-2">
-                <SeverityDot reason={g.reason} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-text-primary">{displaySong(g)}</p>
-                  <p className="flex gap-2 text-text-muted">
-                    <span>{g.station}</span>
-                    <span aria-hidden>·</span>
-                    <span>{friendlyReason(g.reason)}</span>
-                  </p>
+          {groups.map((g) => {
+            const key = `${g.stationId}|${g.reason}|${g.artistRaw ?? ""}|${g.titleRaw ?? ""}`;
+            const busy = busyKey === key;
+            const canAct = g.artistRaw !== undefined && g.titleRaw !== undefined;
+            return (
+              <li
+                key={key}
+                className="flex items-start justify-between gap-3 rounded-sm px-2 py-1.5 text-xs transition-colors duration-[var(--dur-micro)] hover:bg-bg-elevated"
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  <SeverityDot reason={g.reason} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-text-primary">{displaySong(g)}</p>
+                    <p className="flex gap-2 text-text-muted">
+                      <span>{g.station}</span>
+                      <span aria-hidden>·</span>
+                      <span>{friendlyReason(g.reason)}</span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-0.5">
-                {g.count > 1 && (
-                  <span
-                    className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
-                    style={{ fontFamily: "var(--font-mono)" }}
-                    aria-label={`seen ${g.count} times`}
-                  >
-                    {g.count}×
-                  </span>
-                )}
-                <time
-                  dateTime={new Date(g.lastSeenAt).toISOString()}
-                  className="text-text-muted"
-                  style={{ fontFamily: "var(--font-mono)" }}
-                >
-                  {formatRelative(g.lastSeenAt)}
-                </time>
-              </div>
-            </li>
-          ))}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5">
+                    {g.count > 1 && (
+                      <span
+                        className="rounded-sm bg-bg-elevated px-1.5 text-xs text-text-muted"
+                        style={{ fontFamily: "var(--font-mono)" }}
+                        aria-label={`seen ${g.count} times`}
+                      >
+                        {g.count}×
+                      </span>
+                    )}
+                    <time
+                      dateTime={new Date(g.lastSeenAt).toISOString()}
+                      className="text-text-muted"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      {formatRelative(g.lastSeenAt)}
+                    </time>
+                  </div>
+                  {canAct && (
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          run(key, () =>
+                            retry({
+                              stationId: g.stationId as Id<"stations">,
+                              artistRaw: g.artistRaw ?? "",
+                              titleRaw: g.titleRaw ?? "",
+                            }),
+                          )
+                        }
+                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-text-primary hover:text-text-primary disabled:opacity-50"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          run(key, () =>
+                            ignore({
+                              stationId: g.stationId as Id<"stations">,
+                              artistRaw: g.artistRaw ?? "",
+                              titleRaw: g.titleRaw ?? "",
+                            }),
+                          )
+                        }
+                        className="rounded-sm border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-text-muted transition-colors hover:border-status-error hover:text-status-error disabled:opacity-50"
+                        title="Mark as station ID / spot / promo — hides future occurrences"
+                      >
+                        Ignore
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -113,10 +182,6 @@ function displaySong(g: GroupRow): string {
   return "Unknown";
 }
 
-/**
- * Translate internal reason codes into what a music director actually
- * needs to understand. Keep copy tight — this shows in a narrow panel.
- */
 function friendlyReason(reason: string): string {
   switch (reason) {
     case "mb_miss":
@@ -131,8 +196,6 @@ function friendlyReason(reason: string): string {
 }
 
 function SeverityDot({ reason }: { reason: string }) {
-  // mb_miss is low severity — Apple still identified the track, we just
-  // lack canonical MBID. no_match is the one worth actually looking at.
   const severity: Severity = reason === "mb_miss" ? "warn" : "error";
   const bgClass: Record<Severity, string> = {
     error: "bg-status-error",

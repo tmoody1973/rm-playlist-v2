@@ -174,6 +174,90 @@ export const markPlayEnriched = mutation({
   },
 });
 
+/**
+ * Operator action — retry every unresolved play whose
+ * (stationId, artistRaw, titleRaw) matches the supplied tuple by flipping
+ * them back to `enrichmentStatus: "pending"`. The enrich cron picks them
+ * up within 60s and runs whatever enrichment logic is currently shipped
+ * (so useful after a normalization fix / after Discogs was added).
+ *
+ * Deliberately conservative: only touches `unresolved` plays. Resolved or
+ * already-pending plays are left alone.
+ */
+// TODO(security): same HMAC plan as the enrichment mutations. Session 3.
+export const retryUnresolvedGroup = mutation({
+  args: {
+    stationId: v.id("stations"),
+    artistRaw: v.string(),
+    titleRaw: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { stationId, artistRaw, titleRaw, limit }) => {
+    const cap = Math.min(limit ?? 500, 1000);
+    const matching = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("enrichmentStatus"), "unresolved"),
+          q.eq(q.field("artistRaw"), artistRaw),
+          q.eq(q.field("titleRaw"), titleRaw),
+        ),
+      )
+      .take(cap);
+    let flipped = 0;
+    for (const p of matching) {
+      await ctx.db.patch(p._id, { enrichmentStatus: "pending" });
+      flipped += 1;
+    }
+    return { flipped };
+  },
+});
+
+/**
+ * Operator action — permanently ignore every play whose
+ * (stationId, artistRaw, titleRaw) matches. "Ignored" is the schema's
+ * existing terminal state that SoundExchange exports and widget queries
+ * filter out. Station IDs, DJ tags, ad breaks, and other non-song
+ * StreamTitles land here.
+ *
+ * Patches BOTH pending AND unresolved rows — the latter catches past
+ * occurrences so they stop surfacing in Needs Attention; the former
+ * short-circuits future ticks of the same promo.
+ */
+// TODO(security): same HMAC plan. Session 3.
+export const ignoreUnresolvedGroup = mutation({
+  args: {
+    stationId: v.id("stations"),
+    artistRaw: v.string(),
+    titleRaw: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { stationId, artistRaw, titleRaw, limit }) => {
+    const cap = Math.min(limit ?? 1000, 5000);
+    const matching = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("artistRaw"), artistRaw),
+          q.eq(q.field("titleRaw"), titleRaw),
+          q.or(
+            q.eq(q.field("enrichmentStatus"), "unresolved"),
+            q.eq(q.field("enrichmentStatus"), "pending"),
+          ),
+        ),
+      )
+      .take(cap);
+    let flipped = 0;
+    for (const p of matching) {
+      await ctx.db.patch(p._id, { enrichmentStatus: "ignored" });
+      flipped += 1;
+    }
+    return { flipped };
+  },
+});
+
 export const markPlayUnresolved = mutation({
   args: {
     playId: v.id("plays"),
