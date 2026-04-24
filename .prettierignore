@@ -8,6 +8,9 @@ coverage
 .trigger
 bun.lockb
 bun.lock
+# Convex codegen owns these files; their formatting differs from prettier
+# and would drift after every `convex dev`/`convex codegen` run.
+**/_generated/
 radiomke-playlist-app V1
 v1-reference
 docs
