@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.github
+docs
+.context
+apps/web
+apps/embed
+packages/enrichment
+v1-reference
+*.log

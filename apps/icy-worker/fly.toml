@@ -1,0 +1,34 @@
+#
+# rm-playlist-v2 ICY worker — Fly.io config
+#
+# Single-region ORD per brainstorm risk register (multi-region deferred to TODO-5).
+# One machine, 256MB RAM, auto-restart on crash (streams die constantly).
+# No HTTP service exposed — this worker reaches OUT to upstream streams only.
+#
+# Build context for `fly deploy`:
+#   fly deploy --config apps/icy-worker/fly.toml --dockerfile apps/icy-worker/Dockerfile .
+# (run from repo root — the Dockerfile copies the full monorepo)
+#
+
+app = "rm-playlist-v2-icy-worker"
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  # CONVEX_URL is set via `fly secrets set CONVEX_URL=https://<...>.convex.cloud`
+  # SOURCE_REFRESH_SEC defaults to 60 inside the worker; override here if needed.
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
+
+[experimental]
+  auto_rollback = true
+
+[[restart]]
+  policy = "always"
+  retries = 10

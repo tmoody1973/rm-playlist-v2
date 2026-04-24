@@ -1,0 +1,22 @@
+{
+  "_note": "Shape captured from live Discogs /database/search?type=release&artist=D'Angelo&release_title=Brown+Sugar call.",
+  "pagination": { "items": 96 },
+  "results": [
+    {
+      "id": 1234567,
+      "type": "release",
+      "title": "D'Angelo - Brown Sugar",
+      "label": ["EMI", "Virgin Records"],
+      "year": "1995",
+      "country": "US"
+    },
+    {
+      "id": 1234568,
+      "type": "release",
+      "title": "D'Angelo - Brown Sugar",
+      "label": ["Cooltempo", "EMI Records Ltd."],
+      "year": "1995",
+      "country": "UK"
+    }
+  ]
+}

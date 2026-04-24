@@ -31,6 +31,20 @@
         "vite": "^6.0.7",
       },
     },
+    "apps/icy-worker": {
+      "name": "@rm/icy-worker",
+      "version": "0.0.0",
+      "dependencies": {
+        "@rm/convex": "workspace:*",
+        "@rm/ingestion": "workspace:*",
+        "@rm/types": "workspace:*",
+        "convex": "^1.17.0",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+        "typescript": "^5.7.0",
+      },
+    },
     "apps/web": {
       "name": "@rm/web",
       "version": "0.0.0",
@@ -61,6 +75,17 @@
       },
       "devDependencies": {
         "@types/node": "^22.10.0",
+      },
+    },
+    "packages/enrichment": {
+      "name": "@rm/enrichment",
+      "version": "0.0.0",
+      "dependencies": {
+        "@rm/types": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "^1.2.0",
+        "typescript": "^5.7.0",
       },
     },
     "packages/ingestion": {
@@ -381,6 +406,10 @@
     "@rm/convex": ["@rm/convex@workspace:packages/convex"],
 
     "@rm/embed": ["@rm/embed@workspace:apps/embed"],
+
+    "@rm/enrichment": ["@rm/enrichment@workspace:packages/enrichment"],
+
+    "@rm/icy-worker": ["@rm/icy-worker@workspace:apps/icy-worker"],
 
     "@rm/ingestion": ["@rm/ingestion@workspace:packages/ingestion"],
 

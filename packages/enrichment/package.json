@@ -1,0 +1,26 @@
+{
+  "name": "@rm/enrichment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Post-ingestion enrichment for rm-playlist-v2. Resolves NormalizedPlay into canonical artist/track identifiers + preview URL + artwork via Apple Music and MusicBrainz in parallel.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./apple-music": "./src/apple-music/index.ts",
+    "./musicbrainz": "./src/musicbrainz/index.ts",
+    "./discogs": "./src/discogs/index.ts",
+    "./throttle": "./src/throttle.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "echo 'lint covered by root eslint runs'"
+  },
+  "dependencies": {
+    "@rm/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}

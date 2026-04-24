@@ -1,0 +1,4 @@
+{
+  "_note": "Apple Music returns an empty object for zero-result searches.",
+  "results": {}
+}

@@ -1,0 +1,7 @@
+{
+  "_note": "Zero-result search — MusicBrainz returns `recordings: []` not missing key.",
+  "created": "2026-04-24T00:00:00.000Z",
+  "count": 0,
+  "offset": 0,
+  "recordings": []
+}

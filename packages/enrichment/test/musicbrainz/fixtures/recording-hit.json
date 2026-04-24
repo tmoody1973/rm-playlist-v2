@@ -1,0 +1,22 @@
+{
+  "_note": "MusicBrainz /ws/2/recording?fmt=json response shape, truncated to essentials.",
+  "created": "2026-04-24T00:00:00.000Z",
+  "count": 1,
+  "offset": 0,
+  "recordings": [
+    {
+      "id": "b1a9c0e8-4b2c-4d3e-8a5f-6c7d8e9f0a1b",
+      "score": 100,
+      "title": "She's Always in My Hair",
+      "artist-credit": [
+        {
+          "name": "D'Angelo",
+          "artist": {
+            "id": "f89eb5ff-2d2a-4a3c-9d27-7b0e9d9bafb0",
+            "name": "D'Angelo"
+          }
+        }
+      ]
+    }
+  ]
+}

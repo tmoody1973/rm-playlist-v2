@@ -23,7 +23,7 @@
       "@/*": ["./*"],
       "@rm/types": ["../../packages/types/src/index.ts"],
       "@rm/types/*": ["../../packages/types/src/*"],
-      "@rm/convex/api": ["../../packages/convex/convex/_generated/api.d.ts"]
+      "@rm/convex/api": ["../../packages/convex/convex/_generated/api"]
     }
   },
   "include": [

@@ -21,10 +21,12 @@ interface StationCardProps {
 export function StationCard({ slug, name }: StationCardProps) {
   const current = useQuery(api.plays.currentByStation, { stationSlug: slug });
   const allStatus = useQuery(api.ingestionSources.statusForDashboard, {});
+  const coverage = useQuery(api.enrichment.stationCoverage, { stationSlug: slug });
   const sources = allStatus?.filter((s) => s.stationSlug === slug) ?? [];
   const primary = sources.find((s) => s.role === "primary" && s.enabled);
 
   const healthState = deriveHealth(primary?.lastSuccessAt);
+  const isLocalStation = slug === "414music";
 
   return (
     <article className="flex flex-col gap-3 rounded-md border border-border bg-bg-surface p-4 transition-colors duration-[var(--dur-short)] hover:border-[color-mix(in_oklab,var(--border)_50%,var(--text-muted))]">
@@ -65,8 +67,73 @@ export function StationCard({ slug, name }: StationCardProps) {
               : "—"}
         </span>
       </footer>
+
+      {/* Coverage row — SoundExchange metadata completeness over last 7d. */}
+      <CoverageRow coverage={coverage} isLocalStation={isLocalStation} />
     </article>
   );
+}
+
+function CoverageRow({
+  coverage,
+  isLocalStation,
+}: {
+  coverage: StationCoverage | null | undefined;
+  isLocalStation: boolean;
+}) {
+  if (coverage === undefined) {
+    return <div className="h-4 w-full animate-pulse rounded-sm bg-bg-elevated/60" />;
+  }
+  if (coverage === null || coverage.resolvedPlays === 0) {
+    return (
+      <p
+        className="text-[10px] text-text-muted"
+        style={{ fontFamily: "var(--font-mono)" }}
+        title="No resolved plays in the last 24h — nothing to measure yet."
+      >
+        coverage —
+      </p>
+    );
+  }
+  const label = pct(coverage.labelCoverage);
+  const isrc = pct(coverage.isrcCoverage);
+  const duration = pct(coverage.durationCoverage);
+  const resolved = pct(coverage.resolvedRatio);
+  return (
+    <div
+      className="flex items-center justify-between gap-2 text-[10px] text-text-muted"
+      style={{ fontFamily: "var(--font-mono)" }}
+      title={
+        isLocalStation
+          ? "414 Music runs local self-released catalogs; low label coverage is expected. " +
+            `Resolved: ${resolved}. Window: last 24h (${coverage.resolvedPlays} plays).`
+          : `Resolved: ${resolved}. Window: last 24h (${coverage.resolvedPlays} plays).`
+      }
+    >
+      <span className={isLocalStation ? "text-text-muted/80" : ""}>
+        L {label} · I {isrc} · D {duration}
+      </span>
+      {isLocalStation && (
+        <span className="rounded-sm bg-bg-elevated px-1 text-[9px] uppercase tracking-wide text-text-muted/80">
+          local
+        </span>
+      )}
+    </div>
+  );
+}
+
+function pct(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
+interface StationCoverage {
+  readonly totalPlays: number;
+  readonly resolvedPlays: number;
+  readonly resolvedRatio: number;
+  readonly labelCoverage: number;
+  readonly isrcCoverage: number;
+  readonly durationCoverage: number;
+  readonly windowMs: number;
 }
 
 // ---------- helpers ----------

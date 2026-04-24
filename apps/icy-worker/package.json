@@ -1,0 +1,24 @@
+{
+  "name": "@rm/icy-worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistent ICY stream listener for rm-playlist-v2. Holds long-lived HTTP connections to broadcaster streams, extracts in-band Shoutcast/Icecast metadata, normalizes plays via @rm/ingestion. Runs on Fly.io.",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "echo 'lint covered by root eslint runs'"
+  },
+  "dependencies": {
+    "@rm/convex": "workspace:*",
+    "@rm/ingestion": "workspace:*",
+    "@rm/types": "workspace:*",
+    "convex": "^1.17.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  }
+}
