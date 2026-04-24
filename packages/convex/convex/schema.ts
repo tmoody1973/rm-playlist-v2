@@ -152,6 +152,35 @@ export default defineSchema({
     .index("by_canonical_track", ["canonicalTrackId"]),
 
   // ------------------------------------------------------------------
+  // Enrichment ignore rules (operator-curated skip list)
+  //
+  // When an operator clicks "Ignore" on a Needs Attention row, the
+  // existing plays get flipped to `ignored` AND a row lands here. On
+  // future ingestion, any play whose (stationId, normalized artistRaw,
+  // normalized titleRaw) matches a rule is written straight to `ignored`
+  // status without spending an enrichment API call. Typical payload:
+  // station-ID spots ("WYMS", "Rhythm Lab Station ID"), legal IDs,
+  // promos — noise that will never resolve to a Canonical track.
+  // ------------------------------------------------------------------
+
+  enrichmentIgnoreRules: defineTable({
+    orgId: v.id("organizations"),
+    stationId: v.id("stations"),
+    /** trim+lowercase of artistRaw used for matching. */
+    artistKey: v.string(),
+    /** trim+lowercase of titleRaw used for matching. */
+    titleKey: v.string(),
+    /** Copy of the raw strings at rule-creation time — audit trail + UI display. */
+    artistRaw: v.string(),
+    titleRaw: v.string(),
+    createdAt: v.number(),
+    /** Clerk user id of the operator who created the rule, if known. */
+    createdBy: v.optional(v.id("users")),
+  })
+    .index("by_station_match", ["stationId", "artistKey", "titleKey"])
+    .index("by_station", ["stationId", "createdAt"]),
+
+  // ------------------------------------------------------------------
   // Canonical catalog (cross-tenant scope locked under single-tenant;
   // schema preserved for forward-compat per decision 001)
   // ------------------------------------------------------------------

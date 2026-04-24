@@ -68,6 +68,30 @@ async function findDuplicatePlay(
 }
 
 /**
+ * Check if an incoming play matches an operator-curated ignore rule
+ * (see `enrichmentIgnoreRules` in schema.ts). When it does, the play is
+ * still inserted — ingestion should preserve the full history for the
+ * rewind timeline — but with `enrichmentStatus: "ignored"`, skipping the
+ * enrichment API call and keeping it out of Needs Attention.
+ */
+async function isIgnoredByRule(
+  ctx: MutationCtx,
+  stationId: Id<"stations">,
+  artistRaw: string,
+  titleRaw: string,
+): Promise<boolean> {
+  const artistKey = normalizeForDedup(artistRaw);
+  const titleKey = normalizeForDedup(titleRaw);
+  const rule = await ctx.db
+    .query("enrichmentIgnoreRules")
+    .withIndex("by_station_match", (q) =>
+      q.eq("stationId", stationId).eq("artistKey", artistKey).eq("titleKey", titleKey),
+    )
+    .first();
+  return rule !== null;
+}
+
+/**
  * Record a batch of normalized plays from a single adapter poll.
  *
  * The adapter produces NormalizedPlay[] — this mutation maps them into
@@ -111,6 +135,12 @@ export const recordPolledPlays = mutation({
         continue;
       }
 
+      const ignoredByRule = await isIgnoredByRule(
+        ctx,
+        source.stationId,
+        play.artistRaw,
+        play.titleRaw,
+      );
       await ctx.db.insert("plays", {
         orgId: source.orgId,
         stationId: source.stationId,
@@ -121,7 +151,7 @@ export const recordPolledPlays = mutation({
         labelRaw: play.labelRaw,
         durationSec: play.durationSec,
         playedAt: play.playedAt,
-        enrichmentStatus: "pending",
+        enrichmentStatus: ignoredByRule ? "ignored" : "pending",
         raw: play.raw,
         createdAt: Date.now(),
       });
@@ -189,6 +219,12 @@ export const recordStreamPlay = mutation({
       return { inserted: false as const, reason: "duplicate" as const };
     }
 
+    const ignoredByRule = await isIgnoredByRule(
+      ctx,
+      source.stationId,
+      play.artistRaw,
+      play.titleRaw,
+    );
     await ctx.db.insert("plays", {
       orgId: source.orgId,
       stationId: source.stationId,
@@ -199,7 +235,7 @@ export const recordStreamPlay = mutation({
       labelRaw: play.labelRaw,
       durationSec: play.durationSec,
       playedAt: play.playedAt,
-      enrichmentStatus: "pending",
+      enrichmentStatus: ignoredByRule ? "ignored" : "pending",
       raw: play.raw,
       createdAt: Date.now(),
     });

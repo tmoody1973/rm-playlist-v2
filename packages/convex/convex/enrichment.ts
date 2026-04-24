@@ -585,6 +585,9 @@ export const ignoreUnresolvedGroup = mutation({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { stationId, artistRaw, titleRaw, limit }) => {
+    const station = await ctx.db.get(stationId);
+    if (station === null) throw new Error(`Unknown station: ${stationId}`);
+
     const cap = Math.min(limit ?? 1000, 5000);
     const matching = await ctx.db
       .query("plays")
@@ -605,9 +608,37 @@ export const ignoreUnresolvedGroup = mutation({
       await ctx.db.patch(p._id, { enrichmentStatus: "ignored" });
       flipped += 1;
     }
-    return { flipped };
+
+    // Persist the ignore rule so future ingestion writes the same
+    // (artist, title) straight to `ignored` without running enrichment.
+    const artistKey = normalizeMatchKey(artistRaw);
+    const titleKey = normalizeMatchKey(titleRaw);
+    const existing = await ctx.db
+      .query("enrichmentIgnoreRules")
+      .withIndex("by_station_match", (q) =>
+        q.eq("stationId", stationId).eq("artistKey", artistKey).eq("titleKey", titleKey),
+      )
+      .first();
+    let ruleCreated = false;
+    if (existing === null) {
+      await ctx.db.insert("enrichmentIgnoreRules", {
+        orgId: station.orgId,
+        stationId,
+        artistKey,
+        titleKey,
+        artistRaw,
+        titleRaw,
+        createdAt: Date.now(),
+      });
+      ruleCreated = true;
+    }
+    return { flipped, ruleCreated };
   },
 });
+
+function normalizeMatchKey(value: string): string {
+  return value.trim().toLowerCase();
+}
 
 export const markPlayUnresolved = mutation({
   args: {
