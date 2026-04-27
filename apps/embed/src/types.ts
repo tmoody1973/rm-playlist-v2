@@ -25,7 +25,20 @@ export interface WidgetConfig {
   readonly maxItems?: number;
   readonly showSearch?: boolean;
   readonly showHeader?: boolean;
+  readonly showLoadMore?: boolean;
   readonly enablePreview?: boolean;
+  readonly enableDateSearch?: boolean;
+  /**
+   * When `false`, the widget renders a one-shot snapshot instead of a live
+   * subscription. Default `true` — matches V1 default + most embed cases.
+   */
+  readonly autoUpdate?: boolean;
+  /**
+   * Reserved for chunk 4 — when `true`, removes the 100-row cap and uses
+   * a cursor-paginated query. Today still capped at 100; the attr is
+   * accepted but has no extra effect. See playlist.tsx PAGE_CEILING.
+   */
+  readonly unlimitedSongs?: boolean;
 }
 
 /**

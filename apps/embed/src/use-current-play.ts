@@ -35,8 +35,16 @@ export function useCurrentPlay(station: StationSlug): PublicPlay | null | undefi
 /**
  * Subscribe to `plays.recentByStation` for a single station. Returns
  * `undefined` while loading, then a (possibly empty) array thereafter.
+ *
+ * When `autoUpdate` is `false`, takes a one-shot snapshot via the same
+ * subscription mechanism — Convex still pushes the first frame, we just
+ * unsubscribe immediately so subsequent inserts don't move the list.
  */
-export function useRecentPlays(station: StationSlug, limit: number): PublicPlay[] | undefined {
+export function useRecentPlays(
+  station: StationSlug,
+  limit: number,
+  autoUpdate = true,
+): PublicPlay[] | undefined {
   const [plays, setPlays] = useState<PublicPlay[] | undefined>(undefined);
 
   useEffect(() => {
@@ -46,12 +54,59 @@ export function useRecentPlays(station: StationSlug, limit: number): PublicPlay[
       { stationSlug: station, limit },
       (next) => {
         setPlays(next as PublicPlay[]);
+        if (!autoUpdate) unsubscribe();
       },
     );
     return () => {
       unsubscribe();
     };
-  }, [station, limit]);
+  }, [station, limit, autoUpdate]);
+
+  return plays;
+}
+
+export interface SearchPlaysArgs {
+  readonly station: StationSlug;
+  readonly q: string;
+  readonly afterMs: number | undefined;
+  readonly beforeMs: number | undefined;
+  readonly limit: number;
+  readonly autoUpdate?: boolean;
+}
+
+/**
+ * Subscribe to `plays.searchByStation` with active filters (search term
+ * and/or date range). Same three-state semantics as `useRecentPlays`.
+ *
+ * The hook re-subscribes whenever any filter argument changes, so callers
+ * should debounce search-input keystrokes upstream to avoid spamming the
+ * Convex backend on every character.
+ */
+export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined {
+  const { station, q, afterMs, beforeMs, limit, autoUpdate = true } = args;
+  const [plays, setPlays] = useState<PublicPlay[] | undefined>(undefined);
+
+  useEffect(() => {
+    const client = getConvexClient();
+    const trimmed = q.trim();
+    const unsubscribe = client.onUpdate(
+      api.plays.searchByStation,
+      {
+        stationSlug: station,
+        q: trimmed.length > 0 ? trimmed : undefined,
+        afterMs,
+        beforeMs,
+        limit,
+      },
+      (next) => {
+        setPlays(next as PublicPlay[]);
+        if (!autoUpdate) unsubscribe();
+      },
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [station, q, afterMs, beforeMs, limit, autoUpdate]);
 
   return plays;
 }
