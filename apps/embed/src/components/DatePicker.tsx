@@ -53,7 +53,8 @@ function parseISO(s: string): Date | null {
 function formatDisplay(s: string): string {
   const d = parseISO(s);
   if (!d) return "";
-  return `${MONTH_LABELS[d.getMonth()].slice(0, 3)} ${d.getDate()}, ${d.getFullYear()}`;
+  const monthName = MONTH_LABELS[d.getMonth()] ?? "";
+  return `${monthName.slice(0, 3)} ${d.getDate()}, ${d.getFullYear()}`;
 }
 
 export function DatePicker({ value, onChange, ariaLabel, placeholder }: DatePickerProps) {
