@@ -438,10 +438,7 @@ export const searchByStation = query({
     beforeMs: v.optional(v.number()),
     limit: v.optional(v.number()),
   },
-  handler: async (
-    ctx,
-    { stationSlug, q, afterMs, beforeMs, limit },
-  ): Promise<PublicPlay[]> => {
+  handler: async (ctx, { stationSlug, q, afterMs, beforeMs, limit }): Promise<PublicPlay[]> => {
     const station = await ctx.db
       .query("stations")
       .withIndex("by_slug", (qb) => qb.eq("slug", stationSlug))
@@ -478,8 +475,7 @@ export const searchByStation = query({
         if (p.enrichmentStatus === "ignored") return false;
         if (!hasSubstring) return true;
         return (
-          p.artistRaw.toLowerCase().includes(needle) ||
-          p.titleRaw.toLowerCase().includes(needle)
+          p.artistRaw.toLowerCase().includes(needle) || p.titleRaw.toLowerCase().includes(needle)
         );
       })
       .slice(0, take);

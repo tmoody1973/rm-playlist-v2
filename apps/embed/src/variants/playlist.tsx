@@ -58,7 +58,8 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
     [dateRangeOn, startDate, endDate],
   );
 
-  const filtersActive = debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
+  const filtersActive =
+    debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
 
   const recentPlays = useRecentPlays(config.station, limit, autoUpdate);
   const searchPlays = useSearchPlays({

@@ -231,7 +231,10 @@ export function DatePicker({ value, onChange, ariaLabel, placeholder }: DatePick
                     padding: "6px 0",
                     fontSize: "12px",
                     fontFamily: "var(--rmke-font-body)",
-                    border: isToday && !isSelected ? "1px solid var(--rmke-border)" : "1px solid transparent",
+                    border:
+                      isToday && !isSelected
+                        ? "1px solid var(--rmke-border)"
+                        : "1px solid transparent",
                     borderRadius: "var(--rmke-radius-sm)",
                     background: isSelected ? "var(--rmke-text-primary)" : "transparent",
                     color: isSelected
