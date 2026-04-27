@@ -5,24 +5,27 @@ import { ListItem } from "../components/ListItem";
 import { GridItem } from "../components/GridItem";
 import { StationBadge } from "../components/StationBadge";
 import { Skeleton } from "../components/Skeleton";
-import { useRecentPlays, useSearchPlays } from "../use-current-play";
+import { useRecentPlays, useSearchPlays, useTopSongs } from "../use-current-play";
 import { DatePicker } from "../components/DatePicker";
+import { TopSongsList } from "../components/TopSongsList";
+import { AboutTab } from "../components/AboutTab";
 import tokensCss from "../tokens.css?inline";
 
 /**
- * Playlist widget — V1 carry-forward in 4 chunks. Chunks 1+2 shipped:
+ * Playlist widget — V1 carry-forward in 4 chunks. Chunks 1-3 shipped:
  *   - Chunk 1: list/grid layout, station badge header, Load More pagination
  *   - Chunk 2: search box + date filter + autoUpdate, showLoadMore, etc.
- *
- * Remaining chunks:
  *   - Chunk 3: tabs (Recent / Top 20 Songs / Top 20 30-days / About)
+ *
+ * Remaining chunk:
  *   - Chunk 4: related-tracks carousel + concerts (events-blocked) +
  *              cursor pagination to honor `unlimitedSongs`
  *
  * Reactive: when no filter is active we subscribe to `recentByStation`;
  * when a search term or date range is set we subscribe to
  * `searchByStation`. Both push live updates by default — set
- * `data-auto-update="false"` for a one-shot snapshot.
+ * `data-auto-update="false"` for a one-shot snapshot. Top 20 tabs use
+ * `topSongsByStation` which also live-updates as new plays land.
  */
 const INITIAL_PAGE = 20;
 const PAGE_INCREMENT = 20;
@@ -31,52 +34,17 @@ const PAGE_INCREMENT = 20;
 const PAGE_CEILING = 100;
 const SEARCH_DEBOUNCE_MS = 300;
 
+type TabId = "recent" | "top7" | "top30" | "about";
+
+const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
+  { id: "recent", label: "Recent" },
+  { id: "top7", label: "Top 20" },
+  { id: "top30", label: "Top 30 days" },
+  { id: "about", label: "About" },
+];
+
 function PlaylistWidget({ config }: { config: WidgetConfig }) {
-  const layout = config.layout ?? "list";
-  const initial = config.maxItems ?? INITIAL_PAGE;
-  const [limit, setLimit] = useState<number>(Math.min(initial, PAGE_CEILING));
-
-  const showSearch = config.showSearch !== false;
-  const enableDateSearch = config.enableDateSearch === true;
-  const showLoadMore = config.showLoadMore !== false;
-  const autoUpdate = config.autoUpdate !== false;
-
-  const [searchInput, setSearchInput] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-  const [dateRangeOn, setDateRangeOn] = useState(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-
-  // Debounce the search input — keystrokes don't spam Convex.
-  useEffect(() => {
-    const handle = setTimeout(() => setDebouncedQ(searchInput), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(handle);
-  }, [searchInput]);
-
-  const { afterMs, beforeMs } = useMemo(
-    () => parseDateRange(dateRangeOn, startDate, endDate),
-    [dateRangeOn, startDate, endDate],
-  );
-
-  const filtersActive =
-    debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
-
-  const recentPlays = useRecentPlays(config.station, limit, autoUpdate);
-  const searchPlays = useSearchPlays({
-    station: config.station,
-    q: debouncedQ,
-    afterMs,
-    beforeMs,
-    limit,
-    autoUpdate,
-  });
-  const plays = filtersActive ? searchPlays : recentPlays;
-
-  const enablePreview = config.enablePreview !== false;
-
-  const canLoadMore =
-    showLoadMore && plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
-  const onLoadMore = () => setLimit((prev) => Math.min(prev + PAGE_INCREMENT, PAGE_CEILING));
+  const [activeTab, setActiveTab] = useState<TabId>("recent");
 
   return (
     <section
@@ -102,12 +70,136 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
               letterSpacing: "0.02em",
             }}
           >
-            {filtersActive ? "Filtered playlist" : "Recently played"}
+            {TAB_HEADINGS[activeTab]}
           </h3>
           <StationBadge station={config.station} variant="inline" />
         </header>
       )}
 
+      <TabNav activeTab={activeTab} onSelect={setActiveTab} />
+
+      {activeTab === "recent" && <RecentPane config={config} />}
+      {activeTab === "top7" && <TopSongsPane config={config} windowDays={7} />}
+      {activeTab === "top30" && <TopSongsPane config={config} windowDays={30} />}
+      {activeTab === "about" && <AboutTab station={config.station} />}
+
+      <footer
+        style={{
+          borderTop: "1px solid var(--rmke-border)",
+          paddingTop: "var(--rmke-space-sm)",
+          fontSize: "11px",
+          color: "var(--rmke-text-muted)",
+          fontFamily: "var(--rmke-font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
+        Powered by Radio Milwaukee
+      </footer>
+    </section>
+  );
+}
+
+const TAB_HEADINGS: Record<TabId, string> = {
+  recent: "Recently played",
+  top7: "Top 20 — last 7 days",
+  top30: "Top 20 — last 30 days",
+  about: "About",
+};
+
+function TabNav({ activeTab, onSelect }: { activeTab: TabId; onSelect: (id: TabId) => void }) {
+  return (
+    <nav
+      role="tablist"
+      style={{
+        display: "flex",
+        gap: "var(--rmke-space-xs, 4px)",
+        borderBottom: "1px solid var(--rmke-border)",
+        overflowX: "auto",
+      }}
+    >
+      {TABS.map((tab) => {
+        const isActive = tab.id === activeTab;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onSelect(tab.id)}
+            style={{
+              padding: "var(--rmke-space-sm) var(--rmke-space-md)",
+              background: "transparent",
+              border: "none",
+              borderBottom: isActive
+                ? "2px solid var(--rmke-text-primary)"
+                : "2px solid transparent",
+              fontSize: "12px",
+              fontFamily: "var(--rmke-font-mono)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              color: isActive ? "var(--rmke-text-primary)" : "var(--rmke-text-muted)",
+              cursor: "pointer",
+              fontWeight: isActive ? 600 : 400,
+              whiteSpace: "nowrap",
+              marginBottom: "-1px",
+            }}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+function RecentPane({ config }: { config: WidgetConfig }) {
+  const layout = config.layout ?? "list";
+  const initial = config.maxItems ?? INITIAL_PAGE;
+  const [limit, setLimit] = useState<number>(Math.min(initial, PAGE_CEILING));
+
+  const showSearch = config.showSearch !== false;
+  const enableDateSearch = config.enableDateSearch === true;
+  const showLoadMore = config.showLoadMore !== false;
+  const autoUpdate = config.autoUpdate !== false;
+
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [dateRangeOn, setDateRangeOn] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(searchInput), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  const { afterMs, beforeMs } = useMemo(
+    () => parseDateRange(dateRangeOn, startDate, endDate),
+    [dateRangeOn, startDate, endDate],
+  );
+
+  const filtersActive =
+    debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
+
+  const recentPlays = useRecentPlays(config.station, limit, autoUpdate);
+  const searchPlays = useSearchPlays({
+    station: config.station,
+    q: debouncedQ,
+    afterMs,
+    beforeMs,
+    limit,
+    autoUpdate,
+  });
+  const plays = filtersActive ? searchPlays : recentPlays;
+  const enablePreview = config.enablePreview !== false;
+
+  const canLoadMore =
+    showLoadMore && plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
+  const onLoadMore = () => setLimit((prev) => Math.min(prev + PAGE_INCREMENT, PAGE_CEILING));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--rmke-space-md)" }}>
       {(showSearch || enableDateSearch) && (
         <FilterBar
           showSearch={showSearch}
@@ -153,22 +245,13 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
           Load more
         </button>
       )}
-
-      <footer
-        style={{
-          borderTop: "1px solid var(--rmke-border)",
-          paddingTop: "var(--rmke-space-sm)",
-          fontSize: "11px",
-          color: "var(--rmke-text-muted)",
-          fontFamily: "var(--rmke-font-mono)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-        }}
-      >
-        Powered by Radio Milwaukee
-      </footer>
-    </section>
+    </div>
   );
+}
+
+function TopSongsPane({ config, windowDays }: { config: WidgetConfig; windowDays: 7 | 30 }) {
+  const songs = useTopSongs(config.station, windowDays);
+  return <TopSongsList songs={songs} windowDays={windowDays} />;
 }
 
 function PlaylistItems({
