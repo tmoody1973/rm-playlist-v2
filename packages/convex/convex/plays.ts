@@ -483,3 +483,86 @@ export const searchByStation = query({
     return Promise.all(visible.map((p) => buildPublicPlay(ctx, p, station)));
   },
 });
+
+/**
+ * Top-songs aggregation for the Top 20 tabs (chunk 3 of V1 carry-forward).
+ *
+ * Counts plays in a rolling window (7 or 30 days), groups by canonical
+ * track when enrichment resolved one, otherwise by normalized
+ * artist+title key. Returns the top N (default 20) sorted by spin count
+ * desc, with each row hydrated to the same `PublicPlay` shape that
+ * powers the recent and search lists — plus a `playCount` field.
+ *
+ * Cost: O(n) over plays in the window. Worst-case 30-day station has
+ * ~3000 plays; well within Convex's per-query budget.
+ */
+export const topSongsByStation = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    windowDays: v.union(v.literal(7), v.literal(30)),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { stationSlug, windowDays, limit },
+  ): Promise<Array<PublicPlay & { playCount: number }>> => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) return [];
+
+    const take = Math.min(limit ?? 20, 50);
+    const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
+
+    const plays = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) =>
+        q.eq("stationId", station._id).gte("playedAt", cutoff),
+      )
+      .collect();
+
+    const visible = plays.filter(
+      (p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored",
+    );
+
+    type Bucket = {
+      latestPlay: Doc<"plays">;
+      count: number;
+    };
+
+    const byKey = new Map<string, Bucket>();
+    for (const p of visible) {
+      const key =
+        p.canonicalTrackId !== undefined
+          ? `track:${p.canonicalTrackId}`
+          : `raw:${normalizeForDedup(p.artistRaw)}|${normalizeForDedup(p.titleRaw)}`;
+
+      const existing = byKey.get(key);
+      if (existing === undefined) {
+        byKey.set(key, { latestPlay: p, count: 1 });
+      } else {
+        existing.count += 1;
+        if (p.playedAt > existing.latestPlay.playedAt) {
+          existing.latestPlay = p;
+        }
+      }
+    }
+
+    const ranked = Array.from(byKey.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, take);
+
+    return Promise.all(
+      ranked.map(async (bucket) => {
+        const built = await buildPublicPlay(ctx, bucket.latestPlay, station);
+        return { ...built, playCount: bucket.count };
+      }),
+    );
+  },
+});

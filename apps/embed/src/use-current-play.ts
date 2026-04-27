@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { api } from "@rm/convex/api";
-import type { PublicPlay, StationSlug } from "./types";
+import type { PublicPlay, PublicTopSong, StationSlug } from "./types";
 import { getConvexClient } from "./convex-client";
 
 /**
@@ -109,4 +109,34 @@ export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined 
   }, [station, q, afterMs, beforeMs, limit, autoUpdate]);
 
   return plays;
+}
+
+/**
+ * Subscribe to `plays.topSongsByStation` for the Top 20 tabs. Re-counts
+ * automatically as new plays land, so the chart stays current without
+ * polling. `windowDays` is locked to 7 or 30 to match the index range
+ * the query expects.
+ */
+export function useTopSongs(
+  station: StationSlug,
+  windowDays: 7 | 30,
+  limit = 20,
+): PublicTopSong[] | undefined {
+  const [songs, setSongs] = useState<PublicTopSong[] | undefined>(undefined);
+
+  useEffect(() => {
+    const client = getConvexClient();
+    const unsubscribe = client.onUpdate(
+      api.plays.topSongsByStation,
+      { stationSlug: station, windowDays, limit },
+      (next) => {
+        setSongs(next as PublicTopSong[]);
+      },
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [station, windowDays, limit]);
+
+  return songs;
 }

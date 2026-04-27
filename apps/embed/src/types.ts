@@ -74,6 +74,14 @@ export interface PublicPlay {
   readonly liveEvent: LiveEventSummary | null;
 }
 
+/**
+ * A `PublicPlay` extended with a play-count, returned by
+ * `plays.topSongsByStation` for the Top 20 tabs.
+ */
+export interface PublicTopSong extends PublicPlay {
+  readonly playCount: number;
+}
+
 export const STATION_LABEL: Record<StationSlug, string> = {
   hyfin: "HYFIN",
   "88nine": "88Nine",
