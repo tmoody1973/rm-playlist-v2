@@ -6,6 +6,7 @@ import { GridItem } from "../components/GridItem";
 import { StationBadge } from "../components/StationBadge";
 import { Skeleton } from "../components/Skeleton";
 import { useRecentPlays, useSearchPlays } from "../use-current-play";
+import { DatePicker } from "../components/DatePicker";
 import tokensCss from "../tokens.css?inline";
 
 /**
@@ -315,19 +316,17 @@ function FilterBar(props: FilterBarProps) {
 
       {props.enableDateSearch && props.dateRangeOn && (
         <div style={{ display: "flex", gap: "var(--rmke-space-sm)" }}>
-          <input
-            type="date"
+          <DatePicker
             value={props.startDate}
-            onChange={(e) => props.onStartChange((e.target as HTMLInputElement).value)}
-            style={inputStyle}
-            aria-label="Start date"
+            onChange={props.onStartChange}
+            ariaLabel="Start date"
+            placeholder="Start date"
           />
-          <input
-            type="date"
+          <DatePicker
             value={props.endDate}
-            onChange={(e) => props.onEndChange((e.target as HTMLInputElement).value)}
-            style={inputStyle}
-            aria-label="End date"
+            onChange={props.onEndChange}
+            ariaLabel="End date"
+            placeholder="End date"
           />
         </div>
       )}
