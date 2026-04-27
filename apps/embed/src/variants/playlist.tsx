@@ -1,43 +1,79 @@
 import { h, render as preactRender } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import type { PublicPlay, WidgetConfig } from "../types";
 import { ListItem } from "../components/ListItem";
 import { GridItem } from "../components/GridItem";
 import { StationBadge } from "../components/StationBadge";
 import { Skeleton } from "../components/Skeleton";
-import { useRecentPlays } from "../use-current-play";
+import { useRecentPlays, useSearchPlays } from "../use-current-play";
 import tokensCss from "../tokens.css?inline";
 
 /**
- * Playlist widget — V1 carry-forward in 4 chunks. This is CHUNK 1:
- *   - core rendering in both list and grid layouts
- *   - Load More pagination up to the underlying query's cap (100)
- *   - station badge header
+ * Playlist widget — V1 carry-forward in 4 chunks. Chunks 1+2 shipped:
+ *   - Chunk 1: list/grid layout, station badge header, Load More pagination
+ *   - Chunk 2: search box + date filter + autoUpdate, showLoadMore, etc.
  *
- * Chunks 2-4 land next:
- *   - Chunk 2: search box + date filter + remaining data-* attrs
+ * Remaining chunks:
  *   - Chunk 3: tabs (Recent / Top 20 Songs / Top 20 30-days / About)
- *   - Chunk 4: related-tracks carousel + concerts (events-blocked)
+ *   - Chunk 4: related-tracks carousel + concerts (events-blocked) +
+ *              cursor pagination to honor `unlimitedSongs`
  *
- * Uses existing `plays.recentByStation` — no new Convex work in chunk 1.
- * Subscription driven, so a new song replaces the top of the list in
- * real time (same UX as the now-playing variants).
+ * Reactive: when no filter is active we subscribe to `recentByStation`;
+ * when a search term or date range is set we subscribe to
+ * `searchByStation`. Both push live updates by default — set
+ * `data-auto-update="false"` for a one-shot snapshot.
  */
 const INITIAL_PAGE = 20;
 const PAGE_INCREMENT = 20;
-// `plays.recentByStation` caps `take` at 100. Anything past this needs a
-// cursor-style query (chunk 2 or later).
+// Both queries cap `take` at 100. `unlimitedSongs` waits on chunk 4's
+// cursor-paginated query.
 const PAGE_CEILING = 100;
+const SEARCH_DEBOUNCE_MS = 300;
 
 function PlaylistWidget({ config }: { config: WidgetConfig }) {
   const layout = config.layout ?? "list";
   const initial = config.maxItems ?? INITIAL_PAGE;
   const [limit, setLimit] = useState<number>(Math.min(initial, PAGE_CEILING));
 
-  const plays = useRecentPlays(config.station, limit);
+  const showSearch = config.showSearch !== false;
+  const enableDateSearch = config.enableDateSearch === true;
+  const showLoadMore = config.showLoadMore !== false;
+  const autoUpdate = config.autoUpdate !== false;
+
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+  const [dateRangeOn, setDateRangeOn] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  // Debounce the search input — keystrokes don't spam Convex.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQ(searchInput), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
+
+  const { afterMs, beforeMs } = useMemo(
+    () => parseDateRange(dateRangeOn, startDate, endDate),
+    [dateRangeOn, startDate, endDate],
+  );
+
+  const filtersActive = debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
+
+  const recentPlays = useRecentPlays(config.station, limit, autoUpdate);
+  const searchPlays = useSearchPlays({
+    station: config.station,
+    q: debouncedQ,
+    afterMs,
+    beforeMs,
+    limit,
+    autoUpdate,
+  });
+  const plays = filtersActive ? searchPlays : recentPlays;
+
   const enablePreview = config.enablePreview !== false;
 
-  const canLoadMore = plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
+  const canLoadMore =
+    showLoadMore && plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
   const onLoadMore = () => setLimit((prev) => Math.min(prev + PAGE_INCREMENT, PAGE_CEILING));
 
   return (
@@ -64,16 +100,31 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
               letterSpacing: "0.02em",
             }}
           >
-            Recently played
+            {filtersActive ? "Filtered playlist" : "Recently played"}
           </h3>
           <StationBadge station={config.station} variant="inline" />
         </header>
       )}
 
+      {(showSearch || enableDateSearch) && (
+        <FilterBar
+          showSearch={showSearch}
+          enableDateSearch={enableDateSearch}
+          searchInput={searchInput}
+          onSearchChange={setSearchInput}
+          dateRangeOn={dateRangeOn}
+          onDateToggle={setDateRangeOn}
+          startDate={startDate}
+          endDate={endDate}
+          onStartChange={setStartDate}
+          onEndChange={setEndDate}
+        />
+      )}
+
       {plays === undefined ? (
         <PlaylistLoading layout={layout} />
       ) : plays.length === 0 ? (
-        <PlaylistEmpty />
+        <PlaylistEmpty filtered={filtersActive} />
       ) : (
         <PlaylistItems plays={plays} layout={layout} enablePreview={enablePreview} />
       )}
@@ -185,7 +236,7 @@ function PlaylistLoading({ layout }: { layout: "list" | "grid" }) {
   );
 }
 
-function PlaylistEmpty() {
+function PlaylistEmpty({ filtered }: { filtered: boolean }) {
   return (
     <p
       style={{
@@ -195,9 +246,131 @@ function PlaylistEmpty() {
         fontSize: "14px",
       }}
     >
-      No plays yet on this station.
+      {filtered ? "No plays match these filters." : "No plays yet on this station."}
     </p>
   );
+}
+
+interface FilterBarProps {
+  showSearch: boolean;
+  enableDateSearch: boolean;
+  searchInput: string;
+  onSearchChange: (v: string) => void;
+  dateRangeOn: boolean;
+  onDateToggle: (v: boolean) => void;
+  startDate: string;
+  endDate: string;
+  onStartChange: (v: string) => void;
+  onEndChange: (v: string) => void;
+}
+
+function FilterBar(props: FilterBarProps) {
+  const inputStyle = {
+    fontSize: "13px",
+    fontFamily: "var(--rmke-font-body)",
+    padding: "var(--rmke-space-sm) var(--rmke-space-md)",
+    background: "var(--rmke-bg-base)",
+    border: "1px solid var(--rmke-border)",
+    borderRadius: "var(--rmke-radius-sm)",
+    color: "var(--rmke-text-primary)",
+    width: "100%",
+    boxSizing: "border-box" as const,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--rmke-space-sm)" }}>
+      {props.showSearch && (
+        <input
+          type="search"
+          placeholder="Search songs or artists…"
+          value={props.searchInput}
+          onInput={(e) => props.onSearchChange((e.target as HTMLInputElement).value)}
+          style={inputStyle}
+          aria-label="Search songs or artists"
+        />
+      )}
+
+      {props.enableDateSearch && (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--rmke-space-sm)",
+            fontSize: "12px",
+            fontFamily: "var(--rmke-font-mono)",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "var(--rmke-text-muted)",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={props.dateRangeOn}
+            onChange={(e) => props.onDateToggle((e.target as HTMLInputElement).checked)}
+          />
+          Filter by date
+        </label>
+      )}
+
+      {props.enableDateSearch && props.dateRangeOn && (
+        <div style={{ display: "flex", gap: "var(--rmke-space-sm)" }}>
+          <input
+            type="date"
+            value={props.startDate}
+            onChange={(e) => props.onStartChange((e.target as HTMLInputElement).value)}
+            style={inputStyle}
+            aria-label="Start date"
+          />
+          <input
+            type="date"
+            value={props.endDate}
+            onChange={(e) => props.onEndChange((e.target as HTMLInputElement).value)}
+            style={inputStyle}
+            aria-label="End date"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Parse the date toggle + start/end strings into UTC ms bounds.
+ *
+ * Native `<input type="date">` returns "YYYY-MM-DD". We construct a Date
+ * with the local-TZ ctor (year, month-0idx, day) so that "2026-04-27" in
+ * a Milwaukee browser means Milwaukee local midnight, not UTC midnight.
+ * Most viewers of these widgets ARE in Milwaukee — that semantic matches
+ * V1 + the SoundExchange CSV export's date picker.
+ *
+ * Returns `undefined` for either bound when the toggle is off or the
+ * field is empty.
+ */
+function parseDateRange(
+  on: boolean,
+  startDate: string,
+  endDate: string,
+): { afterMs: number | undefined; beforeMs: number | undefined } {
+  if (!on) return { afterMs: undefined, beforeMs: undefined };
+  return {
+    afterMs: parseLocalDateStartOfDay(startDate),
+    beforeMs: parseLocalDateEndOfDay(endDate),
+  };
+}
+
+function parseLocalDateStartOfDay(s: string): number | undefined {
+  if (!s) return undefined;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
+}
+
+function parseLocalDateEndOfDay(s: string): number | undefined {
+  if (!s) return undefined;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
 }
 
 export function render(mount: HTMLElement, config: WidgetConfig): void {

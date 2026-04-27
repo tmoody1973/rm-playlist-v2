@@ -70,7 +70,11 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
     showSearch: el.dataset.showSearch !== "false",
     showHeader: el.dataset.showHeader !== "false",
+    showLoadMore: el.dataset.showLoadMore !== "false",
     enablePreview: el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
+    enableDateSearch: el.dataset.enableDateSearch === "true",
+    autoUpdate: el.dataset.autoUpdate !== "false",
+    unlimitedSongs: el.dataset.unlimitedSongs === "true",
   };
 }
 
@@ -95,8 +99,12 @@ function findMounts(): HTMLElement[] {
       "maxItems",
       "showSearch",
       "showHeader",
+      "showLoadMore",
       "enablePreview",
       "enableYoutube",
+      "enableDateSearch",
+      "autoUpdate",
+      "unlimitedSongs",
     ]) {
       const v = current.dataset[key];
       if (v != null) host.dataset[key] = v;

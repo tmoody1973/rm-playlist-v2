@@ -411,3 +411,79 @@ export const recentByStation = query({
     return Promise.all(visible.map((p) => buildPublicPlay(ctx, p, station)));
   },
 });
+
+/**
+ * Filtered playlist view — drives the embed playlist widget's search and
+ * date-range filters (chunk 2 of V1 carry-forward). Substring match on
+ * artist OR title (case-insensitive); date range bounds the index scan.
+ *
+ * Reactive by default — Convex pushes new matching plays to subscribers
+ * without polling. The widget's `data-auto-update="false"` opts out at
+ * the client by switching to a one-shot fetch.
+ *
+ * Over-fetches more aggressively than `recentByStation` because both the
+ * "ignored" filter AND the substring filter can shrink the visible set.
+ * Capped at 500 candidates to keep query cost bounded.
+ */
+export const searchByStation = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    q: v.optional(v.string()),
+    afterMs: v.optional(v.number()),
+    beforeMs: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { stationSlug, q, afterMs, beforeMs, limit },
+  ): Promise<PublicPlay[]> => {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (qb) => qb.eq("slug", stationSlug))
+      .first();
+    if (station === null) return [];
+
+    const take = Math.min(limit ?? 20, 100);
+    const needle = q?.trim().toLowerCase() ?? "";
+    const hasSubstring = needle.length > 0;
+
+    // Over-fetch budget — bigger when substring filter is in play because
+    // we don't know the match rate ahead of time.
+    const fetchMany = hasSubstring
+      ? Math.min(take * 5, 500)
+      : Math.min(Math.ceil(take * 1.5) + 5, 200);
+
+    const candidates = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (idx) => {
+        const base = idx.eq("stationId", station._id);
+        if (afterMs !== undefined && beforeMs !== undefined) {
+          return base.gte("playedAt", afterMs).lte("playedAt", beforeMs);
+        }
+        if (afterMs !== undefined) return base.gte("playedAt", afterMs);
+        if (beforeMs !== undefined) return base.lte("playedAt", beforeMs);
+        return base;
+      })
+      .order("desc")
+      .take(fetchMany);
+
+    const visible = candidates
+      .filter((p) => {
+        if (p.deletedAt !== undefined) return false;
+        if (p.enrichmentStatus === "ignored") return false;
+        if (!hasSubstring) return true;
+        return (
+          p.artistRaw.toLowerCase().includes(needle) ||
+          p.titleRaw.toLowerCase().includes(needle)
+        );
+      })
+      .slice(0, take);
+
+    return Promise.all(visible.map((p) => buildPublicPlay(ctx, p, station)));
+  },
+});
