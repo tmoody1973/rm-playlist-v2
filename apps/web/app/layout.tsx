@@ -36,7 +36,10 @@ export default function RootLayout({
           href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@500,600,700&display=swap"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-bg-base text-text-primary">
+      <body
+        className="min-h-full flex flex-col bg-bg-base text-text-primary"
+        suppressHydrationWarning
+      >
         <Providers>{children}</Providers>
       </body>
     </html>
