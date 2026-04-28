@@ -42,3 +42,4 @@ yarn.lock
 # We DO track these files (they're implementation code). Only the _generated
 # build output + caches get ignored.
 # (No ignore rule here — the .trigger/ cache ignore higher up handles those.)
+.qa-shots/
