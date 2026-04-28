@@ -17,8 +17,7 @@ const TABS: ReadonlyArray<{ readonly value: Tab; readonly label: string }> = [
   { value: "url", label: "Embed URL" },
 ];
 
-const IFRAME_HEIGHT_BY_VARIANT: Record<WidgetConfig["variant"], number> = {
-  playlist: 720,
+const NON_PLAYLIST_IFRAME_HEIGHT: Record<Exclude<WidgetConfig["variant"], "playlist">, number> = {
   "now-playing-card": 320,
   "now-playing-strip": 96,
 };
@@ -119,7 +118,8 @@ function buildSnippets(config: WidgetConfig, widgetCdnBase: string): Record<Tab,
         src="${widgetJsUrl}"
 ${indented}></script>`;
 
-  const iframeHeight = IFRAME_HEIGHT_BY_VARIANT[config.variant];
+  const iframeHeight =
+    config.variant === "playlist" ? config.height : NON_PLAYLIST_IFRAME_HEIGHT[config.variant];
   const iframe = `<iframe src="${iframeUrl}"
         width="100%"
         height="${iframeHeight}"

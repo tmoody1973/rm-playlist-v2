@@ -44,6 +44,15 @@ function PlaylistControls({ config, onChange }: ConfigControlsProps) {
             min={1}
             max={100}
           />
+          <NumberField
+            label="Height (px)"
+            hint="600 ≈ 7 songs · 800 ≈ 11 songs · 1200 shows all without scrolling."
+            value={config.height}
+            onChange={(v) => onChange("height", v)}
+            min={200}
+            max={2000}
+            step={20}
+          />
           <Toggle
             label="Unlimited songs"
             hint="Ignore Max items, paginate forever via Load More."
