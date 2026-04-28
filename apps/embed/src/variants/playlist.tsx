@@ -38,8 +38,8 @@ type TabId = "recent" | "top7" | "top30" | "about";
 
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "recent", label: "Recent" },
-  { id: "top7", label: "Top 20" },
-  { id: "top30", label: "Top 30 days" },
+  { id: "top7", label: "Last 7 days" },
+  { id: "top30", label: "Last 30 days" },
   { id: "about", label: "About" },
 ];
 
