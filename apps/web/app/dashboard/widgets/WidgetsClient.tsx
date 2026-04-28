@@ -58,7 +58,7 @@ export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
         className="flex flex-col gap-5 rounded-md border border-border bg-bg-surface p-5"
       >
         <ConfigField label="Widget type">
-          <SegmentedControl
+          <VerticalPicker
             options={VARIANTS}
             value={variant}
             onChange={setVariant}
@@ -141,6 +141,43 @@ function SegmentedControl<T extends string>({
               (selected
                 ? "bg-bg-elevated text-text-primary"
                 : "text-text-muted hover:text-text-primary")
+            }
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function VerticalPicker<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: ReadonlyArray<{ readonly value: T; readonly label: string }>;
+  value: T;
+  onChange: (next: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div role="radiogroup" aria-label={ariaLabel} className="flex flex-col gap-1.5">
+      {options.map((opt) => {
+        const selected = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(opt.value)}
+            className={
+              "rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors duration-[var(--dur-micro)] " +
+              (selected
+                ? "border-accent-cta bg-bg-elevated"
+                : "border-border bg-bg-base hover:border-[color-mix(in_oklab,var(--border)_50%,var(--text-muted))]")
             }
           >
             {opt.label}
