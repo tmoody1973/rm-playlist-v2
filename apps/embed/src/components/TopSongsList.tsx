@@ -98,7 +98,7 @@ export function TopSongsList({ songs, windowDays }: TopSongsListProps) {
             </div>
             <div
               style={{
-                fontSize: "11px",
+                fontSize: "13px",
                 fontFamily: "var(--rmke-font-mono)",
                 color: "var(--rmke-text-muted)",
                 textTransform: "uppercase",
@@ -111,7 +111,7 @@ export function TopSongsList({ songs, windowDays }: TopSongsListProps) {
           </div>
           <span
             style={{
-              fontSize: "12px",
+              fontSize: "13px",
               fontFamily: "var(--rmke-font-mono)",
               padding: "4px 10px",
               background: "var(--rmke-bg-base)",

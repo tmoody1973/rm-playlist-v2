@@ -106,7 +106,7 @@ function CardWidget({ config }: { config: WidgetConfig }) {
               >
                 <span
                   style={{
-                    fontSize: "12px",
+                    fontSize: "13px",
                     color: "var(--rmke-text-muted)",
                     fontFamily: "var(--rmke-font-mono)",
                   }}
@@ -132,7 +132,7 @@ function CardWidget({ config }: { config: WidgetConfig }) {
         style={{
           borderTop: "1px solid var(--rmke-border)",
           paddingTop: "var(--rmke-space-sm)",
-          fontSize: "11px",
+          fontSize: "13px",
           color: "var(--rmke-text-muted)",
           fontFamily: "var(--rmke-font-mono)",
           textTransform: "uppercase",
