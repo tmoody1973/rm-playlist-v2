@@ -45,7 +45,7 @@ export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
   const previewSrc = useMemo(() => buildPreviewUrl(config, widgetCdnBase), [config, widgetCdnBase]);
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
       <section
         aria-label="Widget configuration"
         className="flex flex-col gap-5 rounded-md border border-border bg-bg-surface p-5"
@@ -79,7 +79,7 @@ export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
         <ConfigControls config={config} onChange={updateConfig} />
       </section>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex min-w-0 flex-col gap-6">
         <section
           aria-label="Live preview"
           className="flex min-h-0 flex-col gap-2 rounded-md border border-border bg-bg-surface p-5"

@@ -5,8 +5,8 @@
   "type": "module",
   "description": "rm-playlist-v2 embeddable widget bundle. Preact + Vite, shipped to embed.radiomilwaukee.org via Cloudflare Pages.",
   "scripts": {
-    "build": "vite build",
-    "build:check": "vite build && bash scripts/check-bundle-size.sh",
+    "build": "vite build && vite build --config vite.config.legacy.ts",
+    "build:check": "vite build && vite build --config vite.config.legacy.ts && bash scripts/check-bundle-size.sh",
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "echo 'no unit tests yet in @rm/embed — Playwright suite lands with widget variants'",

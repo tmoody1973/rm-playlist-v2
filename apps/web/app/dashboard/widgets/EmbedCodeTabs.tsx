@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { buildPreviewUrl, configToDataAttrs } from "./types";
 import type { WidgetConfig } from "./types";
 
-type Tab = "javascript" | "iframe" | "url";
+type Tab = "javascript" | "classic" | "iframe" | "url";
 
 interface EmbedCodeTabsProps {
   readonly config: WidgetConfig;
@@ -13,6 +13,7 @@ interface EmbedCodeTabsProps {
 
 const TABS: ReadonlyArray<{ readonly value: Tab; readonly label: string }> = [
   { value: "javascript", label: "JavaScript" },
+  { value: "classic", label: "Classic Script" },
   { value: "iframe", label: "Iframe" },
   { value: "url", label: "Embed URL" },
 ];
@@ -79,10 +80,13 @@ export function EmbedCodeTabs({ config, widgetCdnBase }: EmbedCodeTabsProps) {
 
 function describeTab(tab: Tab): string {
   if (tab === "javascript") {
-    return "Best UX. Real-time updates, shadow-DOM isolated, full feature set. Drop into any HTML page.";
+    return "Best UX. Real-time updates, shadow-DOM isolated, full feature set. Drop into any modern HTML page (Elementor, Webflow, hand-coded sites).";
+  }
+  if (tab === "classic") {
+    return "For older CMSes that strip type=module (Grove CMS, older WordPress, Joomla). Same widget, slightly larger bundle (~31KB gzip vs 28KB for the modern path), single script tag — no marker div needed.";
   }
   if (tab === "iframe") {
-    return "Use when the host page can't run third-party scripts (CMS limitations, security policies).";
+    return "Universal fallback. Use when the host blocks third-party scripts entirely (some Squarespace plans, locked-down enterprise editors).";
   }
   return "Just the iframe URL — useful for sharing previews or testing.";
 }
@@ -110,19 +114,26 @@ function CopyButton({ text }: { text: string }) {
 
 function buildSnippets(config: WidgetConfig, widgetCdnBase: string): Record<Tab, string> {
   const widgetJsUrl = `${widgetCdnBase}/widget.js`;
+  const widgetLegacyJsUrl = `${widgetCdnBase}/widget-legacy.js`;
   const iframeUrl = buildPreviewUrl(config, widgetCdnBase) ?? "";
 
-  // Declarative pattern (marker div + script) per industry standard
-  // (Twitter, Mastodon, Disqus all do this). The script-shorthand
-  // pattern looks tidier but document.currentScript is null inside
-  // ES modules per spec, so the loader can't auto-create the host
-  // div from a single <script data-*> tag. Two elements, but it
-  // actually mounts.
   const dataAttrs = configToDataAttrs(config);
+
+  // JavaScript (modern, ES module): declarative pattern (marker div +
+  // script) per industry standard (Twitter, Mastodon, Disqus). Required
+  // because document.currentScript is null inside ES modules per spec,
+  // so script-shorthand can't auto-create a host div for module scripts.
   const divAttrs = dataAttrs.map(([k, v]) => `     ${k}="${v}"`).join("\n");
   const javascript = `<div data-rmke-widget
 ${divAttrs}></div>
 <script type="module" src="${widgetJsUrl}"></script>`;
+
+  // Classic Script (legacy, IIFE): script-shorthand pattern works here
+  // because document.currentScript is valid in non-deferred classic
+  // scripts. One tag, data-* attrs on the script itself, NPR-style.
+  const scriptAttrs = dataAttrs.map(([k, v]) => `        ${k}="${v}"`).join("\n");
+  const classic = `<script src="${widgetLegacyJsUrl}"
+${scriptAttrs}></script>`;
 
   const iframeHeight =
     config.variant === "playlist" ? config.height : NON_PLAYLIST_IFRAME_HEIGHT[config.variant];
@@ -135,6 +146,7 @@ ${divAttrs}></div>
 
   return {
     javascript,
+    classic,
     iframe,
     url: iframeUrl,
   };
