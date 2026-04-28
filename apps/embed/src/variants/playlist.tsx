@@ -109,47 +109,73 @@ const TAB_HEADINGS: Record<TabId, string> = {
 
 function TabNav({ activeTab, onSelect }: { activeTab: TabId; onSelect: (id: TabId) => void }) {
   return (
-    <nav
-      role="tablist"
+    <div
+      // Positioning wrapper hosts the right-edge fade overlay. The nav
+      // itself stays scrollable; the fade signals that more tabs exist
+      // off-screen-right at narrow viewports (~320px mobile portrait,
+      // where 'About' was previously hidden with no affordance).
       style={{
-        display: "flex",
-        gap: "var(--rmke-space-xs, 4px)",
+        position: "relative",
         borderBottom: "1px solid var(--rmke-border)",
-        overflowX: "auto",
       }}
     >
-      {TABS.map((tab) => {
-        const isActive = tab.id === activeTab;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onSelect(tab.id)}
-            style={{
-              padding: "var(--rmke-space-sm) var(--rmke-space-md)",
-              background: "transparent",
-              border: "none",
-              borderBottom: isActive
-                ? "2px solid var(--rmke-text-primary)"
-                : "2px solid transparent",
-              fontSize: "12px",
-              fontFamily: "var(--rmke-font-mono)",
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-              color: isActive ? "var(--rmke-text-primary)" : "var(--rmke-text-muted)",
-              cursor: "pointer",
-              fontWeight: isActive ? 600 : 400,
-              whiteSpace: "nowrap",
-              marginBottom: "-1px",
-            }}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
-    </nav>
+      <nav
+        role="tablist"
+        style={{
+          display: "flex",
+          gap: "var(--rmke-space-xs, 4px)",
+          overflowX: "auto",
+        }}
+      >
+        {TABS.map((tab) => {
+          const isActive = tab.id === activeTab;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onSelect(tab.id)}
+              style={{
+                padding: "var(--rmke-space-sm) var(--rmke-space-md)",
+                background: "transparent",
+                border: "none",
+                borderBottom: isActive
+                  ? "2px solid var(--rmke-text-primary)"
+                  : "2px solid transparent",
+                fontSize: "12px",
+                fontFamily: "var(--rmke-font-mono)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: isActive ? "var(--rmke-text-primary)" : "var(--rmke-text-muted)",
+                cursor: "pointer",
+                fontWeight: isActive ? 600 : 400,
+                whiteSpace: "nowrap",
+                marginBottom: "-1px",
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+      {/* Right-edge fade. Sits on whitespace at wide viewports (invisible);
+          becomes a visible gradient over clipped tab content at narrow
+          viewports so users know more tabs are scrollable to the right. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: "24px",
+          pointerEvents: "none",
+          background:
+            "linear-gradient(to right, color-mix(in oklab, var(--rmke-bg-base) 0%, transparent), var(--rmke-bg-base))",
+        }}
+      />
+    </div>
   );
 }
 

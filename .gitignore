@@ -29,6 +29,7 @@ radiomke-playlist-app V1/
 .convex/
 .turbo/
 .trigger/
+.playwright-mcp/
 yarn.lock
 
 # Root /convex/ existed temporarily in Milestone 2-3 when `convex dev` was
