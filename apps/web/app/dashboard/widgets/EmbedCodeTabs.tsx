@@ -113,11 +113,17 @@ function buildSnippets(config: WidgetConfig, widgetCdnBase: string): Record<Tab,
   const widgetJsUrl = `${widgetCdnBase}/widget.js`;
   const iframeUrl = buildPreviewUrl(config, widgetCdnBase) ?? "";
 
+  // Declarative pattern (marker div + script) per industry standard
+  // (Twitter, Mastodon, Disqus all do this). The script-shorthand
+  // pattern looks tidier but document.currentScript is null inside
+  // ES modules per spec, so the loader can't auto-create the host
+  // div from a single <script data-*> tag. Two elements, but it
+  // actually mounts.
   const dataAttrs = configToDataAttrs(config);
-  const indented = dataAttrs.map(([k, v]) => `        ${k}="${v}"`).join("\n");
-  const javascript = `<script type="module"
-        src="${widgetJsUrl}"
-${indented}></script>`;
+  const divAttrs = dataAttrs.map(([k, v]) => `     ${k}="${v}"`).join("\n");
+  const javascript = `<div data-rmke-widget
+${divAttrs}></div>
+<script type="module" src="${widgetJsUrl}"></script>`;
 
   const iframeHeight = IFRAME_HEIGHT_BY_VARIANT[config.variant];
   const iframe = `<iframe src="${iframeUrl}"
