@@ -90,12 +90,58 @@ export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
               live
             </span>
           </header>
-          <PreviewFrame src={previewSrc} height={PREVIEW_HEIGHT_BY_VARIANT[config.variant]} />
+          <PreviewFrame
+            src={previewSrc}
+            height={
+              config.variant === "playlist"
+                ? config.height
+                : PREVIEW_HEIGHT_BY_VARIANT[config.variant]
+            }
+          />
         </section>
 
         <EmbedCodeTabs config={config} widgetCdnBase={widgetCdnBase} />
+
+        <Tips />
       </div>
     </div>
+  );
+}
+
+function Tips() {
+  return (
+    <section
+      aria-label="Embedding tips"
+      className="flex flex-col gap-3 rounded-md border border-border bg-bg-surface p-5"
+    >
+      <header>
+        <h2 className="text-sm font-semibold tracking-tight">Tips for partner sites</h2>
+      </header>
+      <ul className="flex flex-col gap-2.5 text-sm text-text-secondary">
+        <li>
+          <span className="text-text-primary">Surround the embed with descriptive text.</span>{" "}
+          Search engines index the page, not the iframe — heading + intro paragraph above the widget
+          gives context for ranking.
+        </li>
+        <li>
+          <span className="text-text-primary">Prefer the JavaScript embed.</span> Real-time updates,
+          smaller bundle, shadow-DOM isolated. Reach for the iframe form only when the host CMS or
+          security policy blocks third-party scripts.
+        </li>
+        <li>
+          <span className="text-text-primary">
+            Keep <code style={{ fontFamily: "var(--font-mono)" }}>loading=&quot;lazy&quot;</code>
+          </span>{" "}
+          on iframe embeds below the fold — it&apos;s already in the snippet. The widget mounts when
+          scrolled into view, saving the host page network on first paint.
+        </li>
+        <li>
+          <span className="text-text-primary">Mobile responsive.</span> All snippets use{" "}
+          <code style={{ fontFamily: "var(--font-mono)" }}>width=&quot;100%&quot;</code>; the widget
+          itself adapts down to ~320px wide. Test on a narrow viewport before publishing.
+        </li>
+      </ul>
+    </section>
   );
 }
 
