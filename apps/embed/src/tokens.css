@@ -138,3 +138,14 @@
   outline: 2px solid var(--rmke-accent-cta);
   outline-offset: 2px;
 }
+
+/*
+ * Tabs live inside an overflow:auto tablist (the playlist variant's
+ * scroll-fade nav). A positive outline-offset gets clipped at the nav
+ * boundary or at the iframe edge when the widget is pinned tight. Inset
+ * the outline for tabs specifically so the focus ring is always visible
+ * regardless of host-page context.
+ */
+:host [role="tab"]:focus-visible {
+  outline-offset: -2px;
+}
