@@ -4,20 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
-    <meta name="color-scheme" content="light dark" />
     <title>Radio Milwaukee — Playlist Widget</title>
     <style>
       html,
       body {
         margin: 0;
         padding: 0;
-        background: transparent;
       }
       body {
         font-family:
           system-ui,
           -apple-system,
           sans-serif;
+        /* Background is set inline at boot time, matching the resolved
+           widget theme. This prevents the OS dark-mode canvas from
+           bleeding through when the host iframe is taller than the
+           widget content (Windows users were getting a black band
+           below the widget). */
       }
       [data-rmke-widget] {
         display: block;
@@ -38,6 +41,30 @@
           });
           mount.dataset[datasetKey] = value;
         });
+
+        // Resolve the theme + apply matching body bg so empty space
+        // inside the iframe doesn't fall through to the OS canvas
+        // color. Token values mirror DESIGN.md: light = #F7F3EE
+        // (warm off-white), dark = #0E0F11 (warm near-black).
+        var theme = mount.dataset.theme || "auto";
+        var resolved =
+          theme === "auto"
+            ? matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : theme;
+        document.body.style.background = resolved === "dark" ? "#0E0F11" : "#F7F3EE";
+
+        // If theme is "auto" we keep the body bg in sync with the
+        // user's OS preference flipping mid-session.
+        if (theme === "auto" && window.matchMedia) {
+          var mq = matchMedia("(prefers-color-scheme: dark)");
+          if (mq.addEventListener) {
+            mq.addEventListener("change", function (e) {
+              document.body.style.background = e.matches ? "#0E0F11" : "#F7F3EE";
+            });
+          }
+        }
       })();
     </script>
     <script type="module" src="./widget.js"></script>
