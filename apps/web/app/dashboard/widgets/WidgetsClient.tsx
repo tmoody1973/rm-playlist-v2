@@ -1,17 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-type Variant = "playlist" | "now-playing-card" | "now-playing-strip";
-type Theme = "auto" | "light" | "dark";
-
-interface Station {
-  readonly _id: string;
-  readonly slug: string;
-  readonly name: string;
-  readonly embedSlug: string;
-  readonly tagline?: string;
-}
+import { ConfigControls } from "./ConfigControls";
+import { EmbedCodeTabs } from "./EmbedCodeTabs";
+import { ConfigField, SegmentedControl, VerticalPicker } from "./primitives";
+import {
+  buildPreviewUrl,
+  DEFAULT_CONFIG,
+  PREVIEW_HEIGHT_BY_VARIANT,
+  type Station,
+  type Theme,
+  type Variant,
+  type WidgetConfig,
+} from "./types";
 
 interface WidgetsClientProps {
   readonly stations: ReadonlyArray<Station>;
@@ -30,26 +31,18 @@ const THEMES: ReadonlyArray<{ readonly value: Theme; readonly label: string }> =
   { value: "dark", label: "Dark" },
 ];
 
-const PREVIEW_HEIGHT_BY_VARIANT: Record<Variant, number> = {
-  playlist: 720,
-  "now-playing-card": 320,
-  "now-playing-strip": 96,
-};
-
 export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
   const firstStation = stations[0];
-  const [variant, setVariant] = useState<Variant>("playlist");
-  const [stationSlug, setStationSlug] = useState<string>(firstStation?.embedSlug ?? "");
-  const [theme, setTheme] = useState<Theme>("auto");
+  const [config, setConfig] = useState<WidgetConfig>({
+    ...DEFAULT_CONFIG,
+    stationSlug: firstStation?.embedSlug ?? "",
+  });
 
-  const previewSrc = useMemo(() => {
-    if (!stationSlug) return null;
-    const url = new URL(`${widgetCdnBase}/iframe.html`);
-    url.searchParams.set("station", stationSlug);
-    url.searchParams.set("variant", variant);
-    url.searchParams.set("theme", theme);
-    return url.toString();
-  }, [widgetCdnBase, stationSlug, variant, theme]);
+  const updateConfig = <K extends keyof WidgetConfig>(key: K, value: WidgetConfig[K]) => {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const previewSrc = useMemo(() => buildPreviewUrl(config, widgetCdnBase), [config, widgetCdnBase]);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
@@ -60,130 +53,48 @@ export function WidgetsClient({ stations, widgetCdnBase }: WidgetsClientProps) {
         <ConfigField label="Widget type">
           <VerticalPicker
             options={VARIANTS}
-            value={variant}
-            onChange={setVariant}
+            value={config.variant}
+            onChange={(v) => updateConfig("variant", v)}
             ariaLabel="Widget variant"
           />
         </ConfigField>
 
         <ConfigField label="Station">
-          <StationPicker stations={stations} value={stationSlug} onChange={setStationSlug} />
+          <StationPicker
+            stations={stations}
+            value={config.stationSlug}
+            onChange={(slug) => updateConfig("stationSlug", slug)}
+          />
         </ConfigField>
 
         <ConfigField label="Theme">
           <SegmentedControl
             options={THEMES}
-            value={theme}
-            onChange={setTheme}
+            value={config.theme}
+            onChange={(v) => updateConfig("theme", v)}
             ariaLabel="Widget theme"
           />
         </ConfigField>
+
+        <ConfigControls config={config} onChange={updateConfig} />
       </section>
 
-      <section
-        aria-label="Live preview"
-        className="flex min-h-0 flex-col gap-2 rounded-md border border-border bg-bg-surface p-5"
-      >
-        <header className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold tracking-tight">Preview</h2>
-          <span style={{ fontFamily: "var(--font-mono)" }} className="text-xs text-text-muted">
-            live
-          </span>
-        </header>
-        <PreviewFrame src={previewSrc} height={PREVIEW_HEIGHT_BY_VARIANT[variant]} />
-      </section>
-    </div>
-  );
-}
+      <div className="flex flex-col gap-6">
+        <section
+          aria-label="Live preview"
+          className="flex min-h-0 flex-col gap-2 rounded-md border border-border bg-bg-surface p-5"
+        >
+          <header className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold tracking-tight">Preview</h2>
+            <span style={{ fontFamily: "var(--font-mono)" }} className="text-xs text-text-muted">
+              live
+            </span>
+          </header>
+          <PreviewFrame src={previewSrc} height={PREVIEW_HEIGHT_BY_VARIANT[config.variant]} />
+        </section>
 
-function ConfigField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span
-        className="text-xs uppercase tracking-wider text-text-muted"
-        style={{ fontFamily: "var(--font-mono)" }}
-      >
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function SegmentedControl<T extends string>({
-  options,
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  options: ReadonlyArray<{ readonly value: T; readonly label: string }>;
-  value: T;
-  onChange: (next: T) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label={ariaLabel}
-      className="grid auto-cols-fr grid-flow-col gap-1 rounded-md border border-border bg-bg-base p-1"
-    >
-      {options.map((opt) => {
-        const selected = opt.value === value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(opt.value)}
-            className={
-              "rounded px-3 py-1.5 text-sm transition-colors duration-[var(--dur-micro)] " +
-              (selected
-                ? "bg-bg-elevated text-text-primary"
-                : "text-text-muted hover:text-text-primary")
-            }
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function VerticalPicker<T extends string>({
-  options,
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  options: ReadonlyArray<{ readonly value: T; readonly label: string }>;
-  value: T;
-  onChange: (next: T) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div role="radiogroup" aria-label={ariaLabel} className="flex flex-col gap-1.5">
-      {options.map((opt) => {
-        const selected = opt.value === value;
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(opt.value)}
-            className={
-              "rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors duration-[var(--dur-micro)] " +
-              (selected
-                ? "border-accent-cta bg-bg-elevated"
-                : "border-border bg-bg-base hover:border-[color-mix(in_oklab,var(--border)_50%,var(--text-muted))]")
-            }
-          >
-            {opt.label}
-          </button>
-        );
-      })}
+        <EmbedCodeTabs config={config} widgetCdnBase={widgetCdnBase} />
+      </div>
     </div>
   );
 }
