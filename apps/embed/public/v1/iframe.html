@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Radio Milwaukee — Playlist Widget</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      [data-rmke-widget] {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="rmke-mount" data-rmke-widget></div>
+    <script>
+      (function () {
+        var mount = document.getElementById("rmke-mount");
+        var params = new URLSearchParams(location.search);
+        params.forEach(function (value, name) {
+          // Accept both kebab-case (?max-items=20) and camelCase (?maxItems=20)
+          // URL param names. dataset keys are camelCase, so normalize either form.
+          var datasetKey = name.replace(/-([a-z])/g, function (_, c) {
+            return c.toUpperCase();
+          });
+          mount.dataset[datasetKey] = value;
+        });
+      })();
+    </script>
+    <script type="module" src="./widget.js"></script>
+  </body>
+</html>
