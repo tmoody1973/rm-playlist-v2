@@ -87,7 +87,7 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
         style={{
           borderTop: "1px solid var(--rmke-border)",
           paddingTop: "var(--rmke-space-sm)",
-          fontSize: "11px",
+          fontSize: "13px",
           color: "var(--rmke-text-muted)",
           fontFamily: "var(--rmke-font-mono)",
           textTransform: "uppercase",
@@ -137,13 +137,20 @@ function TabNav({ activeTab, onSelect }: { activeTab: TabId; onSelect: (id: TabI
               aria-selected={isActive}
               onClick={() => onSelect(tab.id)}
               style={{
+                // Older-listener a11y (2026-04-28): 14px (was 12px) lifts to
+                // DESIGN.md UI/Label tier for legibility. minHeight 44px hits
+                // the WCAG touch-target minimum without thickening padding,
+                // which would have broken the editorial nav density.
+                display: "inline-flex",
+                alignItems: "center",
+                minHeight: "44px",
                 padding: "var(--rmke-space-sm) var(--rmke-space-md)",
                 background: "transparent",
                 border: "none",
                 borderBottom: isActive
                   ? "2px solid var(--rmke-text-primary)"
                   : "2px solid transparent",
-                fontSize: "12px",
+                fontSize: "14px",
                 fontFamily: "var(--rmke-font-mono)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
@@ -260,7 +267,7 @@ function RecentPane({ config }: { config: WidgetConfig }) {
             border: "1px solid var(--rmke-border)",
             borderRadius: "var(--rmke-radius-sm)",
             color: "var(--rmke-text-primary)",
-            fontSize: "12px",
+            fontSize: "13px",
             fontFamily: "var(--rmke-font-mono)",
             textTransform: "uppercase",
             letterSpacing: "0.06em",
@@ -407,7 +414,7 @@ function FilterBar(props: FilterBarProps) {
             display: "flex",
             alignItems: "center",
             gap: "var(--rmke-space-sm)",
-            fontSize: "12px",
+            fontSize: "13px",
             fontFamily: "var(--rmke-font-mono)",
             textTransform: "uppercase",
             letterSpacing: "0.06em",

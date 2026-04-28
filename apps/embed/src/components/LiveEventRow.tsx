@@ -42,7 +42,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
     >
       <span
         style={{
-          fontSize: "10px",
+          fontSize: "13px",
           letterSpacing: "0.1em",
           textTransform: "uppercase",
           fontWeight: 700,
@@ -67,7 +67,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
         </span>
         <span
           style={{
-            fontSize: "12px",
+            fontSize: "13px",
             color: "var(--rmke-text-secondary)",
             fontFamily: "var(--rmke-font-mono)",
           }}
@@ -82,7 +82,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
           rel="noopener noreferrer"
           style={{
             marginLeft: "auto",
-            fontSize: "12px",
+            fontSize: "13px",
             fontWeight: 600,
             color: "var(--rmke-accent-cta)",
             textDecoration: "none",

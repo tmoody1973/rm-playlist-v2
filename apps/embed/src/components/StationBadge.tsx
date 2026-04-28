@@ -22,7 +22,7 @@ export function StationBadge({ station, variant = "inline" }: StationBadgeProps)
           display: "flex",
           alignItems: "center",
           gap: "var(--rmke-space-sm)",
-          fontSize: "11px",
+          fontSize: "13px",
           letterSpacing: "0.08em",
           textTransform: "uppercase",
           color: "var(--rmke-text-muted)",
@@ -48,7 +48,7 @@ export function StationBadge({ station, variant = "inline" }: StationBadgeProps)
   return (
     <span
       style={{
-        fontSize: "11px",
+        fontSize: "13px",
         letterSpacing: "0.04em",
         textTransform: "uppercase",
         color: "var(--rmke-text-muted)",

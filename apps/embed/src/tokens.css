@@ -29,7 +29,12 @@
   --rmke-border: #e8e5de;
   --rmke-text-primary: #1a1a1a;
   --rmke-text-secondary: #6b6e73;
-  --rmke-text-muted: #94989e;
+  /*
+   * Light text-muted: warm-tilted gray at 4.74:1 vs --bg-base #F7F3EE (WCAG AA).
+   * Was #94989e (2.62:1, FAIL) before the 2026-04-28 older-listener pass —
+   * partner sites skew older and DESIGN.md mandates accessibility.
+   */
+  --rmke-text-muted: #6e6c68;
 
   /* Brand-equity colors — constant across modes. */
   --rmke-accent-cta: #e84f2f;
@@ -86,7 +91,9 @@
   --rmke-border: #2a2f36;
   --rmke-text-primary: #f1efeb;
   --rmke-text-secondary: #8b9099;
-  --rmke-text-muted: #5c6168;
+  /* Dark text-muted: warm-tilted gray at 4.87:1 vs --bg-base #0E0F11 (WCAG AA).
+     Was #5c6168 (3.07:1, FAIL). Same 2026-04-28 older-listener pass. */
+  --rmke-text-muted: #82807c;
 }
 
 /* Auto theme — follow host's prefers-color-scheme when theme="auto"   */
@@ -112,4 +119,22 @@
     --rmke-dur-short: 0ms;
     --rmke-dur-medium: 0ms;
   }
+}
+
+/*
+ * Focus indicators — keyboard-only via :focus-visible so mouse clicks
+ * don't paint outlines, but every Tab/Shift-Tab navigation lands on
+ * something visibly highlighted. Older listeners rely on this; before
+ * the 2026-04-28 a11y pass there were zero focus styles in the widget.
+ *
+ * --rmke-accent-cta (#E84F2F) ratios vs bg-base:
+ *   light (#F7F3EE) → 3.40:1   ≥ 3:1 WCAG non-text minimum, ✓
+ *   dark  (#0E0F11) → 5.11:1   comfortable, ✓
+ *
+ * 2px outline + 2px offset reads as a calm editorial highlight, not a
+ * Material Design ring — preserves DESIGN.md aesthetic.
+ */
+:host :focus-visible {
+  outline: 2px solid var(--rmke-accent-cta);
+  outline-offset: 2px;
 }

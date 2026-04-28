@@ -81,7 +81,7 @@ function StripBody({
         </span>
         <span
           style={{
-            fontSize: "12px",
+            fontSize: "13px",
             color: "var(--rmke-text-secondary)",
             whiteSpace: "nowrap",
             overflow: "hidden",

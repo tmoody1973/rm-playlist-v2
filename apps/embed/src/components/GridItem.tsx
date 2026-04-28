@@ -59,7 +59,7 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
         </span>
         <span
           style={{
-            fontSize: "12px",
+            fontSize: "13px",
             color: "var(--rmke-text-secondary)",
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -71,7 +71,7 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
         <time
           dateTime={new Date(play.playedAt).toISOString()}
           style={{
-            fontSize: "10px",
+            fontSize: "13px",
             color: "var(--rmke-text-muted)",
             fontFamily: "var(--rmke-font-mono)",
             marginTop: "2px",

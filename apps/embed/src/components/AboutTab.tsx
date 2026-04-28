@@ -103,7 +103,7 @@ const STATION_TAGLINES: Record<StationSlug, string> = {
 
 const sectionHeadingStyle = {
   margin: "0 0 6px 0",
-  fontSize: "12px",
+  fontSize: "13px",
   fontFamily: "var(--rmke-font-mono)",
   fontWeight: 600,
   textTransform: "uppercase" as const,

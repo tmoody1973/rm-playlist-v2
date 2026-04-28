@@ -71,7 +71,7 @@ export function ListItem({ play, enablePreview }: ListItemProps) {
         <time
           dateTime={new Date(play.playedAt).toISOString()}
           style={{
-            fontSize: "11px",
+            fontSize: "13px",
             color: "var(--rmke-text-muted)",
             fontFamily: "var(--rmke-font-mono)",
           }}

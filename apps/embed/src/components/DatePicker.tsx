@@ -198,7 +198,7 @@ export function DatePicker({ value, onChange, ariaLabel, placeholder }: DatePick
               display: "grid",
               gridTemplateColumns: "repeat(7, 1fr)",
               gap: "2px",
-              fontSize: "11px",
+              fontSize: "13px",
               fontFamily: "var(--rmke-font-mono)",
               color: "var(--rmke-text-muted)",
               textAlign: "center",
@@ -230,7 +230,7 @@ export function DatePicker({ value, onChange, ariaLabel, placeholder }: DatePick
                   }}
                   style={{
                     padding: "6px 0",
-                    fontSize: "12px",
+                    fontSize: "13px",
                     fontFamily: "var(--rmke-font-body)",
                     border:
                       isToday && !isSelected
@@ -305,7 +305,7 @@ const navButtonStyle = {
 const footerButtonStyle = {
   background: "transparent",
   border: "none",
-  fontSize: "11px",
+  fontSize: "13px",
   fontFamily: "var(--rmke-font-mono)",
   textTransform: "uppercase" as const,
   letterSpacing: "0.06em",
