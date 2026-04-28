@@ -49,9 +49,29 @@ const VARIANT_LOADERS: Record<Variant, () => Promise<VariantModule>> = {
   "now-playing-strip": () => import("./variants/now-playing-strip"),
 };
 
+/**
+ * Read a `data-*` attribute resilient to whitespace-mangled attribute names.
+ *
+ * Mirror of the helper in `loader-legacy.ts`. See that file for the full
+ * Brightspot HtmlModule case study; in short, some CMSes preserve leading
+ * whitespace from multi-line embed snippets as part of the attribute NAME,
+ * which the standard `dataset` API does not match. We trim attribute names
+ * before comparing so both well-formed and CMS-mangled embeds resolve.
+ */
+function readDataAttr(el: HTMLElement, key: string): string | undefined {
+  const fromDataset = el.dataset[key];
+  if (fromDataset !== undefined) return fromDataset;
+
+  const expected = "data-" + key.replace(/([A-Z])/g, "-$1").toLowerCase();
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name.trim() === expected) return attr.value;
+  }
+  return undefined;
+}
+
 function parseConfig(el: HTMLElement): WidgetConfig | null {
-  const station = el.dataset.station as WidgetConfig["station"] | undefined;
-  const variant = el.dataset.variant as Variant | undefined;
+  const station = readDataAttr(el, "station") as WidgetConfig["station"] | undefined;
+  const variant = readDataAttr(el, "variant") as Variant | undefined;
 
   if (!station) {
     console.warn("[rmke-widget] missing data-station");
@@ -62,19 +82,23 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     return null;
   }
 
+  const maxItemsRaw = readDataAttr(el, "maxItems");
+
   return {
     station,
     variant,
-    layout: (el.dataset.layout as WidgetConfig["layout"] | undefined) ?? "list",
-    theme: (el.dataset.theme as WidgetConfig["theme"] | undefined) ?? "auto",
-    maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
-    showSearch: el.dataset.showSearch !== "false",
-    showHeader: el.dataset.showHeader !== "false",
-    showLoadMore: el.dataset.showLoadMore !== "false",
-    enablePreview: el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
-    enableDateSearch: el.dataset.enableDateSearch === "true",
-    autoUpdate: el.dataset.autoUpdate !== "false",
-    unlimitedSongs: el.dataset.unlimitedSongs === "true",
+    layout: (readDataAttr(el, "layout") as WidgetConfig["layout"] | undefined) ?? "list",
+    theme: (readDataAttr(el, "theme") as WidgetConfig["theme"] | undefined) ?? "auto",
+    maxItems: maxItemsRaw ? Number(maxItemsRaw) : undefined,
+    showSearch: readDataAttr(el, "showSearch") !== "false",
+    showHeader: readDataAttr(el, "showHeader") !== "false",
+    showLoadMore: readDataAttr(el, "showLoadMore") !== "false",
+    enablePreview:
+      readDataAttr(el, "enablePreview") !== "false" &&
+      readDataAttr(el, "enableYoutube") !== "false",
+    enableDateSearch: readDataAttr(el, "enableDateSearch") === "true",
+    autoUpdate: readDataAttr(el, "autoUpdate") !== "false",
+    unlimitedSongs: readDataAttr(el, "unlimitedSongs") === "true",
   };
 }
 
@@ -87,30 +111,34 @@ function findMounts(): HTMLElement[] {
 
   // 2. The <script> tag itself, if it has the data-* attributes (shorthand)
   const current = document.currentScript;
-  if (current instanceof HTMLScriptElement && current.dataset.station && current.dataset.variant) {
-    // Create a sibling div right after the script tag to host the widget.
-    const host = document.createElement("div");
-    host.dataset.rmkeWidget = "";
-    for (const key of [
-      "station",
-      "variant",
-      "layout",
-      "theme",
-      "maxItems",
-      "showSearch",
-      "showHeader",
-      "showLoadMore",
-      "enablePreview",
-      "enableYoutube",
-      "enableDateSearch",
-      "autoUpdate",
-      "unlimitedSongs",
-    ]) {
-      const v = current.dataset[key];
-      if (v != null) host.dataset[key] = v;
+  if (current instanceof HTMLScriptElement) {
+    const station = readDataAttr(current, "station");
+    const variant = readDataAttr(current, "variant");
+    if (station && variant) {
+      // Create a sibling div right after the script tag to host the widget.
+      const host = document.createElement("div");
+      host.dataset.rmkeWidget = "";
+      for (const key of [
+        "station",
+        "variant",
+        "layout",
+        "theme",
+        "maxItems",
+        "showSearch",
+        "showHeader",
+        "showLoadMore",
+        "enablePreview",
+        "enableYoutube",
+        "enableDateSearch",
+        "autoUpdate",
+        "unlimitedSongs",
+      ]) {
+        const v = readDataAttr(current, key);
+        if (v != null) host.dataset[key] = v;
+      }
+      current.parentNode?.insertBefore(host, current.nextSibling);
+      mounts.push(host);
     }
-    current.parentNode?.insertBefore(host, current.nextSibling);
-    mounts.push(host);
   }
 
   return mounts;

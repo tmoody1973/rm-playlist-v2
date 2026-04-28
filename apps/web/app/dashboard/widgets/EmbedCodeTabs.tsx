@@ -123,17 +123,22 @@ function buildSnippets(config: WidgetConfig, widgetCdnBase: string): Record<Tab,
   // script) per industry standard (Twitter, Mastodon, Disqus). Required
   // because document.currentScript is null inside ES modules per spec,
   // so script-shorthand can't auto-create a host div for module scripts.
-  const divAttrs = dataAttrs.map(([k, v]) => `     ${k}="${v}"`).join("\n");
-  const javascript = `<div data-rmke-widget
-${divAttrs}></div>
+  //
+  // Both snippets emit attributes inline on a single tag rather than
+  // line-broken — Brightspot's HtmlModule (and other strict CMSes)
+  // preserve leading whitespace as part of attribute names when they
+  // re-render multi-line embeds, breaking `dataset` lookups. Single-line
+  // sidesteps the issue entirely; the loaders also tolerate the mangled
+  // form as a defense-in-depth fallback.
+  const divAttrs = dataAttrs.map(([k, v]) => `${k}="${v}"`).join(" ");
+  const javascript = `<div data-rmke-widget ${divAttrs}></div>
 <script type="module" src="${widgetJsUrl}"></script>`;
 
   // Classic Script (legacy, IIFE): script-shorthand pattern works here
   // because document.currentScript is valid in non-deferred classic
   // scripts. One tag, data-* attrs on the script itself, NPR-style.
-  const scriptAttrs = dataAttrs.map(([k, v]) => `        ${k}="${v}"`).join("\n");
-  const classic = `<script src="${widgetLegacyJsUrl}"
-${scriptAttrs}></script>`;
+  const scriptAttrs = dataAttrs.map(([k, v]) => `${k}="${v}"`).join(" ");
+  const classic = `<script src="${widgetLegacyJsUrl}" ${scriptAttrs}></script>`;
 
   const iframeHeight =
     config.variant === "playlist" ? config.height : NON_PLAYLIST_IFRAME_HEIGHT[config.variant];

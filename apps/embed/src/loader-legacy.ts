@@ -59,9 +59,34 @@ const VARIANT_RENDERERS: Record<Variant, (mount: HTMLElement, config: WidgetConf
 const ownScript: HTMLScriptElement | null =
   document.currentScript instanceof HTMLScriptElement ? document.currentScript : null;
 
+/**
+ * Read a `data-*` attribute resilient to whitespace-mangled attribute names.
+ *
+ * Some CMSes — Brightspot's HtmlModule observed 2026-04-28 on
+ * `radio-milwaukee.prod.npr.psdops.com` — keep the attribute VALUE intact
+ * but preserve leading whitespace from a multi-line embed snippet as part
+ * of the attribute NAME. The result is a live-DOM attribute literally
+ * named `"        data-station"` (eight spaces) that the standard
+ * `dataset` / `getAttribute("data-station")` APIs cannot match.
+ *
+ * Trying `dataset` first keeps zero overhead on the well-formed path; the
+ * attribute scan only runs when dataset misses, which matches the
+ * mangled-CMS case. `key` is the camelCase form (same as `dataset`).
+ */
+function readDataAttr(el: HTMLElement, key: string): string | undefined {
+  const fromDataset = el.dataset[key];
+  if (fromDataset !== undefined) return fromDataset;
+
+  const expected = "data-" + key.replace(/([A-Z])/g, "-$1").toLowerCase();
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name.trim() === expected) return attr.value;
+  }
+  return undefined;
+}
+
 function parseConfig(el: HTMLElement): WidgetConfig | null {
-  const station = el.dataset.station as WidgetConfig["station"] | undefined;
-  const variant = el.dataset.variant as Variant | undefined;
+  const station = readDataAttr(el, "station") as WidgetConfig["station"] | undefined;
+  const variant = readDataAttr(el, "variant") as Variant | undefined;
 
   if (!station) {
     console.warn("[rmke-widget] missing data-station");
@@ -72,19 +97,23 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     return null;
   }
 
+  const maxItemsRaw = readDataAttr(el, "maxItems");
+
   return {
     station,
     variant,
-    layout: (el.dataset.layout as WidgetConfig["layout"] | undefined) ?? "list",
-    theme: (el.dataset.theme as WidgetConfig["theme"] | undefined) ?? "auto",
-    maxItems: el.dataset.maxItems ? Number(el.dataset.maxItems) : undefined,
-    showSearch: el.dataset.showSearch !== "false",
-    showHeader: el.dataset.showHeader !== "false",
-    showLoadMore: el.dataset.showLoadMore !== "false",
-    enablePreview: el.dataset.enablePreview !== "false" && el.dataset.enableYoutube !== "false",
-    enableDateSearch: el.dataset.enableDateSearch === "true",
-    autoUpdate: el.dataset.autoUpdate !== "false",
-    unlimitedSongs: el.dataset.unlimitedSongs === "true",
+    layout: (readDataAttr(el, "layout") as WidgetConfig["layout"] | undefined) ?? "list",
+    theme: (readDataAttr(el, "theme") as WidgetConfig["theme"] | undefined) ?? "auto",
+    maxItems: maxItemsRaw ? Number(maxItemsRaw) : undefined,
+    showSearch: readDataAttr(el, "showSearch") !== "false",
+    showHeader: readDataAttr(el, "showHeader") !== "false",
+    showLoadMore: readDataAttr(el, "showLoadMore") !== "false",
+    enablePreview:
+      readDataAttr(el, "enablePreview") !== "false" &&
+      readDataAttr(el, "enableYoutube") !== "false",
+    enableDateSearch: readDataAttr(el, "enableDateSearch") === "true",
+    autoUpdate: readDataAttr(el, "autoUpdate") !== "false",
+    unlimitedSongs: readDataAttr(el, "unlimitedSongs") === "true",
   };
 }
 
@@ -116,15 +145,19 @@ function findMounts(): HTMLElement[] {
 
   document.querySelectorAll<HTMLElement>("[data-rmke-widget]").forEach((el) => mounts.push(el));
 
-  if (ownScript && ownScript.dataset.station && ownScript.dataset.variant) {
-    const host = document.createElement("div");
-    host.dataset.rmkeWidget = "";
-    for (const key of SHORTHAND_DATA_KEYS) {
-      const v = ownScript.dataset[key];
-      if (v != null) host.dataset[key] = v;
+  if (ownScript) {
+    const station = readDataAttr(ownScript, "station");
+    const variant = readDataAttr(ownScript, "variant");
+    if (station && variant) {
+      const host = document.createElement("div");
+      host.dataset.rmkeWidget = "";
+      for (const key of SHORTHAND_DATA_KEYS) {
+        const v = readDataAttr(ownScript, key);
+        if (v != null) host.dataset[key] = v;
+      }
+      ownScript.parentNode?.insertBefore(host, ownScript.nextSibling);
+      mounts.push(host);
     }
-    ownScript.parentNode?.insertBefore(host, ownScript.nextSibling);
-    mounts.push(host);
   }
 
   return mounts;
