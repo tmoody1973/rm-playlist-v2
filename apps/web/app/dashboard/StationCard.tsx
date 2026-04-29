@@ -47,9 +47,16 @@ export function StationCard({ slug, name }: StationCardProps) {
         ) : current === null ? (
           <p className="text-sm text-text-muted">No plays yet.</p>
         ) : (
-          <div>
-            <p className="truncate text-sm font-medium text-text-primary">{current.titleRaw}</p>
-            <p className="truncate text-xs text-text-secondary">{current.artistRaw}</p>
+          <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
+            <AlbumArt
+              src={current.artworkUrl}
+              alt={`${current.title} — ${current.artist}`}
+              size={56}
+            />
+            <div className="flex flex-col gap-0.5" style={{ minWidth: 0, flex: 1 }}>
+              <p className="truncate text-sm font-medium text-text-primary">{current.title}</p>
+              <p className="truncate text-xs text-text-secondary">{current.artist}</p>
+            </div>
           </div>
         )}
       </div>
@@ -174,11 +181,54 @@ function HealthDot({ state }: { state: HealthState }) {
 
 function SkeletonRow() {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="h-4 w-3/4 animate-pulse rounded-sm bg-bg-elevated" />
-      <div className="h-3 w-1/2 animate-pulse rounded-sm bg-bg-elevated" />
+    <div className="flex items-center gap-3">
+      <div
+        className="animate-pulse rounded-sm bg-bg-elevated"
+        style={{ width: "56px", height: "56px", flexShrink: 0 }}
+        aria-hidden="true"
+      />
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div className="h-4 w-3/4 animate-pulse rounded-sm bg-bg-elevated" />
+        <div className="h-3 w-1/2 animate-pulse rounded-sm bg-bg-elevated" />
+      </div>
     </div>
   );
+}
+
+/**
+ * Square album art with graceful-absence fallback. 56px matches the
+ * now-playing-strip widget — design system consistency. When the track
+ * has no resolved artwork (414 Music local catalog, brand-new track
+ * pre-enrichment) we render a sized neutral tile so the row never
+ * reflows when art arrives.
+ *
+ * Apple Music CDN returns artwork as a template URL with {w}/{h}
+ * placeholders that callers substitute at render time. Other sources
+ * (Spotify, MusicBrainz, station defaultArtworkUrl) return fully
+ * materialized URLs where the regex is a no-op.
+ *
+ * Mirrors apps/embed/src/components/AlbumArt.tsx — kept inline here
+ * because the dashboard is React (Next.js) and the widget is Preact;
+ * one component file per stack stays simpler than a shared package.
+ */
+function AlbumArt({ src, alt, size }: { src: string | null; alt: string; size: number }) {
+  const style: React.CSSProperties = {
+    width: `${size}px`,
+    height: `${size}px`,
+    background: "var(--bg-elevated)",
+    border: "1px solid var(--border)",
+    flexShrink: 0,
+    objectFit: "cover",
+    display: "block",
+  };
+  if (src === null) {
+    return <div style={style} role="img" aria-label={alt} />;
+  }
+  const pixelSize = String(size * 2);
+  const materialized = src
+    .replace(/\{w\}|%7Bw%7D/g, pixelSize)
+    .replace(/\{h\}|%7Bh%7D/g, pixelSize);
+  return <img src={materialized} alt={alt} style={style} loading="lazy" decoding="async" />;
 }
 
 /** Short relative-time formatter. e.g. "just now", "2m ago", "45m ago". */
