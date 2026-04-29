@@ -62,6 +62,9 @@ export interface WidgetConfig {
  */
 export interface LiveEventSummary {
   readonly eventId: string;
+  /** Show title as the source reported it. May be null when the source
+   *  omitted it; UI falls back to "Live" + venue. */
+  readonly title: string | null;
   readonly artistName: string;
   readonly venue: string;
   readonly city: string;

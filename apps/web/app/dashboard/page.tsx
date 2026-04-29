@@ -3,7 +3,7 @@ import { api } from "@rm/convex/api";
 import { StationCard } from "./StationCard";
 import { NeedsAttention } from "./NeedsAttention";
 import { ReportsPanel } from "./ReportsPanel";
-import { UpcomingFromRotation } from "./Placeholders";
+import { UpcomingFromRotation } from "./UpcomingFromRotation";
 
 /**
  * Milestone 5 — dashboard wall-of-status (the CEO-plan Week 1-2 deliverable).

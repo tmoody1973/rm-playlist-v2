@@ -1,4 +1,3 @@
-import { h } from "preact";
 import type { LiveEventSummary } from "../types";
 
 interface LiveEventRowProps {
@@ -52,27 +51,36 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
       >
         Live
       </span>
-      <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, flex: 1 }}>
+        {liveEvent.title !== null && (
+          <span
+            style={{
+              fontSize: "16px",
+              fontWeight: 600,
+              color: "var(--rmke-text-primary)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              lineHeight: 1.3,
+            }}
+          >
+            {liveEvent.title}
+          </span>
+        )}
         <span
           style={{
-            fontSize: "13px",
-            fontWeight: 600,
-            color: "var(--rmke-text-primary)",
+            fontSize: "14px",
+            fontWeight: liveEvent.title === null ? 600 : 400,
+            color:
+              liveEvent.title === null ? "var(--rmke-text-primary)" : "var(--rmke-text-secondary)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
           }}
         >
           {liveEvent.venue}, {liveEvent.city}
-        </span>
-        <span
-          style={{
-            fontSize: "13px",
-            color: "var(--rmke-text-secondary)",
-            fontFamily: "var(--rmke-font-mono)",
-          }}
-        >
-          {dateLabel}
+          {" · "}
+          <span style={{ fontFamily: "var(--rmke-font-mono)" }}>{dateLabel}</span>
         </span>
       </div>
       {liveEvent.ticketUrl !== null && (

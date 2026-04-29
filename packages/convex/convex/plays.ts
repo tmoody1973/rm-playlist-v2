@@ -324,6 +324,14 @@ async function buildPublicPlay(
 
 export interface LiveEventSummary {
   readonly eventId: Id<"events">;
+  /**
+   * Show title as the source reported it ("The Strokes - Reality Awaits
+   * North America"). Tells the listener WHAT the show is — without this,
+   * a Thundercat-opening-for-Strokes match looks like a generic "Thundercat
+   * at United Center" announcement. Optional because some events come back
+   * from the source with title omitted; widget falls back to "Live" + venue.
+   */
+  readonly title: string | null;
   readonly artistName: string;
   readonly venue: string;
   readonly city: string;
@@ -410,6 +418,7 @@ async function findLiveEventForArtist(
   const winner = candidates[0]!;
   return {
     eventId: winner.event._id,
+    title: winner.event.title ?? null,
     artistName: winner.matchedArtistName,
     venue: winner.event.venueName,
     city: winner.event.city,

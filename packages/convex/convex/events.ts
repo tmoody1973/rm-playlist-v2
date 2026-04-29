@@ -434,3 +434,148 @@ export const getOrgIdBySlug = query({
     return org?._id ?? null;
   },
 });
+
+// ---------------------------------------------------------------- //
+// Upcoming-from-rotation query (powers the dashboard panel)
+// ---------------------------------------------------------------- //
+
+/**
+ * One row per rotation-artist who has an upcoming event in any of the
+ * configured regions. Joins recent plays × eventArtists × events, with
+ * cross-source dedup honored.
+ *
+ * Cost shape:
+ *   - One indexed scan over plays in the lookback window (capped at
+ *     16k for query budget).
+ *   - For each unique artistKey in the top N most-played, one
+ *     eventArtists.by_artist_key lookup + ≤K event gets.
+ *
+ * The brainstorm scheduled this for Week 6 with a nightly
+ * touringFromRotation cache; this live version meets that need at
+ * shakedown scale (typical RM org has ~5000 plays / 30 days × 4
+ * stations = 20000-ish play rows in any window — under budget) and
+ * stays correct without invalidation logic. If query latency creeps
+ * above 1s on a real load, swap to the cached materialized view.
+ */
+export const upcomingFromRotation = query({
+  args: {
+    orgSlug: v.string(),
+    /** How far back to scan plays for "in rotation". Default 30 days. */
+    lookbackDays: v.optional(v.number()),
+    /** Filter events to those starting within N days of now. Default 90. */
+    horizonDays: v.optional(v.number()),
+    /** Cap on returned matches. Default 50. */
+    limit: v.optional(v.number()),
+    /** Cap on artists checked (top by play count). Bounds query cost
+     *  per call regardless of catalog growth. Default 200. */
+    artistCap: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const lookbackDays = args.lookbackDays ?? 30;
+    const horizonDays = args.horizonDays ?? 90;
+    const limit = args.limit ?? 50;
+    const artistCap = args.artistCap ?? 200;
+
+    const now = Date.now();
+    const lookbackMs = now - lookbackDays * 86_400_000;
+    const horizonMs = now + horizonDays * 86_400_000;
+
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
+      .first();
+    if (org === null) return [];
+
+    // 1. Scan plays in lookback window across all stations.
+    const recentPlays = await ctx.db
+      .query("plays")
+      .withIndex("by_org_played_at", (q) => q.eq("orgId", org._id).gte("playedAt", lookbackMs))
+      .take(16_000);
+
+    // 2. Group by normalized artistKey, count plays + remember stations.
+    type ArtistInfo = {
+      count: number;
+      stationIds: Set<Id<"stations">>;
+      displayName: string;
+    };
+    const byArtistKey = new Map<string, ArtistInfo>();
+    for (const play of recentPlays) {
+      if (play.deletedAt !== undefined) continue;
+      if (play.enrichmentStatus === "ignored") continue;
+      const key = normalizeEventArtistKey(play.artistRaw);
+      if (key.length === 0) continue;
+      const existing = byArtistKey.get(key);
+      if (existing !== undefined) {
+        existing.count++;
+        existing.stationIds.add(play.stationId);
+      } else {
+        byArtistKey.set(key, {
+          count: 1,
+          stationIds: new Set([play.stationId]),
+          displayName: play.artistRaw,
+        });
+      }
+    }
+
+    // 3. Sort by play count, take top N artists. Bounds the follow-up
+    //    eventArtists lookups to keep the query under Convex's read budget.
+    const topArtists = Array.from(byArtistKey.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, artistCap);
+
+    // 4. For each top artist, find matching upcoming events.
+    type Match = {
+      artistKey: string;
+      artistName: string;
+      playCount: number;
+      stationIds: Id<"stations">[];
+      event: Doc<"events">;
+      role: "headliner" | "support";
+    };
+    const matches: Match[] = [];
+
+    for (const [artistKey, info] of topArtists) {
+      const eventArtistRows = await ctx.db
+        .query("eventArtists")
+        .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
+        .take(20);
+
+      for (const ea of eventArtistRows) {
+        const event = await ctx.db.get(ea.eventId);
+        if (event === null) continue;
+        if (event.duplicateOf !== undefined) continue;
+        if (event.startsAt <= now) continue;
+        if (event.startsAt > horizonMs) continue;
+        if (event.status === "cancelled" || event.status === "postponed") continue;
+        matches.push({
+          artistKey,
+          artistName: ea.artistNameRaw,
+          playCount: info.count,
+          stationIds: Array.from(info.stationIds),
+          event,
+          role: ea.role,
+        });
+      }
+    }
+
+    // 5. Sort by event start ascending, return shaped results.
+    matches.sort((a, b) => a.event.startsAt - b.event.startsAt);
+    return matches.slice(0, limit).map((m) => ({
+      artistKey: m.artistKey,
+      artistName: m.artistName,
+      playCount: m.playCount,
+      stationIds: m.stationIds,
+      eventId: m.event._id,
+      eventTitle: m.event.title ?? null,
+      venueName: m.event.venueName,
+      city: m.event.city,
+      region: m.event.region,
+      startsAtMs: m.event.startsAt,
+      dateOnly: m.event.dateOnly === true,
+      ticketUrl: m.event.ticketUrl ?? null,
+      imageUrl: m.event.imageUrl ?? null,
+      role: m.role,
+      source: m.event.source,
+    }));
+  },
+});
