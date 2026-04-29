@@ -88,7 +88,13 @@ interface TmImage {
 
 interface TmAttraction {
   id: string;
-  name: string;
+  /**
+   * TM occasionally returns attractions with an id but no name (incomplete
+   * metadata, performer record mid-update, festival placeholders). We
+   * filter those out during normalization since they can't power the
+   * artistKey reverse-lookup or cross-source dedup either way.
+   */
+  name?: string;
 }
 
 interface TmVenue {
@@ -229,6 +235,25 @@ function normalizeTmEvent(event: TmEvent): NormalizedEvent | null {
   // Skip rather than store a row missing the join key.
   if (!venue?.name) return null;
 
+  // Drop attractions with no name — they fail the events.upsertBatch
+  // validator (artistNameRaw is required) and they can't power the
+  // artistKey reverse-lookup anyway. Role assignment uses the original
+  // index so the first NAMED attraction is the headliner — matches what
+  // a human reader sees on the TM event page.
+  const namedArtists = attractions
+    .map((attraction, originalIndex) => ({ attraction, originalIndex }))
+    .filter(({ attraction }) => typeof attraction.name === "string" && attraction.name.length > 0)
+    .map(({ attraction, originalIndex }) => ({
+      artistNameRaw: attraction.name as string,
+      role: (originalIndex === 0 ? "headliner" : "support") as "headliner" | "support",
+      externalPerformerId: attraction.id,
+    }));
+
+  // Events with zero named artists are dead weight — they can't surface
+  // in the LIVE row and they can't dedup against AXS / custom rows.
+  // TM has these as festival placeholders or "Lineup TBA" rows.
+  if (namedArtists.length === 0) return null;
+
   const lat = venue.location?.latitude;
   const long = venue.location?.longitude;
 
@@ -251,11 +276,7 @@ function normalizeTmEvent(event: TmEvent): NormalizedEvent | null {
     status: mapTmStatus(event.dates.status.code),
     imageUrl: pickBestImage(event.images),
     genre: event.classifications?.[0]?.genre?.name,
-    artists: attractions.map((attraction, index) => ({
-      artistNameRaw: attraction.name,
-      role: (index === 0 ? "headliner" : "support") as "headliner" | "support",
-      externalPerformerId: attraction.id,
-    })),
+    artists: namedArtists,
   };
 }
 
