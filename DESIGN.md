@@ -176,7 +176,7 @@ A warm-tinted, editorial palette: nothing pure black, nothing pure white. Two th
 - **Border Light** (`#E8E5DE`): Warm hairlines. Replaces shadow on light-mode cards.
 - **Text Primary Light** (`#1A1A1A`): Body text. Deep charcoal, not pure black.
 - **Text Secondary Light** (`#6B6E73`): Artist, label, secondary metadata. 5.32:1 vs `warm-off-white`.
-- **Text Muted Light** (`#6E6C68`): Timestamps, captions. Warm-tilted gray (R≥G≥B). 4.74:1 vs `warm-off-white`. **2026-04-28 a11y-pass replacement** for `#94989E` (which sat at 2.62:1 and failed WCAG AA). The widget tokens use this value; the dashboard tokens at `apps/web/app/design-tokens.css` still carry `#94989E` and must be brought to parity.
+- **Text Muted Light** (`#6E6C68`): Timestamps, captions. Warm-tilted gray (R≥G≥B). 4.74:1 vs `warm-off-white`. **2026-04-28 a11y-pass replacement** for `#94989E` (which sat at 2.62:1 and failed WCAG AA). Widget + dashboard tokens at parity as of 2026-04-29.
 - **Event Wash Light** (`#FFF6E0`): The LIVE event card background. A warm amber wash that says "this is different from a play row" without screaming.
 
 ### Neutral, Dark Mode (dashboard default, dark widget hosts)
@@ -187,7 +187,7 @@ A warm-tinted, editorial palette: nothing pure black, nothing pure white. Two th
 - **Border Dark** (`#2A2F36`): Hairlines and dividers.
 - **Text Primary Dark** (`#F1EFEB`): Body. Warm off-white, easier than pure white in long sessions.
 - **Text Secondary Dark** (`#8B9099`): Metadata, secondary copy.
-- **Text Muted Dark** (`#82807C`): Captions. Warm-tilted gray, 4.87:1 vs `warm-near-black`. **Replacement** for the original `#5C6168` (3.07:1, FAIL). Widget tokens use this value; the dashboard tokens still carry `#5C6168`.
+- **Text Muted Dark** (`#82807C`): Captions. Warm-tilted gray, 4.87:1 vs `warm-near-black`. **Replacement** for the original `#5C6168` (3.07:1, FAIL). Widget + dashboard tokens at parity as of 2026-04-29.
 - **Event Wash Dark** (`#2A1F0A`): LIVE event card background. Subtle amber tint, distinguishes event rows from play rows.
 
 ### Status (constant across modes)
@@ -331,7 +331,9 @@ The interleaved card that appears mid-playlist when an artist on rotation is per
 - **Don't** drop body text below 13px on widget surfaces.
 - **Don't** introduce a fourth font family. Display + body + mono is the budget.
 
-### Known drift (clean up before next a11y pass)
+### Resolved drift (2026-04-29)
 
-- `apps/web/app/design-tokens.css` still carries the pre-a11y-pass values: `--text-muted` light = `#94989E` (FAIL, 2.62:1) and `--text-muted` dark = `#5C6168` (FAIL, 3.07:1). The embed widget tokens at `apps/embed/src/tokens.css` were brought to parity (warm-tilted `#6E6C68` / `#82807C`); the dashboard tokens were not. Operator UI inherits the FAIL values until this is resolved.
-- `apps/embed/src/tokens.css` `prefers-color-scheme: dark` block (the auto-mode dark fallback) still sets `--rmke-text-muted: #5c6168` instead of `#82807c`. Auto-theme dark widgets are missing the a11y fix.
+The two pre-a11y-pass token gaps the audit flagged are now closed:
+
+- `apps/web/app/design-tokens.css` `--text-muted` light → `#6E6C68` (4.74:1), dark → `#82807C` (4.87:1). Dashboard at parity with widget tokens.
+- `apps/embed/src/tokens.css` `prefers-color-scheme: dark` auto-fallback → `#82807C`. All three widget theme paths (static dark, static light, auto-following-host) now hit WCAG AA.

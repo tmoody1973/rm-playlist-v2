@@ -108,7 +108,11 @@
     --rmke-border: #2a2f36;
     --rmke-text-primary: #f1efeb;
     --rmke-text-secondary: #8b9099;
-    --rmke-text-muted: #5c6168;
+    /* Mirrors the static [data-theme="dark"] block above. The 2026-04-28
+       a11y pass landed #82807c there; this auto-theme fallback was missed
+       in #30 and silently delivered the failed 3.07:1 muted to every
+       prefers-color-scheme:dark host. Now matches at 4.87:1. */
+    --rmke-text-muted: #82807c;
   }
 }
 

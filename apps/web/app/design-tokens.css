@@ -12,7 +12,10 @@
   --border: #2a2f36;
   --text-primary: #f1efeb;
   --text-secondary: #8b9099;
-  --text-muted: #5c6168;
+  /* Warm-tilted muted, 4.87:1 vs --bg-base #0e0f11 (WCAG AA). Matches the
+     widget tokens at apps/embed/src/tokens.css. Closes the dashboard half
+     of the 2026-04-28 a11y pass; was #5c6168 (3.07:1, FAIL). */
+  --text-muted: #82807c;
 
   /* ---- Brand-equity (constant across modes) ---- */
   --accent-cta: #e84f2f;
@@ -62,7 +65,9 @@
   --border: #e8e5de;
   --text-primary: #1a1a1a;
   --text-secondary: #6b6e73;
-  --text-muted: #94989e;
+  /* Warm-tilted muted, 4.74:1 vs --bg-base #f7f3ee (WCAG AA). Matches the
+     widget tokens. Was #94989e (2.62:1, FAIL). */
+  --text-muted: #6e6c68;
 }
 
 @media (prefers-reduced-motion: reduce) {
