@@ -12,30 +12,35 @@ rm-playlist-v2 is that missing layer. It's three things in one repo:
 
 1. **An operator dashboard.** Live wall-of-status for all four stations with a `Needs Attention` panel that surfaces enrichment failures and missing SoundExchange fields. Every row has one-click actions — retry, ignore (persistently, so the next "WYMS Legal ID" tick doesn't come back), override artist/title, edit label/ISRC/duration inline, auto-fill missing durations from the cached Apple Music songId. Per-station coverage stats let a DJ see at a glance whether their stream's metadata is healthy, with 414 Music's chronically-low label coverage marked as expected rather than broken. The Reports panel generates NPR-compliant playlist logs (tab-delimited UTF-8 TXT, Milwaukee local time) on demand.
 2. **An ingestion + enrichment backbone.** Trigger.dev crons poll SGmetadata every minute. A Fly-deployed ICY worker holds the Rhythm Lab stream open 24/7 and parses in-band Shoutcast metadata as it streams. Every resolved play runs through parallel Apple Music + MusicBrainz lookups, then a five-tier waterfall for record label (Apple → Discogs release with deluxe/remaster variant retry → MusicBrainz release-by-MBID → Discogs artist-only → "Self-released" for 414 Music local acts) and a three-tier waterfall for album art (Apple → MusicBrainz Cover Art Archive → per-station branded fallback). Station-specific knowledge is baked in throughout — 414 Music's fallback to `Self-released` is what SoundExchange accepts for a local unsigned act.
-3. **Embeddable widgets.** The same canonical play data ships to Cloudflare Pages as a small Preact bundle (~28 KB gzip critical-path per variant). Any page on radiomilwaukee.org (or a partner site later) can drop in a `<script type="module">` tag and render a live playlist (list or grid layout, Load More pagination), now-playing strip, or now-playing card (with 30-second Apple Music preview audio). Variants are code-split; each page only downloads the chunk it uses. Widget bundle loads cross-origin correctly via `import.meta.url`-based chunk resolution.
+3. **Embeddable widgets.** The same canonical play data ships to Cloudflare Pages as a small Preact bundle (~28 KB gzip critical-path per variant). Any page on radiomilwaukee.org (or a partner site later) can drop in a `<script type="module">` tag and render a live playlist (list or grid layout, Load More pagination, search, date picker, Recent/Top Songs/About tabs, "playing now in Milwaukee" event row), a now-playing strip, or a now-playing card (with 30-second Apple Music preview audio). Variants are code-split; each page only downloads the chunk it uses. Widget bundle loads cross-origin correctly via `import.meta.url`-based chunk resolution. A legacy `widget-legacy.js` classic-script bundle is also published for partner CMSes (e.g., WordPress) that strip `type="module"` or mangle `data-*` attributes.
+4. **PlaylistFM landing page.** A public marketing surface at [playlistfm.app](https://playlistfm.app) showing a live 4-stream demo, widget feature gallery, and embed snippet — branded "PlaylistFM, powered by Radio Milwaukee." Social shares get a live OG image at `/api/og` that pulls the most-recently-played track across all four stations from Convex and renders it edge-side via `next/og`.
+
+`rm-playlist-v2` is also a deliberate experiment in **AI-assisted building**: nearly every commit on the repo was authored together with [Claude Code](https://claude.com/claude-code). The hope is that the same approach lets other small public-radio teams stand up the same operational layer without a six-figure dev budget — which is why the codebase, design system, and ADRs are all kept readable enough to be a template for someone else.
 
 The single-tenant decision ([`docs/decisions/001-single-tenant-first.md`](docs/decisions/001-single-tenant-first.md)) is deliberate. Everything is scoped to Radio Milwaukee today, but every table carries `orgId` + `stationId` so a partner station can be stood up later without a migration. Done looks like: SoundExchange quarterly exports take minutes instead of days, DJs never ask "why isn't my song showing up," and the embed widgets outlive every platform rewrite that comes after this one.
 
 ## Stack
 
-| Layer         | Tech                                                                            |
-| ------------- | ------------------------------------------------------------------------------- |
-| DB + realtime | Convex (queries, mutations, HTTP actions)                                       |
-| Auth          | Clerk (users only; Organizations deferred)                                      |
-| Scheduling    | Trigger.dev (poll-all-sources, enrich-pending-plays, refresh-apple-music-token) |
-| Long-lived    | Fly.io (`@rm/icy-worker`)                                                       |
-| Dashboard     | Next.js 16.2 (Turbopack) + React 19 + Tailwind v4                               |
-| Widgets       | Preact + Vite, `@rm/embed` deployed to Cloudflare Pages                         |
-| Enrichment    | Apple Music API (ES256 JWT), MusicBrainz, Discogs                               |
-| Runtime       | Bun 1.3+ (workspaces, test runner)                                              |
-| CI            | GitHub Actions                                                                  |
+| Layer         | Tech                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| DB + realtime | Convex (queries, mutations, HTTP actions)                                                         |
+| Auth          | Clerk (users only; Organizations deferred). Dashboard restricted to `@radiomilwaukee.org` emails. |
+| Scheduling    | Trigger.dev — `poll-all-sources`, `enrich-pending-plays`, `refresh-apple-music-token`, `poll-ticketmaster` |
+| Long-lived    | Fly.io (`@rm/icy-worker`)                                                                         |
+| Dashboard     | Next.js 16.2 (Turbopack) + React 19 + Tailwind v4                                                 |
+| Public landing | Next.js (same `apps/web`) deployed to Vercel at `playlistfm.app`. Live OG image via `next/og`.   |
+| Widgets       | Preact + Vite, `@rm/embed` deployed to Cloudflare Pages                                           |
+| Enrichment    | Apple Music API (ES256 JWT), MusicBrainz, Discogs                                                 |
+| Events        | Ticketmaster Discovery API + AXS API + custom event creator UI                                    |
+| Runtime       | Bun 1.3+ (workspaces, test runner)                                                                |
+| CI            | GitHub Actions                                                                                    |
 
 ## Monorepo layout
 
 ```
 apps/
-  web/         # Next.js dashboard + /embed iframe fallback + /widget.js loader
-  embed/       # Preact widget bundle (code-split by variant)
+  web/         # Next.js dashboard + PlaylistFM landing (/) + /api/og + /embed iframe fallback + /widget.js loader
+  embed/       # Preact widget bundle (code-split by variant) + widget-legacy.js classic-script bundle
   icy-worker/  # Fly.io persistent ICY listener
 packages/
   convex/      # schema, queries, mutations, HTTP actions
@@ -43,12 +48,13 @@ packages/
   enrichment/  # Apple Music + MusicBrainz + Discogs clients, throttles, label waterfall
   types/       # shared TS types (NormalizedPlay, AdapterKind, etc.)
 src/
-  trigger/     # Trigger.dev tasks — poll-all-sources, enrich-pending-plays, refresh-apple-music-token
+  trigger/     # Trigger.dev tasks — poll-all-sources, enrich-pending-plays, refresh-apple-music-token, poll-ticketmaster
 scripts/       # one-shot utilities (sync-env.sh, verify-apple-music.ts)
 docs/
   decisions/     # ADRs — schema changes, API renames, pivots
   design/        # DESIGN.md + information-architecture, interaction-states, a11y
   implementation/# weekly implementation plans
+  blog/          # listener-facing posts about the platform
 ```
 
 ## Quick start
@@ -136,13 +142,19 @@ All secrets live in `.env.local` (gitignored) and `~/.gstack/secrets/` for the A
 
 ## Ingestion adapters
 
-MVP adapters, all live:
+Plays adapters (all live):
 
 - **`spinitron`** — polled REST API, 60s interval
-- **`sgmetadata`** — StreamGuys metadata scraper REST, 60s interval, drives HYFIN + 88Nine + Rhythm Lab
-- **`icy`** — long-lived HTTP connection with `Icy-MetaData: 1`, in-band `StreamTitle=` blocks, Fly-deployed worker
+- **`sgmetadata`** — StreamGuys metadata scraper REST, 60s interval, drives HYFIN + 88Nine + 414 Music
+- **`icy`** — long-lived HTTP connection with `Icy-MetaData: 1`, in-band `StreamTitle=` blocks, Fly-deployed worker (Rhythm Lab today)
 
 Each adapter is one file under `packages/ingestion/src/adapters/`, conforms to the `Adapter` interface, pure `parse()` function, Zod-validated config, fixture-tested.
+
+Events adapters (live):
+
+- **Ticketmaster Discovery API** — polled by `src/trigger/poll-ticketmaster.ts`, region anchors read from the `stationRegions` Convex table (defaults: Milwaukee 50mi, Madison 35mi, Chicago 40mi). Skips festival placeholders and events with zero named attractions.
+- **AXS API** — wired into the same events pipeline.
+- **Custom events** — operator-created via the drawer on `/dashboard/events`, stored alongside ingested events with cross-source dedup (priority: `axs` > `custom` > `ticketmaster`, loser gets `duplicateOf` set).
 
 ## Enrichment pipeline
 
@@ -160,11 +172,28 @@ Every `pending` play runs through `src/trigger/enrich-pending-plays.ts` (60s cro
 
 **Preview-audio resolution** (lazy, widget-driven): `play.previewUrl` if cached on track → `preview.resolvePreviewUrl` Convex action fetches from Apple's `/songs/{id}` endpoint on first click → patches the track row → all future clicks use the cached value.
 
+## Dashboard surfaces
+
+Operator dashboard at `/dashboard` (Clerk-gated, `@radiomilwaukee.org` allowlist enforced server-side in `apps/web/app/dashboard/layout.tsx`; non-allowlisted users bounce to `/access-denied`):
+
+- **`/dashboard`** — wall-of-status: per-station now-playing cards with album art (Row 1), Reports preview (Row 2), `Needs Attention` + `Upcoming from rotation` two-up (Row 3).
+- **`/dashboard/streams`** — per-station drill-down with Health / Activity / On Air sections, switchable across all 4 stations.
+- **`/dashboard/reports`** — playlist log export (NPR-compliant tab-delimited UTF-8 TXT, Milwaukee local time), coverage snapshot, top songs export.
+- **`/dashboard/events`** — browse + filter ingested events. Sticky filter, group-by-date, artist filter, in-rotation toggle, CSV export, click-to-detail drawer, "+ Add custom event" creator.
+- **`/dashboard/widgets`** — embed snippet builder + live preview for each variant.
+- **`/dashboard/settings`** — org info (read-only), operators list, ingestion sources (per-source pause/resume), station regions CRUD (the geographic anchors `poll-ticketmaster` queries; empty table falls back to hardcoded defaults), env reference checklist.
+
+## PlaylistFM (public landing)
+
+[playlistfm.app](https://playlistfm.app) is the public face: hero + live 4-stream demo + widget feature gallery + operator features + embed snippet, branded "PlaylistFM, powered by Radio Milwaukee."
+
+Social shares get a live OG image from `apps/web/app/api/og/route.tsx` (edge runtime, 60s cache). The route fetches `currentByStation` for all four stations, picks the most-recent, and renders a 1200×630 PNG with the brand mark, an "ON AIR" badge, 220px album art, the track title, and the artist — all from real Convex data.
+
 ## Deployment targets
 
 - **Convex** — auto-deployed via `.github/workflows/convex-deploy.yml` on every CI-passing merge to `main`. Uses `CONVEX_DEPLOY_KEY` repo secret. Never run `bunx convex codegen` or `bunx convex dev` from a stale branch (see `CLAUDE.md` → "Convex Deployment Sync").
-- **Cloudflare Pages** — `apps/embed` auto-deploys via `.github/workflows/widget-publish.yml` on main pushes touching `apps/embed/**`. Enforces `build:check` (40 KB gzip critical-path ceiling per variant) before deploying. Public origin: `rm-playlist-v2-embed.pages.dev` (will become `embed.radiomilwaukee.org`).
-- **Vercel** — `apps/web` (dashboard), deployed manually
+- **Cloudflare Pages** — `apps/embed` auto-deploys via `.github/workflows/widget-publish.yml` on main pushes touching `apps/embed/**`. Enforces `build:check` (40 KB gzip critical-path ceiling per variant) before deploying. Public origin: `rm-playlist-v2-embed.pages.dev` (will become `embed.radiomilwaukee.org`). Both the module bundle and the `widget-legacy.js` classic-script bundle ship from the same workflow.
+- **Vercel** — `apps/web` (dashboard + PlaylistFM landing) at [playlistfm.app](https://playlistfm.app), auto-deployed on push to `main`.
 - **Fly.io** — `apps/icy-worker` (`fly deploy` from that directory)
 - **Trigger.dev** — dev worker runs the scheduled crons. Deployed by running `bunx trigger.dev dev` locally (watch mode auto-publishes on file change); production deploy via `bunx trigger.dev deploy` when we're ready to cut over.
 
@@ -177,12 +206,12 @@ Every `pending` play runs through `src/trigger/enrich-pending-plays.ts` (60s cro
 
 ## Status
 
-Shakedown phase — single-tenant, Radio Milwaukee only. Live ingestion on Rhythm Lab via ICY + SGmetadata, 88Nine and HYFIN via SGmetadata; enrichment running every 60s with ~95% album-art coverage across resolved plays (Apple + CAA + station fallback); dashboard + Needs Attention panel + NPR playlist log export + per-station coverage stats in daily use. All three widget variants (`playlist`, `now-playing-card`, `now-playing-strip`) deployed to Cloudflare Pages and working cross-origin. Deliverables tracked against the CEO plan at `~/.gstack/projects/rm-playlist-v2/ceo-plans/2026-04-22-v2-selective-expansion.md`.
+Shakedown phase — single-tenant, Radio Milwaukee only. Live ingestion on Rhythm Lab via ICY + SGmetadata; 88Nine, HYFIN, and 414 Music via SGmetadata. Enrichment runs every 60s with ~95% album-art coverage across resolved plays (Apple + CAA + station fallback). Six dashboard surfaces in daily use (Dashboard / Streams / Reports / Events / Widgets / Settings). NPR-compliant playlist log export, per-station coverage stats, station-regions CRUD, and a custom-event creator are all live. All three widget variants (`playlist`, `now-playing-card`, `now-playing-strip`) deployed to Cloudflare Pages and working cross-origin, with `widget-legacy.js` available for partner CMSes. Public landing at [playlistfm.app](https://playlistfm.app) with a live OG image. Deliverables tracked against the CEO plan at `~/.gstack/projects/rm-playlist-v2/ceo-plans/2026-04-22-v2-selective-expansion.md`.
 
 ## Parked work
 
-- **Playlist widget chunks 2-4** — search + date filter, tabs (Recent / Top 20 / About), related-tracks carousel. Chunk 1 (list/grid + Load More) shipped.
-- **Events ingestion** (Ticketmaster / AXS) — unblocks the "Upcoming from rotation" dashboard panel and `liveEvent` slot on widgets.
-- **Touring-from-rotation materialized view** — nightly cron cross-joining recent plays × upcoming Milwaukee events.
+- **Touring-from-rotation materialized view** — nightly cron cross-joining recent plays × upcoming Milwaukee events. The `Upcoming from rotation` dashboard panel uses live joins for now.
 - **HMAC auth on public Convex mutations** — every operator mutation has a `TODO(security)`. Required before any partner station comes online.
-- **Classic-script bootstrapper** for widgets — so partners don't need `type="module"` on their script tag.
+- **V1-parity custom event polish** — artist autocomplete, "played N times in last 30d" feedback inline in the form, edit/delete past custom events, "Copy from Ticketmaster" prefill.
+- **Plays-by-period summary report** + **export audit log** on `/dashboard/reports`.
+- **Multi-tenant onboarding** — the schema already carries `orgId` + `stationId` everywhere; what's missing is the partner-station onboarding flow, region/source bootstrap, and per-org Clerk allowlist.
