@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
+import { normalizeEventArtistKey } from "./events";
 
 /**
  * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
@@ -317,8 +318,17 @@ async function buildPublicPlay(
     spotifyTrackId: track?.spotifyTrackId ?? null,
     appleMusicSongId: track?.appleMusicSongId ?? null,
     previewUrl: track?.previewUrl ?? null,
-    liveEvent: null,
+    liveEvent: await findLiveEventForArtist(ctx, artist?.displayName ?? play.artistRaw),
   };
+}
+
+export interface LiveEventSummary {
+  readonly eventId: Id<"events">;
+  readonly artistName: string;
+  readonly venue: string;
+  readonly city: string;
+  readonly startsAtMs: number;
+  readonly ticketUrl: string | null;
 }
 
 export interface PublicPlay {
@@ -336,7 +346,76 @@ export interface PublicPlay {
   readonly spotifyTrackId: string | null;
   readonly appleMusicSongId: string | null;
   readonly previewUrl: string | null;
-  readonly liveEvent: null;
+  readonly liveEvent: LiveEventSummary | null;
+}
+
+/**
+ * Reverse lookup from a played artist to the soonest upcoming local event
+ * featuring that artist. Powers the LIVE event row in the now-playing-card
+ * and any playlist row whose artist is on tour locally — the system's
+ * signature differentiator (DESIGN.md § B tertiary tier).
+ *
+ * Match logic:
+ *   1. Normalize the artist name with the same key used by Ticketmaster /
+ *      AXS / custom adapters in events.ts (article-stripped, alnum-only).
+ *      "The Beatles" → "beatles" matches whether the play row spells it
+ *      "THE BEATLES" or the event source spells it "Beatles".
+ *   2. Index lookup on `eventArtists.by_artist_key` returns 0..N matches
+ *      across all events and roles.
+ *   3. For each match, load the event and filter:
+ *        - skip if duplicateOf set (cross-source dedup loser)
+ *        - skip if startsAt is in the past
+ *        - skip if status is cancelled or postponed
+ *   4. Sort surviving events by startsAt ascending, return the soonest.
+ *
+ * Returns `null` when no upcoming event matches — the LiveEventRow
+ * component renders nothing in that case.
+ *
+ * Cost envelope: single artistKey index lookup + ≤MAX_LOOKUP_FANOUT
+ * point gets per call. Bounded so a popular artist with many shows
+ * doesn't balloon recentByStation's read budget.
+ */
+const MAX_LOOKUP_FANOUT = 10;
+
+async function findLiveEventForArtist(
+  ctx: QueryCtx,
+  artistDisplayName: string,
+): Promise<LiveEventSummary | null> {
+  const artistKey = normalizeEventArtistKey(artistDisplayName);
+  if (artistKey.length === 0) return null;
+
+  const matchingArtists = await ctx.db
+    .query("eventArtists")
+    .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
+    .take(MAX_LOOKUP_FANOUT);
+  if (matchingArtists.length === 0) return null;
+
+  const now = Date.now();
+  const events = await Promise.all(matchingArtists.map((row) => ctx.db.get(row.eventId)));
+
+  type Candidate = { event: Doc<"events">; matchedArtistName: string };
+  const candidates: Candidate[] = [];
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    const matchedArtist = matchingArtists[i];
+    if (!event || !matchedArtist) continue;
+    if (event.duplicateOf !== undefined) continue;
+    if (event.startsAt <= now) continue;
+    if (event.status === "cancelled" || event.status === "postponed") continue;
+    candidates.push({ event, matchedArtistName: matchedArtist.artistNameRaw });
+  }
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
+  const winner = candidates[0]!;
+  return {
+    eventId: winner.event._id,
+    artistName: winner.matchedArtistName,
+    venue: winner.event.venueName,
+    city: winner.event.city,
+    startsAtMs: winner.event.startsAt,
+    ticketUrl: winner.event.ticketUrl ?? null,
+  };
 }
 
 export const currentByStation = query({

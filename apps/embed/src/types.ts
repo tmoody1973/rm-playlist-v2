@@ -54,9 +54,11 @@ export interface WidgetConfig {
 
 /**
  * LIVE event slot on a play row — the product differentiator (DESIGN.md
- * § B tertiary tier). Always `null` today because events ingestion is a
- * later milestone; the shape is reserved so LiveEventRow can render from
- * real data without a breaking change later.
+ * § B tertiary tier). Populated by `findLiveEventForArtist` in
+ * packages/convex/convex/plays.ts: when the play's artist has an upcoming
+ * non-duplicate, non-cancelled event in the station's region, the
+ * soonest one is returned here. `null` otherwise. Mirrors the server
+ * `LiveEventSummary` interface (Id<"events"> serializes to string).
  */
 export interface LiveEventSummary {
   readonly eventId: string;
