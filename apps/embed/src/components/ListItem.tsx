@@ -32,12 +32,12 @@ export function ListItem({ play, enablePreview }: ListItemProps) {
         borderBottom: "1px solid var(--rmke-border)",
       }}
     >
-      <AlbumArt src={play.artworkUrl} alt={`${play.title} — ${play.artist}`} size={48} />
+      <AlbumArt src={play.artworkUrl} alt={`${play.title} — ${play.artist}`} size={56} />
 
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1, gap: "2px" }}>
         <span
           style={{
-            fontSize: "14px",
+            fontSize: "16px",
             fontWeight: 600,
             color: "var(--rmke-text-primary)",
             whiteSpace: "nowrap",
@@ -49,7 +49,8 @@ export function ListItem({ play, enablePreview }: ListItemProps) {
         </span>
         <span
           style={{
-            fontSize: "13px",
+            fontSize: "14px",
+            fontWeight: 500,
             color: "var(--rmke-text-secondary)",
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -71,7 +72,7 @@ export function ListItem({ play, enablePreview }: ListItemProps) {
         <time
           dateTime={new Date(play.playedAt).toISOString()}
           style={{
-            fontSize: "13px",
+            fontSize: "14px",
             color: "var(--rmke-text-muted)",
             fontFamily: "var(--rmke-font-mono)",
           }}

@@ -128,19 +128,21 @@ function CardWidget({ config }: { config: WidgetConfig }) {
         </>
       )}
 
-      <footer
-        style={{
-          borderTop: "1px solid var(--rmke-border)",
-          paddingTop: "var(--rmke-space-sm)",
-          fontSize: "13px",
-          color: "var(--rmke-text-muted)",
-          fontFamily: "var(--rmke-font-mono)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-        }}
-      >
-        Powered by Radio Milwaukee
-      </footer>
+      {config.showFooter === true && (
+        <footer
+          style={{
+            borderTop: "1px solid var(--rmke-border)",
+            paddingTop: "var(--rmke-space-sm)",
+            fontSize: "14px",
+            color: "var(--rmke-text-muted)",
+            // Host-inherited body font + normal case (see types.ts showFooter
+            // doc comment). Default OFF; partner sites stay native.
+            fontFamily: "var(--rmke-font-body)",
+          }}
+        >
+          Powered by Radio Milwaukee
+        </footer>
+      )}
     </article>
   );
 }

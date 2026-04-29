@@ -108,6 +108,7 @@ function parseConfig(el: HTMLElement): WidgetConfig | null {
     showSearch: readDataAttr(el, "showSearch") !== "false",
     showHeader: readDataAttr(el, "showHeader") !== "false",
     showLoadMore: readDataAttr(el, "showLoadMore") !== "false",
+    showFooter: readDataAttr(el, "showFooter") === "true",
     enablePreview:
       readDataAttr(el, "enablePreview") !== "false" &&
       readDataAttr(el, "enableYoutube") !== "false",
@@ -126,6 +127,7 @@ const SHORTHAND_DATA_KEYS = [
   "showSearch",
   "showHeader",
   "showLoadMore",
+  "showFooter",
   "enablePreview",
   "enableYoutube",
   "enableDateSearch",

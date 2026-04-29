@@ -26,6 +26,17 @@ export interface WidgetConfig {
   readonly showSearch?: boolean;
   readonly showHeader?: boolean;
   readonly showLoadMore?: boolean;
+  /**
+   * Render the "Powered by Radio Milwaukee" footer line at the bottom of
+   * the playlist widget. Default `false` so partner-site embeds stay native
+   * to the host page. Opt in (`data-show-footer="true"`) when the host
+   * wants the attribution chip — typically RM-owned pages.
+   *
+   * When shown, the footer renders in the host-inherited body font at
+   * normal case, not mono uppercase. PRODUCT.md anti-references forbid
+   * "'Powered by' footers in a different visual language than the host."
+   */
+  readonly showFooter?: boolean;
   readonly enablePreview?: boolean;
   readonly enableDateSearch?: boolean;
   /**

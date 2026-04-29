@@ -77,6 +77,15 @@ export async function play(appleMusicSongId: string, url: string): Promise<void>
   }
 }
 
+/**
+ * Surface a resolution / non-playback error in the player state machine so
+ * subscribed PreviewButtons can render their error treatment (title hint +
+ * aria-live announcement). Callers own the message wording.
+ */
+export function setResolveError(appleMusicSongId: string, message: string): void {
+  setState({ kind: "error", appleMusicSongId, message });
+}
+
 export function stop(): void {
   if (sharedAudio !== null) {
     sharedAudio.pause();

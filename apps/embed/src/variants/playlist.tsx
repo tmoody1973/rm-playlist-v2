@@ -64,10 +64,11 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
           <h3
             style={{
               margin: 0,
-              fontSize: "14px",
+              fontSize: "18px",
               fontFamily: "var(--rmke-font-display)",
-              fontWeight: 600,
-              letterSpacing: "0.02em",
+              fontWeight: 700,
+              letterSpacing: "normal",
+              lineHeight: 1.2,
             }}
           >
             {TAB_HEADINGS[activeTab]}
@@ -83,19 +84,22 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
       {activeTab === "top30" && <TopSongsPane config={config} windowDays={30} />}
       {activeTab === "about" && <AboutTab station={config.station} />}
 
-      <footer
-        style={{
-          borderTop: "1px solid var(--rmke-border)",
-          paddingTop: "var(--rmke-space-sm)",
-          fontSize: "13px",
-          color: "var(--rmke-text-muted)",
-          fontFamily: "var(--rmke-font-mono)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-        }}
-      >
-        Powered by Radio Milwaukee
-      </footer>
+      {config.showFooter === true && (
+        <footer
+          style={{
+            borderTop: "1px solid var(--rmke-border)",
+            paddingTop: "var(--rmke-space-sm)",
+            fontSize: "14px",
+            color: "var(--rmke-text-muted)",
+            // Inherit host body font + normal case so the footer reads as part of
+            // the surrounding page rather than as a stamped-on credit line. Default
+            // OFF so partner-site embeds stay native; opt in via data-show-footer.
+            fontFamily: "var(--rmke-font-body)",
+          }}
+        >
+          Powered by Radio Milwaukee
+        </footer>
+      )}
     </section>
   );
 }
@@ -212,8 +216,18 @@ function RecentPane({ config }: { config: WidgetConfig }) {
     [dateRangeOn, startDate, endDate],
   );
 
+  // End-before-start is a user error, not a query the server should run.
+  // Suppress the search until the user fixes the range; the FilterBar shows
+  // an inline message alongside the pickers.
+  const dateRangeInverted =
+    dateRangeOn &&
+    afterMs !== undefined &&
+    beforeMs !== undefined &&
+    beforeMs < afterMs;
+
   const filtersActive =
-    debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined;
+    !dateRangeInverted &&
+    (debouncedQ.trim().length > 0 || afterMs !== undefined || beforeMs !== undefined);
 
   const recentPlays = useRecentPlays(config.station, limit, autoUpdate);
   const searchPlays = useSearchPlays({
@@ -245,6 +259,7 @@ function RecentPane({ config }: { config: WidgetConfig }) {
           endDate={endDate}
           onStartChange={setStartDate}
           onEndChange={setEndDate}
+          dateRangeInverted={dateRangeInverted}
         />
       )}
 
@@ -380,6 +395,7 @@ interface FilterBarProps {
   endDate: string;
   onStartChange: (v: string) => void;
   onEndChange: (v: string) => void;
+  dateRangeInverted: boolean;
 }
 
 function FilterBar(props: FilterBarProps) {
@@ -446,6 +462,20 @@ function FilterBar(props: FilterBarProps) {
             placeholder="End date"
           />
         </div>
+      )}
+
+      {props.dateRangeInverted && (
+        <p
+          role="alert"
+          style={{
+            margin: 0,
+            fontSize: "14px",
+            color: "var(--rmke-status-error)",
+            fontFamily: "var(--rmke-font-body)",
+          }}
+        >
+          End date is before start date. Adjust the range to see results.
+        </p>
       )}
     </div>
   );

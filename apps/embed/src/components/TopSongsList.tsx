@@ -67,9 +67,9 @@ export function TopSongsList({ songs, windowDays }: TopSongsListProps) {
         >
           <span
             style={{
-              minWidth: "24px",
+              minWidth: "28px",
               textAlign: "center",
-              fontSize: "13px",
+              fontSize: "14px",
               fontFamily: "var(--rmke-font-mono)",
               color: "var(--rmke-text-muted)",
               fontWeight: 600,
@@ -80,12 +80,12 @@ export function TopSongsList({ songs, windowDays }: TopSongsListProps) {
           <AlbumArt
             src={song.artworkUrl}
             alt={`${song.artist} — ${song.title} cover art`}
-            size={48}
+            size={56}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
-                fontSize: "14px",
+                fontSize: "16px",
                 fontFamily: "var(--rmke-font-display)",
                 fontWeight: 600,
                 color: "var(--rmke-text-primary)",
@@ -96,23 +96,12 @@ export function TopSongsList({ songs, windowDays }: TopSongsListProps) {
             >
               {song.artist} — {song.title}
             </div>
-            <div
-              style={{
-                fontSize: "13px",
-                fontFamily: "var(--rmke-font-mono)",
-                color: "var(--rmke-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-                marginTop: "2px",
-              }}
-            >
-              Last {windowDays} days
-            </div>
           </div>
           <span
             style={{
-              fontSize: "13px",
+              fontSize: "14px",
               fontFamily: "var(--rmke-font-mono)",
+              fontWeight: 500,
               padding: "4px 10px",
               background: "var(--rmke-bg-base)",
               border: "1px solid var(--rmke-border)",

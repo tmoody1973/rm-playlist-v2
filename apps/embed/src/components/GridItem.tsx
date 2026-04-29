@@ -47,7 +47,7 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
       <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
         <span
           style={{
-            fontSize: "13px",
+            fontSize: "16px",
             fontWeight: 600,
             color: "var(--rmke-text-primary)",
             whiteSpace: "nowrap",
@@ -59,7 +59,8 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
         </span>
         <span
           style={{
-            fontSize: "13px",
+            fontSize: "14px",
+            fontWeight: 500,
             color: "var(--rmke-text-secondary)",
             whiteSpace: "nowrap",
             overflow: "hidden",
@@ -71,7 +72,7 @@ export function GridItem({ play, enablePreview }: GridItemProps) {
         <time
           dateTime={new Date(play.playedAt).toISOString()}
           style={{
-            fontSize: "13px",
+            fontSize: "14px",
             color: "var(--rmke-text-muted)",
             fontFamily: "var(--rmke-font-mono)",
             marginTop: "2px",

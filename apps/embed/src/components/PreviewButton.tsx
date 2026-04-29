@@ -5,6 +5,7 @@ import { getConvexClient } from "../convex-client";
 import {
   getPreviewPlayerState,
   play,
+  setResolveError,
   stop,
   subscribe,
   type PreviewPlayerState,
@@ -58,11 +59,13 @@ export function PreviewButton({ appleMusicSongId, previewUrl, trackLabel }: Prev
       const result = (await client.action(api.preview.resolvePreviewUrl, {
         appleMusicSongId,
       })) as { previewUrl: string | null };
-      if (result.previewUrl === null) return;
+      if (result.previewUrl === null) {
+        setResolveError(appleMusicSongId, "Preview unavailable for this track.");
+        return;
+      }
       await play(appleMusicSongId, result.previewUrl);
     } catch {
-      // Action failure — swallowed; button returns to idle. A follow-up
-      // could surface an inline error tooltip.
+      setResolveError(appleMusicSongId, "Preview couldn't load. Try again in a moment.");
     }
   };
 
@@ -71,46 +74,71 @@ export function PreviewButton({ appleMusicSongId, previewUrl, trackLabel }: Prev
     : `Play 30-second preview of ${trackLabel}`;
 
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      aria-pressed={isPlaying}
-      onClick={onClick}
-      disabled={isLoading}
-      title={isError ? playerState.message : undefined}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "32px",
-        height: "32px",
-        border: `1px solid ${isPlaying ? "var(--rmke-accent-cta)" : "var(--rmke-border)"}`,
-        borderRadius: "var(--rmke-radius-full)",
-        background: isPlaying ? "var(--rmke-accent-cta)" : "var(--rmke-bg-surface)",
-        color: isPlaying ? "var(--rmke-bg-base)" : "var(--rmke-text-primary)",
-        cursor: isLoading ? "progress" : "pointer",
-        flexShrink: 0,
-        transition:
-          "background var(--rmke-dur-micro) ease-out, border-color var(--rmke-dur-micro) ease-out, color var(--rmke-dur-micro) ease-out",
-      }}
-    >
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 12 12"
-        fill="currentColor"
-        aria-hidden="true"
-        focusable="false"
+    <span style={{ display: "inline-flex", flexShrink: 0, position: "relative" }}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-pressed={isPlaying}
+        onClick={onClick}
+        disabled={isLoading}
+        title={isError ? playerState.message : undefined}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          // 44x44 hits WCAG 2.5.5 AAA target size (right floor for the
+          // older-listener audience). Glyph stays 12x12 — padding does the work.
+          width: "44px",
+          height: "44px",
+          border: `1px solid ${isPlaying ? "var(--rmke-accent-cta)" : "var(--rmke-border)"}`,
+          borderRadius: "var(--rmke-radius-full)",
+          background: isPlaying ? "var(--rmke-accent-cta)" : "var(--rmke-bg-surface)",
+          color: isPlaying ? "var(--rmke-bg-base)" : "var(--rmke-text-primary)",
+          cursor: isLoading ? "progress" : "pointer",
+          flexShrink: 0,
+          transition:
+            "background var(--rmke-dur-micro) ease-out, border-color var(--rmke-dur-micro) ease-out, color var(--rmke-dur-micro) ease-out",
+        }}
       >
-        {isPlaying ? (
-          <g>
-            <rect x="3" y="2" width="2" height="8" rx="0.5" />
-            <rect x="7" y="2" width="2" height="8" rx="0.5" />
-          </g>
-        ) : (
-          <path d="M3 1.5v9l7-4.5-7-4.5z" />
-        )}
-      </svg>
-    </button>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          {isPlaying ? (
+            <g>
+              <rect x="3" y="2" width="2" height="8" rx="0.5" />
+              <rect x="7" y="2" width="2" height="8" rx="0.5" />
+            </g>
+          ) : (
+            <path d="M3 1.5v9l7-4.5-7-4.5z" />
+          )}
+        </svg>
+      </button>
+      {/*
+        Visually-hidden live region so screen readers announce resolve / playback
+        failures. Sighted users get the `title` tooltip on hover; keyboard users get
+        the title on focus. Both already wired above.
+      */}
+      <span
+        aria-live="polite"
+        style={{
+          position: "absolute",
+          width: "1px",
+          height: "1px",
+          padding: 0,
+          margin: "-1px",
+          overflow: "hidden",
+          clip: "rect(0, 0, 0, 0)",
+          whiteSpace: "nowrap",
+          border: 0,
+        }}
+      >
+        {isError ? playerState.message : ""}
+      </span>
+    </span>
   );
 }

@@ -22,7 +22,7 @@ export function AboutTab({ station }: AboutTabProps) {
         display: "flex",
         flexDirection: "column",
         gap: "var(--rmke-space-md)",
-        fontSize: "14px",
+        fontSize: "16px",
         lineHeight: 1.55,
         color: "var(--rmke-text-primary)",
         fontFamily: "var(--rmke-font-body)",
@@ -32,10 +32,11 @@ export function AboutTab({ station }: AboutTabProps) {
         <h4
           style={{
             margin: 0,
-            fontSize: "15px",
+            fontSize: "18px",
             fontFamily: "var(--rmke-font-display)",
-            fontWeight: 600,
-            letterSpacing: "0.02em",
+            fontWeight: 700,
+            letterSpacing: "normal",
+            lineHeight: 1.2,
           }}
         >
           About {stationName}
@@ -75,7 +76,7 @@ export function AboutTab({ station }: AboutTabProps) {
         </p>
       </section>
 
-      <p style={{ margin: 0, fontSize: "13px", color: "var(--rmke-text-muted)" }}>
+      <p style={{ margin: 0, fontSize: "14px", color: "var(--rmke-text-muted)" }}>
         Support more work like this at{" "}
         <a
           href="https://radiomilwaukee.org/donate"
@@ -103,7 +104,7 @@ const STATION_TAGLINES: Record<StationSlug, string> = {
 
 const sectionHeadingStyle = {
   margin: "0 0 6px 0",
-  fontSize: "13px",
+  fontSize: "14px",
   fontFamily: "var(--rmke-font-mono)",
   fontWeight: 600,
   textTransform: "uppercase" as const,
