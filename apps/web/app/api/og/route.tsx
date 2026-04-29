@@ -154,15 +154,21 @@ export async function GET() {
         width: "100%",
         height: "100%",
         background: COLOR.bgBase,
-        padding: "60px 70px",
+        padding: "50px 70px",
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Top: brand */}
-      <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Top: brand (compact) */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          gap: "12px",
+        }}
+      >
         <div
           style={{
-            fontSize: "32px",
+            fontSize: "28px",
             fontWeight: 700,
             letterSpacing: "0.04em",
             color: COLOR.textPrimary,
@@ -173,12 +179,11 @@ export async function GET() {
         </div>
         <div
           style={{
-            fontSize: "14px",
+            fontSize: "13px",
             fontWeight: 400,
             letterSpacing: "0.08em",
             color: COLOR.textMuted,
             lineHeight: 1,
-            marginTop: "8px",
             textTransform: "uppercase",
           }}
         >
@@ -186,22 +191,27 @@ export async function GET() {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex" }} />
-
-      {/* Bottom: now playing */}
+      {/* Middle hero: now playing — center of gravity */}
       {nowPlaying !== null ? (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
+          {/* On Air badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "10px",
               fontSize: "16px",
               fontWeight: 700,
               letterSpacing: "0.12em",
               color: COLOR.accentCta,
-              marginBottom: "20px",
               textTransform: "uppercase",
+              marginBottom: "28px",
             }}
           >
             <div
@@ -210,33 +220,36 @@ export async function GET() {
                 height: "12px",
                 borderRadius: "9999px",
                 background: COLOR.accentCta,
+                marginRight: "12px",
                 display: "flex",
               }}
             />
-            On air · {nowPlaying.stationLabel}
+            <span style={{ display: "flex" }}>On air · {nowPlaying.stationLabel}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "32px" }}>
+
+          {/* Art + track row */}
+          <div style={{ display: "flex", alignItems: "center" }}>
             {nowPlaying.artworkUrl !== null ? (
               <img
-                src={materializeArtwork(nowPlaying.artworkUrl, 160)}
-                width={160}
-                height={160}
+                src={materializeArtwork(nowPlaying.artworkUrl, 220)}
+                width={220}
+                height={220}
                 style={{
                   border: `1px solid ${COLOR.border}`,
                   objectFit: "cover",
-                  flexShrink: 0,
                   display: "flex",
+                  marginRight: "40px",
                 }}
                 alt=""
               />
             ) : (
               <div
                 style={{
-                  width: "160px",
-                  height: "160px",
+                  width: "220px",
+                  height: "220px",
                   background: COLOR.bgElevated,
                   border: `1px solid ${COLOR.border}`,
-                  flexShrink: 0,
+                  marginRight: "40px",
                   display: "flex",
                 }}
               />
@@ -246,33 +259,28 @@ export async function GET() {
                 display: "flex",
                 flexDirection: "column",
                 flex: 1,
-                minWidth: 0,
-                overflow: "hidden",
               }}
             >
               <div
                 style={{
-                  fontSize: "56px",
+                  fontSize: "72px",
                   fontWeight: 700,
                   color: COLOR.textPrimary,
                   lineHeight: 1.05,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  letterSpacing: "-0.02em",
+                  display: "flex",
                 }}
               >
                 {nowPlaying.title}
               </div>
               <div
                 style={{
-                  fontSize: "32px",
+                  fontSize: "40px",
                   fontWeight: 400,
                   color: COLOR.textSecondary,
                   lineHeight: 1.3,
-                  marginTop: "8px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  marginTop: "12px",
+                  display: "flex",
                 }}
               >
                 {nowPlaying.artist}
@@ -281,42 +289,62 @@ export async function GET() {
           </div>
         </div>
       ) : (
-        /* Fallback when Convex is unreachable or no station has data:
-             editorial typography only, no live data. */
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        /* Fallback: brand-only editorial layout when Convex is
+           unreachable or every station is null. */
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+          }}
+        >
           <div
             style={{
-              fontSize: "64px",
+              fontSize: "84px",
               fontWeight: 700,
               lineHeight: 1.05,
               color: COLOR.textPrimary,
               letterSpacing: "-0.02em",
+              display: "flex",
             }}
           >
             What&apos;s playing now.
           </div>
           <div
             style={{
-              fontSize: "64px",
+              fontSize: "84px",
               fontWeight: 700,
               lineHeight: 1.05,
               color: COLOR.accentCta,
               letterSpacing: "-0.02em",
               marginTop: "8px",
+              display: "flex",
             }}
           >
             Where they&apos;re playing next.
           </div>
-          <div
-            style={{
-              fontSize: "20px",
-              fontWeight: 400,
-              color: COLOR.textSecondary,
-              marginTop: "24px",
-            }}
-          >
-            Real-time playlist data plus tour-date discovery for public radio.
-          </div>
+        </div>
+      )}
+
+      {/* Bottom: tagline / closer */}
+      {nowPlaying !== null && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            fontSize: "20px",
+            fontWeight: 400,
+            color: COLOR.textSecondary,
+            paddingTop: "20px",
+            borderTop: `1px solid ${COLOR.border}`,
+          }}
+        >
+          <span style={{ color: COLOR.textPrimary, fontWeight: 700 }}>
+            What&apos;s playing now.
+          </span>
+          <span>Where they&apos;re playing next.</span>
         </div>
       )}
     </div>,
