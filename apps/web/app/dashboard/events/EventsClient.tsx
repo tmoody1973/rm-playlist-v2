@@ -39,7 +39,13 @@ export function EventsClient() {
   const events = useQuery(api.events.allUpcomingEvents, {
     orgSlug: "radiomilwaukee",
     horizonDays: 90,
-    limit: 200,
+    // Pull the entire 90-day window. The earlier 200 cap was sorting
+    // events by date asc and slicing — meaning artist filter (client-
+    // side) couldn't see anyone playing past the first 200 dates.
+    // Thundercat opening for The Strokes on Jun 17 sat past that
+    // cutoff. 2000 covers RM's whole horizon (~850 events at 90d) with
+    // headroom; under Convex's 16k-doc / 8MB query budget.
+    limit: 2000,
     search: debouncedSearch.trim().length > 0 ? debouncedSearch : undefined,
     region: region === "all" ? undefined : region,
     source: source === "all" ? undefined : source,
