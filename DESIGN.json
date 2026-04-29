@@ -277,16 +277,56 @@
       "WCAG 2.2 AA is the floor on widgets: 13px minimum body, ≥4.5:1 contrast on every text token, 44px tap targets on tab buttons."
     ],
     "rules": [
-      { "name": "The One Voice Rule", "body": "CTA Coral covers ≤10% of any surface. Overuse softens the donate signal Radio Milwaukee depends on.", "section": "colors" },
-      { "name": "The Two Jobs Rule", "body": "CTA Coral and LIVE Amber are never interchangeable and never sit adjacent in conflicting roles. Coral urges action; amber announces presence.", "section": "colors" },
-      { "name": "The No-Pure-Extremes Rule", "body": "No #000000, no #FFFFFF. Every neutral is tinted toward the warm brand palette so the system feels like an editorial artifact, not a default Tailwind reset.", "section": "colors" },
-      { "name": "The Color-Plus-Shape Rule", "body": "Status indicators always pair color + text + shape. Color-only signaling is forbidden.", "section": "colors" },
-      { "name": "The 13px Floor Rule", "body": "Widget body text never goes below 13px. Older listeners are the audience; 11px and 12px captions were removed in the 2026-04-28 a11y pass and must not return.", "section": "typography" },
-      { "name": "The Tabular Numerals Rule", "body": "Every timestamp, duration, play count, and date renders with font-feature-settings: tnum so figures align cleanly in scrolling lists.", "section": "typography" },
-      { "name": "The Three Faces Rule", "body": "Display + body + mono. No fourth family loaded simultaneously per page.", "section": "typography" },
-      { "name": "The No System Font Rule", "body": "System fonts (Inter, Roboto, Arial, Helvetica, system-ui) are fallbacks only and never sit at the head of the font stack on dashboard surfaces.", "section": "typography" },
-      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest. Tonal stepping conveys hierarchy in dark mode; warm hairlines convey it in light mode. Shadows are reserved for genuinely floating affordances.", "section": "elevation" },
-      { "name": "The No-Glassmorphism Rule", "body": "Backdrop blur is forbidden as decoration. The system leans on print typography and tonal restraint.", "section": "elevation" }
+      {
+        "name": "The One Voice Rule",
+        "body": "CTA Coral covers ≤10% of any surface. Overuse softens the donate signal Radio Milwaukee depends on.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Jobs Rule",
+        "body": "CTA Coral and LIVE Amber are never interchangeable and never sit adjacent in conflicting roles. Coral urges action; amber announces presence.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Pure-Extremes Rule",
+        "body": "No #000000, no #FFFFFF. Every neutral is tinted toward the warm brand palette so the system feels like an editorial artifact, not a default Tailwind reset.",
+        "section": "colors"
+      },
+      {
+        "name": "The Color-Plus-Shape Rule",
+        "body": "Status indicators always pair color + text + shape. Color-only signaling is forbidden.",
+        "section": "colors"
+      },
+      {
+        "name": "The 13px Floor Rule",
+        "body": "Widget body text never goes below 13px. Older listeners are the audience; 11px and 12px captions were removed in the 2026-04-28 a11y pass and must not return.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Numerals Rule",
+        "body": "Every timestamp, duration, play count, and date renders with font-feature-settings: tnum so figures align cleanly in scrolling lists.",
+        "section": "typography"
+      },
+      {
+        "name": "The Three Faces Rule",
+        "body": "Display + body + mono. No fourth family loaded simultaneously per page.",
+        "section": "typography"
+      },
+      {
+        "name": "The No System Font Rule",
+        "body": "System fonts (Inter, Roboto, Arial, Helvetica, system-ui) are fallbacks only and never sit at the head of the font stack on dashboard surfaces.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest. Tonal stepping conveys hierarchy in dark mode; warm hairlines convey it in light mode. Shadows are reserved for genuinely floating affordances.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No-Glassmorphism Rule",
+        "body": "Backdrop blur is forbidden as decoration. The system leans on print typography and tonal restraint.",
+        "section": "elevation"
+      }
     ],
     "dos": [
       "Do keep CTA Coral at ≤10% of any surface. Its rarity is the donation signal.",

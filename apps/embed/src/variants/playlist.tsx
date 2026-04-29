@@ -220,10 +220,7 @@ function RecentPane({ config }: { config: WidgetConfig }) {
   // Suppress the search until the user fixes the range; the FilterBar shows
   // an inline message alongside the pickers.
   const dateRangeInverted =
-    dateRangeOn &&
-    afterMs !== undefined &&
-    beforeMs !== undefined &&
-    beforeMs < afterMs;
+    dateRangeOn && afterMs !== undefined && beforeMs !== undefined && beforeMs < afterMs;
 
   const filtersActive =
     !dateRangeInverted &&
