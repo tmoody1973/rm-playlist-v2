@@ -52,11 +52,6 @@ const NAV_ITEMS: Array<{ href: string; label: string; icon: ReactNode }> = [
   { href: "/dashboard/streams", label: "Streams", icon: <StreamsIcon /> },
   { href: "/dashboard/reports", label: "Reports", icon: <ReportsIcon /> },
   { href: "/dashboard/events", label: "Events", icon: <EventsIcon /> },
-  {
-    href: "/dashboard/unclassified",
-    label: "Unclassified",
-    icon: <UnclassifiedIcon />,
-  },
   { href: "/dashboard/widgets", label: "Widgets", icon: <WidgetsIcon /> },
   { href: "/dashboard/settings", label: "Settings", icon: <SettingsIcon /> },
 ];
@@ -128,15 +123,6 @@ function EventsIcon() {
     <Icon>
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 9h18M8 3v4M16 3v4" />
-    </Icon>
-  );
-}
-function UnclassifiedIcon() {
-  return (
-    <Icon>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.3-1 1-1 1.7v.5" />
-      <path d="M12 17h.01" />
     </Icon>
   );
 }
