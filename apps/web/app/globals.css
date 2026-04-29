@@ -33,3 +33,24 @@ body {
   color: var(--text-primary);
   font-family: var(--font-body);
 }
+
+/* Landing-page LIVE pulse — DESIGN.md § Motion. Two-second loop, low
+ * contrast (10% opacity diff). Visual breathing, not flashing. Honors
+ * the reduced-motion contract via the @media block below. */
+@keyframes live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-live);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [style*="live-pulse"] {
+    animation: none !important;
+  }
+}
