@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@rm/convex/api";
 import type { FunctionReturnType } from "convex/server";
+import { EventCreatorDrawer } from "./EventCreatorDrawer";
 
 type EventRow = FunctionReturnType<typeof api.events.allUpcomingEvents>[number];
 type SourceFilter = "all" | "ticketmaster" | "axs" | "custom";
@@ -32,6 +33,7 @@ export function EventsClient() {
   const [source, setSource] = useState<SourceFilter>("all");
   const [hideNoRotation, setHideNoRotation] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<EventRow | null>(null);
+  const [creatorOpen, setCreatorOpen] = useState(false);
 
   const debouncedSearch = useDebounced(search, 200);
   const debouncedArtist = useDebounced(artistFilter, 150);
@@ -139,6 +141,18 @@ export function EventsClient() {
             >
               Export CSV
             </button>
+            <button
+              type="button"
+              onClick={() => setCreatorOpen(true)}
+              className="rounded-md px-3 py-1 text-xs font-semibold uppercase text-bg-base transition-colors hover:opacity-90"
+              style={{
+                background: "var(--accent-cta)",
+                letterSpacing: "0.04em",
+                fontFamily: "var(--font-mono)",
+              }}
+            >
+              + Add event
+            </button>
           </div>
         </div>
       </div>
@@ -162,6 +176,8 @@ export function EventsClient() {
       {selectedEvent !== null && (
         <EventDrawer event={selectedEvent} onClose={() => setSelectedEvent(null)} />
       )}
+
+      {creatorOpen && <EventCreatorDrawer onClose={() => setCreatorOpen(false)} />}
     </section>
   );
 }
