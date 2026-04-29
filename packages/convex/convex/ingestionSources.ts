@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 
 /**
@@ -225,6 +225,21 @@ export const disableById = internalMutation({
   args: { sourceId: v.id("ingestionSources") },
   handler: async (ctx, { sourceId }) => {
     await ctx.db.patch(sourceId, { enabled: false });
+  },
+});
+
+// TODO(security): callable by anyone with the Convex URL — same threat
+// profile as plays.recordPolledPlays. Add an admin-role + HMAC check
+// before partner stations onboard. Today the dashboard is allowlist-
+// gated to RM emails (apps/web/app/dashboard/layout.tsx) so this is
+// acceptable for shakedown.
+export const setEnabled = mutation({
+  args: {
+    sourceId: v.id("ingestionSources"),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, { sourceId, enabled }) => {
+    await ctx.db.patch(sourceId, { enabled });
   },
 });
 

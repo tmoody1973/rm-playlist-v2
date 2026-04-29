@@ -78,3 +78,32 @@ export const currentUser = query({
     };
   },
 });
+
+/**
+ * List all operators in an org. Powers the dashboard settings page's
+ * Operators table. Returns shaped rows sorted by createdAt ascending
+ * so the founding admin appears first.
+ */
+export const listForOrg = query({
+  args: { orgSlug: v.string() },
+  handler: async (ctx, { orgSlug }) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", orgSlug))
+      .first();
+    if (org === null) return [];
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_org", (q) => q.eq("orgId", org._id))
+      .collect();
+    return users
+      .map((u) => ({
+        _id: u._id,
+        email: u.email,
+        fullName: u.fullName ?? null,
+        role: u.role,
+        createdAt: u.createdAt,
+      }))
+      .sort((a, b) => a.createdAt - b.createdAt);
+  },
+});

@@ -29,15 +29,20 @@ import { getConvexUrl } from "./env";
  */
 
 // ---------------------------------------------------------------- //
-// Regions — hardcoded for shakedown; promotes to stationRegions table
-// in Step 5 when the operator UI lands.
+// Regions — read from stationRegions Convex table at runtime, with
+// hardcoded fallback when the table is empty.
 //
 // TM's radius search expands from a single point. To cover Milwaukee
 // metro + Madison + Chicago without a single 100mi sweep that grabs a
-// lot of irrelevant suburbs, we run three smaller-radius searches and
-// union via the (source, externalId) upsert. Same TM event id won't
-// double-insert if it shows up in two anchors (rare — usually only
-// happens on the regional spillover boundaries).
+// lot of irrelevant suburbs, we run multiple smaller-radius searches
+// and union via the (source, externalId) upsert. Same TM event id
+// won't double-insert if it shows up in two anchors (rare — usually
+// only happens on the regional spillover boundaries).
+//
+// Operators add / edit / disable regions via /dashboard/settings.
+// When that table is empty (clean install, regions were never
+// configured), the cron uses DEFAULT_ANCHORS so polling still works
+// out-of-the-box without a one-time seed step.
 // ---------------------------------------------------------------- //
 
 interface SearchAnchor {
@@ -47,7 +52,7 @@ interface SearchAnchor {
   readonly radiusMiles: number;
 }
 
-const SEARCH_ANCHORS: readonly SearchAnchor[] = [
+const DEFAULT_ANCHORS: readonly SearchAnchor[] = [
   // Downtown Milwaukee → covers the metro + Pabst Theater Group venues.
   { label: "Milwaukee", lat: 43.0389, long: -87.9065, radiusMiles: 50 },
   // Capitol Square Madison → covers Madison + Sun Prairie + Stoughton.
@@ -59,6 +64,45 @@ const SEARCH_ANCHORS: readonly SearchAnchor[] = [
   // station audience doesn't follow).
   { label: "Chicago", lat: 41.8781, long: -87.6298, radiusMiles: 40 },
 ];
+
+/**
+ * Fetch enabled regions from Convex. Filters to the `radius` kind
+ * since TM's Discovery API only takes lat/long/radius — the other
+ * kinds (`dma`, `venue_list`, `country`) are reserved for future
+ * adapters. Returns DEFAULT_ANCHORS when the table is empty so a
+ * fresh install polls correctly without a manual seed.
+ */
+async function loadAnchors(client: ConvexHttpClient): Promise<readonly SearchAnchor[]> {
+  type ConfiguredRegion = {
+    kind: "dma" | "radius" | "venue_list" | "country";
+    config: { lat?: number; long?: number; radiusMiles?: number };
+    label?: string;
+  };
+  const regions = (await client.query(api.stationRegions.listEnabledForOrg, {
+    orgSlug: ORG_SLUG,
+  })) as ConfiguredRegion[];
+
+  const radiusRegions = regions.filter(
+    (
+      r,
+    ): r is ConfiguredRegion & {
+      config: { lat: number; long: number; radiusMiles: number };
+    } =>
+      r.kind === "radius" &&
+      typeof r.config?.lat === "number" &&
+      typeof r.config?.long === "number" &&
+      typeof r.config?.radiusMiles === "number",
+  );
+
+  if (radiusRegions.length === 0) return DEFAULT_ANCHORS;
+
+  return radiusRegions.map((r, i) => ({
+    label: r.label ?? `Region ${i + 1}`,
+    lat: r.config.lat,
+    long: r.config.long,
+    radiusMiles: r.config.radiusMiles,
+  }));
+}
 
 /** Look 90 days into the future per poll. Matches the brainstorm spec
  *  and stays well under the 5000/day TM rate envelope even at this
@@ -298,7 +342,10 @@ function parseStartTime(event: TmEvent): number | null {
 // Fetch — paginate through TM until we run out of pages
 // ---------------------------------------------------------------- //
 
-async function fetchAllTmEvents(apiKey: string): Promise<TmEvent[]> {
+async function fetchAllTmEvents(
+  apiKey: string,
+  anchors: readonly SearchAnchor[],
+): Promise<TmEvent[]> {
   const now = new Date();
   const startDateTime = now.toISOString().slice(0, 19) + "Z";
   const horizon = new Date(now.getTime() + SEARCH_HORIZON_DAYS * 86_400_000);
@@ -308,7 +355,7 @@ async function fetchAllTmEvents(apiKey: string): Promise<TmEvent[]> {
   // by_external_id index on source+externalId) collapses any TM event
   // that shows up in two overlapping anchors — same TM id, single row.
   const allEvents: TmEvent[] = [];
-  for (const anchor of SEARCH_ANCHORS) {
+  for (const anchor of anchors) {
     const events = await fetchAnchorEvents(apiKey, anchor, startDateTime, endDateTime);
     logger.log(`[${anchor.label}] fetched ${events.length} events`);
     allEvents.push(...events);
@@ -419,10 +466,11 @@ export const pollTicketmaster = schedules.task({
       };
     }
 
-    const tmEvents = await fetchAllTmEvents(apiKey);
+    const anchors = await loadAnchors(client);
+    const tmEvents = await fetchAllTmEvents(apiKey, anchors);
     logger.log(
-      `Fetched ${tmEvents.length} TM events across ${SEARCH_ANCHORS.length} regions ` +
-        `(${SEARCH_ANCHORS.map((a) => a.label).join(", ")})`,
+      `Fetched ${tmEvents.length} TM events across ${anchors.length} regions ` +
+        `(${anchors.map((a) => a.label).join(", ")})`,
     );
 
     let skipped = 0;

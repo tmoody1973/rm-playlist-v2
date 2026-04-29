@@ -18,6 +18,7 @@ import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
+import type * as stationRegions from "../stationRegions.js";
 import type * as stations from "../stations.js";
 import type * as users from "../users.js";
 
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   preview: typeof preview;
   reports: typeof reports;
   seed: typeof seed;
+  stationRegions: typeof stationRegions;
   stations: typeof stations;
   users: typeof users;
 }>;
