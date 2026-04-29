@@ -79,6 +79,71 @@ export const recentProblems = query({
 });
 
 /**
+ * Recent ingestion events scoped to a single station. Powers the
+ * /dashboard/streams per-station drill-down. Includes ALL event kinds
+ * (poll_ok heartbeats + errors + enrichment events) by default — the
+ * stream-detail view wants the full activity tail so an operator can
+ * see "yes, polls are firing" alongside "but enrichment failed twice
+ * in the last hour." Caller can opt out of poll_ok via excludeHealthy
+ * if they want a problems-only feed.
+ */
+export const recentByStation = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+    limit: v.optional(v.number()),
+    excludeHealthy: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { stationSlug, limit, excludeHealthy }) => {
+    const take = Math.min(limit ?? 30, 100);
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) return [];
+
+    // Over-fetch slightly when excluding healthy; the by_station index
+    // returns chronological without filtering on `kind`.
+    const fetchMany = excludeHealthy === true ? Math.min(take * 4, 400) : take;
+
+    const events = await ctx.db
+      .query("ingestionEvents")
+      .withIndex("by_station", (q) => q.eq("stationId", station._id))
+      .order("desc")
+      .take(fetchMany);
+
+    const filtered =
+      excludeHealthy === true
+        ? events.filter((e) => e.kind !== "poll_ok" && e.kind !== "enrichment_ok")
+        : events;
+
+    return filtered.slice(0, take).map((ev) => {
+      const c = (ev.context ?? {}) as {
+        artistRaw?: string;
+        titleRaw?: string;
+        inserted?: number;
+        skipped?: number;
+        total?: number;
+      };
+      return {
+        _id: ev._id,
+        kind: ev.kind,
+        message: ev.message,
+        createdAt: ev.createdAt,
+        artistRaw: typeof c.artistRaw === "string" ? c.artistRaw : undefined,
+        titleRaw: typeof c.titleRaw === "string" ? c.titleRaw : undefined,
+        inserted: typeof c.inserted === "number" ? c.inserted : undefined,
+        skipped: typeof c.skipped === "number" ? c.skipped : undefined,
+      };
+    });
+  },
+});
+
+/**
  * Enrichment-error events in the last 24h, grouped by (station × reason ×
  * artist × title) so a repeating station-ID / DJ-tag / spot that can't be
  * resolved doesn't clutter the dashboard with 47 identical rows. Count
