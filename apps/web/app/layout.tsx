@@ -13,9 +13,40 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://playlistfm.app";
+const OG_IMAGE = `${SITE_URL}/api/og`;
+const TITLE = "PlaylistFM — what's playing now, where they're playing next";
+const DESCRIPTION =
+  "Real-time playlist data plus tour-date discovery for public radio. Powered by Radio Milwaukee. Embeddable on any partner station's site.";
+
 export const metadata: Metadata = {
-  title: "rm-playlist-v2",
-  description: "Radio Milwaukee playlist platform — operator dashboard and embeddable widgets",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "PlaylistFM",
+    type: "website",
+    images: [
+      {
+        // Live-generated OG via /api/og — pulls current Convex data,
+        // so every social-share unfurl shows whatever's spinning right
+        // now. Cached 60s edge-side; platforms cache for hours after.
+        url: OG_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: "PlaylistFM — now playing on Radio Milwaukee",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [OG_IMAGE],
+  },
 };
 
 export default function RootLayout({
