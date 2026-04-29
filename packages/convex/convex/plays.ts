@@ -524,14 +524,20 @@ export const searchByStation = query({
       .first();
     if (station === null) return [];
 
-    const take = Math.min(limit ?? 20, 100);
+    // Take cap raised 100 → 500 so a search that matches 50+ plays
+    // doesn't get artificially truncated to the page-size cap.
+    const take = Math.min(limit ?? 20, 500);
     const needle = q?.trim().toLowerCase() ?? "";
     const hasSubstring = needle.length > 0;
 
-    // Over-fetch budget — bigger when substring filter is in play because
-    // we don't know the match rate ahead of time.
+    // Over-fetch budget. When a substring filter is active, scan a much
+    // wider history window — the previous 500-candidate ceiling was
+    // roughly the last day for 88Nine and made the search feel broken
+    // ("I played that yesterday and it's not there"). 10000 covers
+    // ~17 days for an active station; users with deeper lookups should
+    // also enable the date-range filter to bound the index scan.
     const fetchMany = hasSubstring
-      ? Math.min(take * 5, 500)
+      ? Math.min(take * 5, 10_000)
       : Math.min(Math.ceil(take * 1.5) + 5, 200);
 
     const candidates = await ctx.db

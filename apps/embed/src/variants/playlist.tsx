@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import type { PublicPlay, WidgetConfig } from "../types";
 import { ListItem } from "../components/ListItem";
 import { GridItem } from "../components/GridItem";
+import { LiveEventRow } from "../components/LiveEventRow";
 import { StationBadge } from "../components/StationBadge";
 import { Skeleton } from "../components/Skeleton";
 import { useRecentPlays, useSearchPlays, useTopSongs } from "../use-current-play";
@@ -33,6 +34,13 @@ const PAGE_INCREMENT = 20;
 // cursor-paginated query.
 const PAGE_CEILING = 100;
 const SEARCH_DEBOUNCE_MS = 300;
+// When a search or date filter is active, ignore the user's page-size
+// cap and show many more matches. Searching across "the entire database"
+// is what users expect — limiting to 20 even when the server has hundreds
+// of matches makes the search feel broken. Server-side searchByStation
+// caps `take` at 500 and over-fetches up to 10000 candidates, so this
+// number meets the server budget without truncating.
+const SEARCH_LIMIT = 500;
 
 type TabId = "recent" | "top7" | "top30" | "about";
 
@@ -232,14 +240,22 @@ function RecentPane({ config }: { config: WidgetConfig }) {
     q: debouncedQ,
     afterMs,
     beforeMs,
-    limit,
+    // Search/filter mode uses its own larger limit so users see all
+    // matches across the recent history, not just the visible page.
+    limit: SEARCH_LIMIT,
     autoUpdate,
   });
   const plays = filtersActive ? searchPlays : recentPlays;
   const enablePreview = config.enablePreview !== false;
 
+  // Load More only relevant when no filter is active — search mode already
+  // returns up to SEARCH_LIMIT matches.
   const canLoadMore =
-    showLoadMore && plays !== undefined && plays.length === limit && limit < PAGE_CEILING;
+    !filtersActive &&
+    showLoadMore &&
+    plays !== undefined &&
+    plays.length === limit &&
+    limit < PAGE_CEILING;
   const onLoadMore = () => setLimit((prev) => Math.min(prev + PAGE_INCREMENT, PAGE_CEILING));
 
   return (
@@ -309,6 +325,10 @@ function PlaylistItems({
   enablePreview: boolean;
 }) {
   if (layout === "grid") {
+    // Grid mode: skip inline LIVE event rows. The amber wide card doesn't
+    // fit cleanly inside a grid cell, and "see them tonight" is naturally
+    // a list-mode affordance. Future enhancement: span the LIVE row across
+    // the full grid width with `gridColumn: "1 / -1"`.
     return (
       <ol
         style={{
@@ -326,6 +346,10 @@ function PlaylistItems({
       </ol>
     );
   }
+  // List mode: interleave LIVE event rows beneath any play whose artist
+  // has an upcoming non-duplicate, non-cancelled local event. The reverse-
+  // lookup runs server-side in plays.ts findLiveEventForArtist; here we
+  // just consume the resolved play.liveEvent slot.
   return (
     <ol
       style={{
@@ -336,9 +360,17 @@ function PlaylistItems({
         flexDirection: "column",
       }}
     >
-      {plays.map((play) => (
-        <ListItem key={play._id} play={play} enablePreview={enablePreview} />
-      ))}
+      {plays.flatMap((play) => {
+        const items = [<ListItem key={play._id} play={play} enablePreview={enablePreview} />];
+        if (play.liveEvent !== null) {
+          items.push(
+            <li key={`${play._id}-live`} style={{ listStyle: "none" }}>
+              <LiveEventRow liveEvent={play.liveEvent} />
+            </li>,
+          );
+        }
+        return items;
+      })}
     </ol>
   );
 }
