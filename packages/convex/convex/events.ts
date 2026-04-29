@@ -436,6 +436,104 @@ export const getOrgIdBySlug = query({
 });
 
 // ---------------------------------------------------------------- //
+// All-upcoming-events query (powers the /dashboard/events browse page)
+// ---------------------------------------------------------------- //
+
+/**
+ * Browse view of every upcoming event in the database. Used by the
+ * /dashboard/events page so operators can verify TM coverage, search
+ * by venue/title, scope to a region, etc — independent of whether
+ * the show's artist is in rotation.
+ *
+ * Cost: scans up to 2000 upcoming events via by_org_starts (sufficient
+ * for shakedown — three-region 90-day TM window typically returns
+ * ~850 events). Each visible event triggers a small eventArtists
+ * lookup for the headliner+support hydration.
+ */
+export const allUpcomingEvents = query({
+  args: {
+    orgSlug: v.string(),
+    /** Filter to events within N days of now. Default 90. */
+    horizonDays: v.optional(v.number()),
+    /** Cap on returned events. Default 200. */
+    limit: v.optional(v.number()),
+    /** Optional substring filter on event title or venue. */
+    search: v.optional(v.string()),
+    /** Filter to specific region by city substring (e.g. "Milwaukee", "Chicago"). */
+    region: v.optional(v.string()),
+    /** Filter to a specific source ("ticketmaster" | "axs" | "custom"). */
+    source: v.optional(SOURCE),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 200;
+    const horizonDays = args.horizonDays ?? 90;
+    const now = Date.now();
+    const horizonMs = now + horizonDays * 86_400_000;
+
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
+      .first();
+    if (org === null) return [];
+
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_org_starts", (q) => q.eq("orgId", org._id).gte("startsAt", now))
+      .take(2000);
+
+    const search = args.search?.trim().toLowerCase() ?? "";
+    const region = args.region?.trim().toLowerCase() ?? "";
+
+    const filtered: Doc<"events">[] = [];
+    for (const event of events) {
+      if (event.duplicateOf !== undefined) continue;
+      if (event.startsAt > horizonMs) continue;
+      if (event.status === "cancelled" || event.status === "postponed") continue;
+      if (args.source !== undefined && event.source !== args.source) continue;
+      if (region.length > 0 && !event.city.toLowerCase().includes(region)) continue;
+      if (search.length > 0) {
+        const title = (event.title ?? "").toLowerCase();
+        const venue = event.venueName.toLowerCase();
+        if (!title.includes(search) && !venue.includes(search)) continue;
+      }
+      filtered.push(event);
+    }
+
+    filtered.sort((a, b) => a.startsAt - b.startsAt);
+    const visible = filtered.slice(0, limit);
+
+    return Promise.all(
+      visible.map(async (event) => {
+        const artists = await ctx.db
+          .query("eventArtists")
+          .withIndex("by_event", (q) => q.eq("eventId", event._id))
+          .take(10);
+        const headliners = artists
+          .filter((a) => a.role === "headliner")
+          .map((a) => a.artistNameRaw);
+        const supports = artists.filter((a) => a.role === "support").map((a) => a.artistNameRaw);
+        return {
+          eventId: event._id,
+          title: event.title ?? null,
+          venueName: event.venueName,
+          city: event.city,
+          region: event.region,
+          startsAtMs: event.startsAt,
+          dateOnly: event.dateOnly === true,
+          ticketUrl: event.ticketUrl ?? null,
+          imageUrl: event.imageUrl ?? null,
+          genre: event.genre ?? null,
+          source: event.source,
+          status: event.status ?? null,
+          headliners,
+          supports,
+        };
+      }),
+    );
+  },
+});
+
+// ---------------------------------------------------------------- //
 // Upcoming-from-rotation query (powers the dashboard panel)
 // ---------------------------------------------------------------- //
 
