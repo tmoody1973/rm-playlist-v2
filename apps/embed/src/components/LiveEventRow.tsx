@@ -52,6 +52,21 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
         Live
       </span>
       <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0, flex: 1 }}>
+        {liveEvent.role === "support" && (
+          <span
+            style={{
+              fontSize: "12px",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              fontWeight: 600,
+              color: "var(--rmke-text-muted)",
+              fontFamily: "var(--rmke-font-mono)",
+              lineHeight: 1.3,
+            }}
+          >
+            {liveEvent.artistName} opens for
+          </span>
+        )}
         {liveEvent.title !== null && (
           <span
             style={{

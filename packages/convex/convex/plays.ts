@@ -332,7 +332,15 @@ export interface LiveEventSummary {
    * from the source with title omitted; widget falls back to "Live" + venue.
    */
   readonly title: string | null;
+  /** The matched performer's name (the artist whose play triggered this row). */
   readonly artistName: string;
+  /**
+   * Whether the matched artist is the headliner or a support act on this
+   * event. Drives the "X opens for Y" framing in the widget — without it,
+   * a listener who hears a Thundercat song and sees a "The Strokes" LIVE
+   * row has no way to connect the two.
+   */
+  readonly role: "headliner" | "support";
   readonly venue: string;
   readonly city: string;
   readonly startsAtMs: number;
@@ -401,7 +409,11 @@ async function findLiveEventForArtist(
   const now = Date.now();
   const events = await Promise.all(matchingArtists.map((row) => ctx.db.get(row.eventId)));
 
-  type Candidate = { event: Doc<"events">; matchedArtistName: string };
+  type Candidate = {
+    event: Doc<"events">;
+    matchedArtistName: string;
+    role: "headliner" | "support";
+  };
   const candidates: Candidate[] = [];
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
@@ -410,7 +422,11 @@ async function findLiveEventForArtist(
     if (event.duplicateOf !== undefined) continue;
     if (event.startsAt <= now) continue;
     if (event.status === "cancelled" || event.status === "postponed") continue;
-    candidates.push({ event, matchedArtistName: matchedArtist.artistNameRaw });
+    candidates.push({
+      event,
+      matchedArtistName: matchedArtist.artistNameRaw,
+      role: matchedArtist.role,
+    });
   }
   if (candidates.length === 0) return null;
 
@@ -420,6 +436,7 @@ async function findLiveEventForArtist(
     eventId: winner.event._id,
     title: winner.event.title ?? null,
     artistName: winner.matchedArtistName,
+    role: winner.role,
     venue: winner.event.venueName,
     city: winner.event.city,
     startsAtMs: winner.event.startsAt,

@@ -65,7 +65,12 @@ export interface LiveEventSummary {
   /** Show title as the source reported it. May be null when the source
    *  omitted it; UI falls back to "Live" + venue. */
   readonly title: string | null;
+  /** The matched performer's name. */
   readonly artistName: string;
+  /** Headliner vs support — drives the "X opens for Y" framing in
+   *  LiveEventRow so the listener understands the connection between
+   *  the song they just heard and the show being announced. */
+  readonly role: "headliner" | "support";
   readonly venue: string;
   readonly city: string;
   readonly startsAtMs: number;
