@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /**
@@ -180,7 +180,11 @@ function normalizeVenueName(name: string): string {
 // Mutation
 // ---------------------------------------------------------------- //
 
-export const upsertBatch = internalMutation({
+// TODO(security): currently callable by anyone with the Convex URL. Same
+// threat profile as plays.recordPolledPlays — add a shared-secret HMAC
+// check before partner stations go live. Internal mutation isn't an option
+// because Trigger.dev tasks call this via the external ConvexHttpClient.
+export const upsertBatch = mutation({
   args: {
     orgId: v.id("organizations"),
     source: SOURCE,
@@ -418,7 +422,9 @@ function hasIntersection<T>(a: Set<T>, b: Set<T>): boolean {
  * RM org id at the start of each run; multi-tenant activation will swap
  * this for a per-region or per-station listing.
  */
-export const getOrgIdBySlug = internalQuery({
+// Public so Trigger.dev tasks (poll-ticketmaster, future poll-axs) can call
+// it via ConvexHttpClient. Single-tenant lookup; safe to expose.
+export const getOrgIdBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, { slug }): Promise<Id<"organizations"> | null> => {
     const org = await ctx.db

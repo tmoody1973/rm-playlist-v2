@@ -1,22 +1,25 @@
 import { logger, schedules } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
-import { internal } from "../../packages/convex/convex/_generated/api.js";
+import { api } from "../../packages/convex/convex/_generated/api.js";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel.js";
 import { getConvexUrl } from "./env";
 
 /**
- * Poll Ticketmaster every 6 hours for upcoming Music events in the
- * Milwaukee region. Normalize each event into the source-agnostic shape
- * that `events.upsertBatch` accepts; the mutation handles upsert, artist
- * fanout, and cross-source dedup.
+ * Poll Ticketmaster every 6 hours for upcoming Music events across the
+ * three regions Radio Milwaukee's audience cares about: Milwaukee metro,
+ * Madison, and Chicago. Normalize each event into the source-agnostic
+ * shape that `events.upsertBatch` accepts; the mutation handles upsert,
+ * artist fanout, and cross-source dedup.
  *
  * Why 6 hours: events don't change that fast (announcements, on-sale
  * dates, occasional postponements). 6h is the right cadence for a
  * read-mostly source given TM's 5/req/s + 5000/day rate-limit envelope.
  *
- * Geo strategy: lat/long + 50-mile radius from downtown Milwaukee.
- * Easier to reason about than DMA codes, and matches the same shape
- * AXS uses (Step 6) so when the AXS adapter lands we're not maintaining
+ * Geo strategy: three lat/long anchors with bounded radii instead of one
+ * large sweep. Cleaner coverage of the actual scenes (Milwaukee + Pabst
+ * group, Madison metro, Chicago downtown + north shore) without
+ * grabbing rural Wisconsin or Aurora/Joliet. Same shape AXS uses
+ * (Step 6) so when the AXS adapter lands we're not maintaining
  * two different region models for shakedown.
  *
  * Once the dashboard custom-DJ-events UI lands (Step 5), this task will
@@ -26,17 +29,41 @@ import { getConvexUrl } from "./env";
  */
 
 // ---------------------------------------------------------------- //
-// Region — hardcoded for shakedown; promotes to stationRegions table
+// Regions — hardcoded for shakedown; promotes to stationRegions table
 // in Step 5 when the operator UI lands.
+//
+// TM's radius search expands from a single point. To cover Milwaukee
+// metro + Madison + Chicago without a single 100mi sweep that grabs a
+// lot of irrelevant suburbs, we run three smaller-radius searches and
+// union via the (source, externalId) upsert. Same TM event id won't
+// double-insert if it shows up in two anchors (rare — usually only
+// happens on the regional spillover boundaries).
 // ---------------------------------------------------------------- //
 
-const MILWAUKEE_LAT = 43.0389;
-const MILWAUKEE_LONG = -87.9065;
-const SEARCH_RADIUS_MILES = 50;
+interface SearchAnchor {
+  readonly label: string;
+  readonly lat: number;
+  readonly long: number;
+  readonly radiusMiles: number;
+}
+
+const SEARCH_ANCHORS: readonly SearchAnchor[] = [
+  // Downtown Milwaukee → covers the metro + Pabst Theater Group venues.
+  { label: "Milwaukee", lat: 43.0389, long: -87.9065, radiusMiles: 50 },
+  // Capitol Square Madison → covers Madison + Sun Prairie + Stoughton.
+  // Smaller radius (35mi) because Madison shows are usually downtown +
+  // immediate suburbs; 50 would start grabbing rural Wisconsin.
+  { label: "Madison", lat: 43.0731, long: -89.4012, radiusMiles: 35 },
+  // The Loop Chicago → covers downtown Chicago, north shore, near suburbs.
+  // 40mi radius keeps Aurora / Joliet / Gary out (different scenes the
+  // station audience doesn't follow).
+  { label: "Chicago", lat: 41.8781, long: -87.6298, radiusMiles: 40 },
+];
 
 /** Look 90 days into the future per poll. Matches the brainstorm spec
  *  and stays well under the 5000/day TM rate envelope even at this
- *  cadence (typical Milwaukee+50mi pulls back ≤300 events / 90 days). */
+ *  cadence (three anchors × ~3-5 paginated requests each = ≤15 req/cron;
+ *  4 crons/day = ~60 req/day, ceiling 5000). */
 const SEARCH_HORIZON_DAYS = 90;
 
 /** TM's classification id for "Music". Stable; not the human "Music"
@@ -256,6 +283,24 @@ async function fetchAllTmEvents(apiKey: string): Promise<TmEvent[]> {
   const horizon = new Date(now.getTime() + SEARCH_HORIZON_DAYS * 86_400_000);
   const endDateTime = horizon.toISOString().slice(0, 19) + "Z";
 
+  // Union all anchors. The events.upsertBatch dedup pass (composite
+  // by_external_id index on source+externalId) collapses any TM event
+  // that shows up in two overlapping anchors — same TM id, single row.
+  const allEvents: TmEvent[] = [];
+  for (const anchor of SEARCH_ANCHORS) {
+    const events = await fetchAnchorEvents(apiKey, anchor, startDateTime, endDateTime);
+    logger.log(`[${anchor.label}] fetched ${events.length} events`);
+    allEvents.push(...events);
+  }
+  return allEvents;
+}
+
+async function fetchAnchorEvents(
+  apiKey: string,
+  anchor: SearchAnchor,
+  startDateTime: string,
+  endDateTime: string,
+): Promise<TmEvent[]> {
   const events: TmEvent[] = [];
   // TM caps page-iteration at 1000 results regardless of totalElements
   // (the "deep paging" limit). Stop early if the cap hits.
@@ -266,8 +311,8 @@ async function fetchAllTmEvents(apiKey: string): Promise<TmEvent[]> {
     const params = new URLSearchParams({
       apikey: apiKey,
       classificationId: MUSIC_CLASSIFICATION_ID,
-      latlong: `${MILWAUKEE_LAT},${MILWAUKEE_LONG}`,
-      radius: String(SEARCH_RADIUS_MILES),
+      latlong: `${anchor.lat},${anchor.long}`,
+      radius: String(anchor.radiusMiles),
       unit: "miles",
       size: String(PAGE_SIZE),
       page: String(page),
@@ -279,7 +324,9 @@ async function fetchAllTmEvents(apiKey: string): Promise<TmEvent[]> {
     const response = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`);
 
     if (!response.ok) {
-      throw new Error(`Ticketmaster API ${response.status}: ${response.statusText}`);
+      throw new Error(
+        `Ticketmaster API ${response.status} for ${anchor.label}: ${response.statusText}`,
+      );
     }
 
     const data = (await response.json()) as TmResponse;
@@ -335,7 +382,7 @@ export const pollTicketmaster = schedules.task({
       };
     }
 
-    const orgId = await client.query(internal.events.getOrgIdBySlug, {
+    const orgId = await client.query(api.events.getOrgIdBySlug, {
       slug: ORG_SLUG,
     });
     if (orgId === null) {
@@ -352,7 +399,10 @@ export const pollTicketmaster = schedules.task({
     }
 
     const tmEvents = await fetchAllTmEvents(apiKey);
-    logger.log(`Fetched ${tmEvents.length} TM events for Milwaukee+${SEARCH_RADIUS_MILES}mi`);
+    logger.log(
+      `Fetched ${tmEvents.length} TM events across ${SEARCH_ANCHORS.length} regions ` +
+        `(${SEARCH_ANCHORS.map((a) => a.label).join(", ")})`,
+    );
 
     let skipped = 0;
     const normalized: NormalizedEvent[] = [];
@@ -378,7 +428,7 @@ export const pollTicketmaster = schedules.task({
       };
     }
 
-    const result = await client.mutation(internal.events.upsertBatch, {
+    const result = await client.mutation(api.events.upsertBatch, {
       orgId: orgId as Id<"organizations">,
       source: "ticketmaster",
       events: normalized,
