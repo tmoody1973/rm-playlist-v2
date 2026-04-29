@@ -283,30 +283,193 @@ export default defineSchema({
     .index("by_slug", ["slug"]),
 
   // ------------------------------------------------------------------
+  // Station regions — what geography each station cares about for events
+  // ------------------------------------------------------------------
+
+  /**
+   * Stations enable one or more regions for events ingestion. Different
+   * region kinds map to different upstream APIs:
+   *
+   *   - `dma`        Ticketmaster only. Cleanest match to TM's data model.
+   *                  config: { dmaId: number }  (e.g. 632 for Milwaukee).
+   *   - `radius`     TM and AXS both accept lat/long/radius. The portable
+   *                  fallback when DMA isn't a clean fit.
+   *                  config: { lat: number, long: number, radiusMiles: number }.
+   *   - `venue_list` AXS-specific. Explicit venueId allowlist for venue
+   *                  groups (Pabst Theater Group: Pabst, Riverside, Turner
+   *                  Hall, Vivarium, Back Room at Colectivo).
+   *                  config: { venueIds: number[] }.
+   *   - `country`    Either source. ISO alpha-2 country code filter.
+   *                  config: { cc: string }  (e.g. "US").
+   *
+   * Forward-compat: every row carries `orgId` even though RM is single-tenant
+   * during shakedown. Same pattern as every other table in this schema.
+   */
+  stationRegions: defineTable({
+    orgId: v.id("organizations"),
+    stationId: v.id("stations"),
+    kind: v.union(
+      v.literal("dma"),
+      v.literal("radius"),
+      v.literal("venue_list"),
+      v.literal("country"),
+    ),
+    /**
+     * Region-kind-specific config. Discriminated by `kind`. See the
+     * `eventRegionConfig` validators in events.ts for the typed shapes.
+     */
+    config: v.any(),
+    /** Optional human label for the operator UI, e.g. "Milwaukee metro". */
+    label: v.optional(v.string()),
+    /** Polling pulls only enabled regions. Lets the operator pause sources. */
+    enabled: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_station", ["stationId", "enabled"])
+    .index("by_org", ["orgId"]),
+
+  // ------------------------------------------------------------------
   // Events (Ticketmaster / AXS / custom DJ — Week 5 scope)
   // ------------------------------------------------------------------
 
+  /**
+   * Concert / show / event row. One per real-world event. Multi-source
+   * dedup means two rows can describe the same show — the lower-priority
+   * one carries `duplicateOf = winner._id` and is filtered from public
+   * queries. Priority order is hardcoded `axs > custom > ticketmaster`
+   * (see brainstorm § cross-source deduplication).
+   *
+   * Multi-artist events fan their headliners + supporting acts into the
+   * `eventArtists` join table — `events.artistId` does NOT exist here.
+   * The reverse-lookup query in plays.ts joins `eventArtists.artistKey`
+   * against the artistKey of the currently-playing track.
+   */
   events: defineTable({
     orgId: v.id("organizations"),
     source: v.union(v.literal("ticketmaster"), v.literal("axs"), v.literal("custom")),
-    externalId: v.optional(v.string()), // TM event id, AXS event id
-    artistId: v.optional(v.id("artists")),
-    /** Artist name as the event source reported it, before canonical resolution. */
-    artistNameRaw: v.string(),
+    /**
+     * Source's own event id. TM's event.id ("Z7r9jZ1A..."), AXS's eventId
+     * ("959"). NOT unique on its own — composite with `source` for upsert.
+     * Optional because custom DJ events have no upstream id.
+     */
+    externalId: v.optional(v.string()),
+    /** Plain-text title. AXS title.eventTitle is HTML; adapter strips tags. */
+    title: v.optional(v.string()),
+    /** AXS `title.presentedBy` — sponsorship line, omitted if null. */
+    presenterName: v.optional(v.string()),
+
+    // Venue
     venueName: v.string(),
+    /**
+     * Source's venue id (AXS venueId or TM venue id). Different sources
+     * have different namespaces, so this is paired with `source` for any
+     * cross-source venue match. Helpful for dedup similarity scoring.
+     */
+    venueExternalId: v.optional(v.string()),
     city: v.string(),
+    /** State/region code (e.g. "WI"). */
     region: v.string(),
-    /** Unix ms of the event start. */
+    /** ISO alpha-2 country code (e.g. "US"). */
+    country: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+
+    // Time
+    /** Unix ms of the event start (UTC). */
     startsAt: v.number(),
+    /**
+     * AXS `dateOnly` flag — true means the source has no specified time
+     * and `startsAt` is midnight as a placeholder. Display layer should
+     * show "Date TBD" or just the date without a time.
+     */
+    dateOnly: v.optional(v.boolean()),
+    /** Optional door-open time (AXS doorDateTime). */
+    doorsAt: v.optional(v.number()),
+    /** Optional ticket on-sale start time. */
+    onSaleAt: v.optional(v.number()),
+
+    // Tickets
     ticketUrl: v.optional(v.string()),
-    /** When a DJ created this event by hand. */
+    /**
+     * Normalized ticketing status across sources. AXS has 38+ statusIds;
+     * TM has its own enum; we collapse to a small public-facing set.
+     * Public widget queries filter out `cancelled` and `postponed`.
+     */
+    status: v.optional(
+      v.union(
+        v.literal("buyTickets"),
+        v.literal("soldOut"),
+        v.literal("cancelled"),
+        v.literal("postponed"),
+        v.literal("rescheduled"),
+        v.literal("venueChange"),
+        v.literal("free"),
+        v.literal("private"),
+        v.literal("other"),
+      ),
+    ),
+
+    // Media
+    /** Single canonical image URL. AXS uses relatedMedia hierarchy. */
+    imageUrl: v.optional(v.string()),
+
+    // Genre (free-text label, not enum — AXS minorCategory varies)
+    genre: v.optional(v.string()),
+
+    // Cross-source dedup
+    /**
+     * Set when this row has been superseded by a higher-priority source's
+     * row for the same real-world show (same venue + same date ±2h +
+     * overlapping headliner artistKey). Public queries filter
+     * `duplicateOf === undefined`. Lower-priority kept for audit / source
+     * attribution.
+     */
+    duplicateOf: v.optional(v.id("events")),
+
+    // Custom DJ events
+    /** Set when a DJ created this event by hand via the dashboard. */
     createdBy: v.optional(v.id("users")),
+    /**
+     * `true` for source=axs|ticketmaster (these are authoritative),
+     * defaults to `true` for source=custom. Reserved for a future
+     * moderation flow.
+     */
     verified: v.boolean(),
     createdAt: v.number(),
   })
     .index("by_starts_at", ["startsAt"])
-    .index("by_artist", ["artistId"])
-    .index("by_external_id", ["externalId"]),
+    .index("by_external_id", ["source", "externalId"])
+    .index("by_org_starts", ["orgId", "startsAt"]),
+
+  // ------------------------------------------------------------------
+  // Event artists — the join from event → 1..N performers
+  // ------------------------------------------------------------------
+
+  /**
+   * One row per performer per event. Headliners and supporting acts. The
+   * reverse-lookup from "what's playing" to "see them tonight" pivots on
+   * the `artistKey` index here — that's the join column shared with
+   * `plays`'s normalized artist name.
+   *
+   * `artistKey` normalization is the canonical lowercase-strip-articles-
+   * strip-non-alnum form. Identical for plays + events so "The Beatles"
+   * (TM) matches "Beatles" (RM rotation log) on join.
+   */
+  eventArtists: defineTable({
+    eventId: v.id("events"),
+    /** Resolved canonical artist row. Optional until enrichment lands. */
+    artistId: v.optional(v.id("artists")),
+    /** Performer name as the source reported it. */
+    artistNameRaw: v.string(),
+    /** Normalized join key. Identical normalization as `plays`. */
+    artistKey: v.string(),
+    role: v.union(v.literal("headliner"), v.literal("support")),
+    /** AXS performerId or TM attraction id, for future enrichment lookups. */
+    externalPerformerId: v.optional(v.string()),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_artist_key", ["artistKey"])
+    .index("by_artist", ["artistId"]),
 
   // ------------------------------------------------------------------
   // Touring from rotation (cached derived table — Week 6 perf decision)
