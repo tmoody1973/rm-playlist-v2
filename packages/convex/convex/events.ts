@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /**
@@ -408,3 +408,23 @@ function hasIntersection<T>(a: Set<T>, b: Set<T>): boolean {
   }
   return false;
 }
+
+// ---------------------------------------------------------------- //
+// Helper queries (called by Trigger.dev tasks)
+// ---------------------------------------------------------------- //
+
+/**
+ * Single-tenant org lookup. Trigger.dev tasks call this to resolve the
+ * RM org id at the start of each run; multi-tenant activation will swap
+ * this for a per-region or per-station listing.
+ */
+export const getOrgIdBySlug = internalQuery({
+  args: { slug: v.string() },
+  handler: async (ctx, { slug }): Promise<Id<"organizations"> | null> => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    return org?._id ?? null;
+  },
+});
