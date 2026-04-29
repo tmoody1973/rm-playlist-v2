@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
 /**
@@ -502,6 +502,12 @@ export const allUpcomingEvents = query({
     filtered.sort((a, b) => a.startsAt - b.startsAt);
     const visible = filtered.slice(0, limit);
 
+    // Compute rotation-artistKeys once for all events so the per-event
+    // hasRotationMatch flag is cheap. Same lookback (30d) as the
+    // Upcoming-from-Rotation panel — a single shared notion of
+    // "currently in rotation."
+    const rotationArtistKeys = await loadRotationArtistKeys(ctx, org._id);
+
     return Promise.all(
       visible.map(async (event) => {
         const artists = await ctx.db
@@ -512,6 +518,7 @@ export const allUpcomingEvents = query({
           .filter((a) => a.role === "headliner")
           .map((a) => a.artistNameRaw);
         const supports = artists.filter((a) => a.role === "support").map((a) => a.artistNameRaw);
+        const hasRotationMatch = artists.some((a) => rotationArtistKeys.has(a.artistKey));
         return {
           eventId: event._id,
           title: event.title ?? null,
@@ -527,11 +534,39 @@ export const allUpcomingEvents = query({
           status: event.status ?? null,
           headliners,
           supports,
+          /** True if any of the event's artists has been played in the
+           *  last 30d. Powers the dashboard's "hide events with 0 rotation
+           *  matches" toggle. */
+          hasRotationMatch,
         };
       }),
     );
   },
 });
+
+/**
+ * Snapshot of artistKeys currently in rotation (last 30d of plays).
+ * Computed once per allUpcomingEvents call so the per-event match
+ * check is O(1) lookup against a Set.
+ */
+async function loadRotationArtistKeys(
+  ctx: QueryCtx,
+  orgId: Id<"organizations">,
+): Promise<Set<string>> {
+  const lookbackMs = Date.now() - 30 * 86_400_000;
+  const recentPlays = await ctx.db
+    .query("plays")
+    .withIndex("by_org_played_at", (q) => q.eq("orgId", orgId).gte("playedAt", lookbackMs))
+    .take(16_000);
+  const keys = new Set<string>();
+  for (const play of recentPlays) {
+    if (play.deletedAt !== undefined) continue;
+    if (play.enrichmentStatus === "ignored") continue;
+    const key = normalizeEventArtistKey(play.artistRaw);
+    if (key.length > 0) keys.add(key);
+  }
+  return keys;
+}
 
 // ---------------------------------------------------------------- //
 // Upcoming-from-rotation query (powers the dashboard panel)
