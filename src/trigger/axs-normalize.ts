@@ -220,3 +220,112 @@ export function pickBestImage(
   const widest = [...entries].sort((a, b) => Number(b.width) - Number(a.width))[0];
   return widest?.file_name;
 }
+
+// ---- Event normalization ---- //
+
+/** AXS sends "United States"; the events pipeline expects ISO-style
+ *  codes to match Ticketmaster. Extend this map if other countries
+ *  appear. */
+const COUNTRY_CODE_BY_NAME: Record<string, string> = {
+  "United States": "US",
+  Canada: "CA",
+};
+
+function normalizeCountry(country: string | undefined): string | undefined {
+  if (!country) return undefined;
+  return COUNTRY_CODE_BY_NAME[country] ?? country;
+}
+
+/** AXS eventDateTimeUTC has no trailing "Z"; parse it as UTC explicitly.
+ *  Returns null when the value is missing or unparseable. */
+function parseAxsUtc(value: string | undefined): number | null {
+  if (!value) return null;
+  const withZone = value.endsWith("Z") ? value : `${value}Z`;
+  const ms = Date.parse(withZone);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** Resolve the display title: prefer the plain `eventTitleText`, fall
+ *  back to HTML-stripped `eventTitle`. */
+function resolveTitle(title: AxsTitle | undefined): string | undefined {
+  if (!title) return undefined;
+  if (title.eventTitleText && title.eventTitleText.trim().length > 0) {
+    return title.eventTitleText.trim();
+  }
+  if (title.eventTitle) {
+    const stripped = stripHtml(title.eventTitle);
+    return stripped.length > 0 ? stripped : undefined;
+  }
+  return undefined;
+}
+
+/** Map AXS performer arrays to NormalizedArtist[], dropping entries with
+ *  no name. Headliners first, then supporting acts. */
+function resolveArtists(associations: AxsEvent["associations"]): NormalizedArtist[] {
+  const headliners = (associations?.headliners ?? [])
+    .filter(
+      (p): p is AxsPerformer & { name: string } =>
+        typeof p.name === "string" && p.name.length > 0,
+    )
+    .map((p) => ({
+      artistNameRaw: p.name,
+      role: "headliner" as const,
+      externalPerformerId: p.performerId,
+    }));
+  const support = (associations?.supportingActs ?? [])
+    .filter(
+      (p): p is AxsPerformer & { name: string } =>
+        typeof p.name === "string" && p.name.length > 0,
+    )
+    .map((p) => ({
+      artistNameRaw: p.name,
+      role: "support" as const,
+      externalPerformerId: p.performerId,
+    }));
+  return [...headliners, ...support];
+}
+
+/**
+ * Normalize one AXS event into the shape `events.upsertBatch` accepts.
+ * Returns null — and the caller increments a skip count — when the event
+ * lacks a parseable start time, a venue name, or any named artist. These
+ * mirror the skip rules in poll-ticketmaster.ts's normalizeTmEvent.
+ */
+export function normalizeAxsEvent(event: AxsEvent): NormalizedEvent | null {
+  const startsAt = parseAxsUtc(event.eventDateTimeUTC);
+  if (startsAt === null) return null;
+
+  const venueName = event.venue?.title;
+  if (!venueName) return null;
+
+  const artists = resolveArtists(event.associations);
+  if (artists.length === 0) return null;
+
+  if (!event.eventId) return null;
+
+  const ticketUrlRaw = event.ticketing?.url ?? event.ticketing?.eventUrl;
+  const lat = event.venue?.latitude ? parseFloat(event.venue.latitude) : undefined;
+  const long = event.venue?.longitude ? parseFloat(event.venue.longitude) : undefined;
+  const onSaleAt = parseAxsUtc(event.onsaleDateTimeUTC);
+
+  return {
+    externalId: event.eventId,
+    title: resolveTitle(event.title),
+    presenterName: event.title?.presentedBy ?? undefined,
+    venueName,
+    venueExternalId: event.venue?.venueId,
+    city: event.venue?.city ?? "",
+    region: event.venue?.state ?? "",
+    country: normalizeCountry(event.venue?.country),
+    latitude: lat !== undefined && !Number.isNaN(lat) ? lat : undefined,
+    longitude: long !== undefined && !Number.isNaN(long) ? long : undefined,
+    startsAt,
+    dateOnly: event.dateOnly === true ? true : undefined,
+    onSaleAt: onSaleAt ?? undefined,
+    ticketUrl: ticketUrlRaw ? appendTrackingCode(ticketUrlRaw) : undefined,
+    status: mapAxsStatus(event.ticketing?.statusId),
+    imageUrl: pickBestImage(event.relatedMedia),
+    genre: mapGenre(event.minorCategoryId1),
+    artists,
+  };
+}

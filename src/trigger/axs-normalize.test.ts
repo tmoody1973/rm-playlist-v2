@@ -1,11 +1,12 @@
 import { test, expect } from "bun:test";
-import type { AxsResponse } from "./axs-normalize";
+import type { AxsResponse, AxsEvent } from "./axs-normalize";
 import {
   stripHtml,
   appendTrackingCode,
   mapAxsStatus,
   mapGenre,
   pickBestImage,
+  normalizeAxsEvent,
 } from "./axs-normalize";
 import fixture from "./fixtures/axs-sample-event.json";
 
@@ -108,4 +109,93 @@ test("pickBestImage falls back to the widest available image", () => {
 test("pickBestImage returns undefined for empty or missing media", () => {
   expect(pickBestImage({})).toBeUndefined();
   expect(pickBestImage(undefined)).toBeUndefined();
+});
+
+test("normalizeAxsEvent maps the fixture event end to end", () => {
+  const axsEvent = (fixture as AxsResponse).events![0]!;
+  const result = normalizeAxsEvent(axsEvent);
+  expect(result).not.toBeNull();
+  expect(result!.externalId).toBe("959");
+  expect(result!.title).toBe("Phoebe Bridgers");
+  expect(result!.presenterName).toBe("Radio Milwaukee");
+  expect(result!.venueName).toBe("Pabst Theater");
+  expect(result!.venueExternalId).toBe("55001");
+  expect(result!.city).toBe("Milwaukee");
+  expect(result!.region).toBe("WI");
+  expect(result!.country).toBe("US");
+  expect(result!.latitude).toBeCloseTo(43.0415);
+  expect(result!.longitude).toBeCloseTo(-87.9104);
+  expect(result!.startsAt).toBe(Date.parse("2026-08-20T01:00:00Z"));
+  expect(result!.dateOnly).toBeUndefined();
+  expect(result!.onSaleAt).toBe(Date.parse("2026-05-01T15:00:00Z"));
+  expect(result!.status).toBe("buyTickets");
+  expect(result!.genre).toBe("Indie/Emo");
+  expect(result!.imageUrl).toBe("https://images.discovery-prod.axs.com/primary-678.jpg");
+  expect(result!.ticketUrl).toBe(
+    "http://www.axs.com/events/123/phoebe-bridgers-tickets?cid=usaffradiomilwaukee",
+  );
+});
+
+test("normalizeAxsEvent maps headliners and supporting acts with roles", () => {
+  const axsEvent = (fixture as AxsResponse).events![0]!;
+  const result = normalizeAxsEvent(axsEvent)!;
+  expect(result.artists).toEqual([
+    { artistNameRaw: "Phoebe Bridgers", role: "headliner", externalPerformerId: "117030" },
+    { artistNameRaw: "Christian Lee Hutson", role: "support", externalPerformerId: "117031" },
+  ]);
+});
+
+test("normalizeAxsEvent uses stripHtml fallback when eventTitleText is absent", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    title: { eventTitle: '<a href="http://x">The Band</a>' },
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    ticketing: { statusId: 1, url: "http://x.com/t" },
+    venue: { title: "Turner Hall", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9", name: "The Band" }] },
+  };
+  expect(normalizeAxsEvent(axsEvent)!.title).toBe("The Band");
+});
+
+test("normalizeAxsEvent returns null when the start time is unparseable", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    eventDateTimeUTC: "not-a-date",
+    venue: { title: "Pabst Theater", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9", name: "X" }] },
+  };
+  expect(normalizeAxsEvent(axsEvent)).toBeNull();
+});
+
+test("normalizeAxsEvent returns null when there is no venue title", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    venue: { city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9", name: "X" }] },
+  };
+  expect(normalizeAxsEvent(axsEvent)).toBeNull();
+});
+
+test("normalizeAxsEvent returns null when there are no named artists", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    venue: { title: "Pabst Theater", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9" }], supportingActs: [] },
+  };
+  expect(normalizeAxsEvent(axsEvent)).toBeNull();
+});
+
+test("normalizeAxsEvent passes dateOnly through when true", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    title: { eventTitleText: "X" },
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    dateOnly: true,
+    ticketing: { statusId: 1, url: "http://x.com/t" },
+    venue: { title: "Pabst Theater", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9", name: "X" }] },
+  };
+  expect(normalizeAxsEvent(axsEvent)!.dateOnly).toBe(true);
 });
