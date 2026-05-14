@@ -119,6 +119,19 @@ const PAGE_SIZE = 200;
 
 const ORG_SLUG = "radiomilwaukee";
 
+/**
+ * Max events per `upsertBatch` mutation call. Convex caps reads at 4096 per
+ * function execution; `upsertBatch`'s per-event dedup pass does an unbounded
+ * `.collect()` over a ±2.5h window of the events table, so a whole-poll batch
+ * (752 events as of 2026-05-14) ran ~20k reads and hit that ceiling.
+ *
+ * Sized against live data: ±2.5h window density averages ~11 events, peaks at
+ * 34. At chunk=25 the worst-case run is ~1.2k reads — roughly a 3x margin
+ * under 4096. That margin shrinks as the events table grows denser (more
+ * regions, the AXS source landing); revisit this if a poll errors again.
+ */
+const UPSERT_CHUNK_SIZE = 25;
+
 // ---------------------------------------------------------------- //
 // Types — what TM Discovery API actually returns (not exhaustive)
 // ---------------------------------------------------------------- //
@@ -414,6 +427,15 @@ async function fetchAnchorEvents(
   return events;
 }
 
+/** Split an array into fixed-size chunks (the last chunk may be smaller). */
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 // ---------------------------------------------------------------- //
 // Trigger.dev scheduled task
 // ---------------------------------------------------------------- //
@@ -497,11 +519,21 @@ export const pollTicketmaster = schedules.task({
       };
     }
 
-    const result = await client.mutation(api.events.upsertBatch, {
-      orgId: orgId as Id<"organizations">,
-      source: "ticketmaster",
-      events: normalized,
-    });
+    // Chunked to stay under Convex's 4096-reads-per-mutation limit — see UPSERT_CHUNK_SIZE.
+    let result = { inserted: 0, updated: 0, dedupedNew: 0, dedupedExisting: 0 };
+    for (const eventChunk of chunk(normalized, UPSERT_CHUNK_SIZE)) {
+      const chunkResult = await client.mutation(api.events.upsertBatch, {
+        orgId: orgId as Id<"organizations">,
+        source: "ticketmaster",
+        events: eventChunk,
+      });
+      result = {
+        inserted: result.inserted + chunkResult.inserted,
+        updated: result.updated + chunkResult.updated,
+        dedupedNew: result.dedupedNew + chunkResult.dedupedNew,
+        dedupedExisting: result.dedupedExisting + chunkResult.dedupedExisting,
+      };
+    }
 
     logger.log(
       `Upserted: inserted=${result.inserted} updated=${result.updated} ` +
