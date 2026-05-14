@@ -69,4 +69,4 @@ jobs:
             echo "::error::TRIGGER_ACCESS_TOKEN secret is not set. Generate a Personal Access Token from the Trigger.dev dashboard (Profile → Personal Access Tokens) and add it to repo secrets, then re-run."
             exit 1
           fi
-          bunx trigger.dev@latest deploy
+          bunx trigger.dev@4.4.4 deploy
