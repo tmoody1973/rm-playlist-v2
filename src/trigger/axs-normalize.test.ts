@@ -208,3 +208,39 @@ test("normalizeAxsEvent passes dateOnly through when true", () => {
   };
   expect(normalizeAxsEvent(axsEvent)!.dateOnly).toBe(true);
 });
+
+// Real-data shape: a live AXS smoke test showed ~20% of events leave
+// associations.headliners empty, with the headliner name only in
+// title.headlinersText. The two tests below are built from real events
+// in that response (TRIUMPH and Built to Spill).
+test("normalizeAxsEvent falls back to title.headlinersText when associations.headliners is empty", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1249313",
+    title: { headlinersText: "TRIUMPH", supportingText: "April Wine", eventTitleText: "TRIUMPH" },
+    eventDateTimeUTC: "2026-05-15T01:00:00",
+    ticketing: { statusId: 1, url: "https://www.axs.com/events/1249313/triumph-tickets" },
+    venue: { title: "Miller High Life Theatre", city: "Milwaukee", state: "WI" },
+    associations: {
+      headliners: [],
+      supportingActs: [{ performerId: "250654", name: "April Wine" }],
+    },
+  };
+  expect(normalizeAxsEvent(axsEvent)!.artists).toEqual([
+    { artistNameRaw: "TRIUMPH", role: "headliner" },
+    { artistNameRaw: "April Wine", role: "support", externalPerformerId: "250654" },
+  ]);
+});
+
+test("normalizeAxsEvent keeps an event when both associations arrays are empty but title.headlinersText is set", () => {
+  const axsEvent: AxsEvent = {
+    eventId: "1",
+    title: { headlinersText: "Built to Spill", eventTitleText: "Built to Spill" },
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    ticketing: { statusId: 1, url: "http://x.com/t" },
+    venue: { title: "Pabst Theater", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [], supportingActs: [] },
+  };
+  const result = normalizeAxsEvent(axsEvent);
+  expect(result).not.toBeNull();
+  expect(result!.artists).toEqual([{ artistNameRaw: "Built to Spill", role: "headliner" }]);
+});

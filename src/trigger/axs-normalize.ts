@@ -34,6 +34,8 @@ export interface AxsTitle {
   readonly presentedBy?: string | null;
   readonly eventTitle?: string | null;
   readonly eventTitleText?: string | null;
+  readonly headlinersText?: string | null;
+  readonly supportingText?: string | null;
 }
 
 export interface AxsTicketing {
@@ -265,28 +267,52 @@ function resolveTitle(title: AxsTitle | undefined): string | undefined {
   return undefined;
 }
 
-/** Map AXS performer arrays to NormalizedArtist[], dropping entries with
- *  no name. Headliners first, then supporting acts. */
-function resolveArtists(associations: AxsEvent["associations"]): NormalizedArtist[] {
-  const headliners = (associations?.headliners ?? [])
+/** Map an AXS performer array to NormalizedArtist[], dropping entries
+ *  with no name. */
+function mapPerformers(
+  performers: AxsPerformer[] | undefined,
+  role: "headliner" | "support",
+): NormalizedArtist[] {
+  return (performers ?? [])
     .filter(
       (p): p is AxsPerformer & { name: string } => typeof p.name === "string" && p.name.length > 0,
     )
     .map((p) => ({
       artistNameRaw: p.name,
-      role: "headliner" as const,
+      role,
       externalPerformerId: p.performerId,
     }));
-  const support = (associations?.supportingActs ?? [])
-    .filter(
-      (p): p is AxsPerformer & { name: string } => typeof p.name === "string" && p.name.length > 0,
-    )
-    .map((p) => ({
-      artistNameRaw: p.name,
-      role: "support" as const,
-      externalPerformerId: p.performerId,
-    }));
-  return [...headliners, ...support];
+}
+
+/** When an `associations` array is empty, AXS still carries the name in
+ *  `title.headlinersText` / `title.supportingText`. Use it as a single
+ *  artist with no performer id. */
+function titleFallback(
+  text: string | null | undefined,
+  role: "headliner" | "support",
+): NormalizedArtist[] {
+  const name = text?.trim();
+  if (!name) return [];
+  return [{ artistNameRaw: name, role }];
+}
+
+/** Resolve the event's artists. AXS does not always populate
+ *  `associations.headliners` / `supportingActs` — ~20% of real events
+ *  leave them empty with the names only in `title.*Text`. When an
+ *  associations array is empty we fall back to the title's plain-text
+ *  field so the headliner is never lost (and an event with a headliner
+ *  isn't wrongly dropped by the no-artists skip rule). Headliners first,
+ *  then supporting acts. */
+function resolveArtists(event: AxsEvent): NormalizedArtist[] {
+  const headliners = mapPerformers(event.associations?.headliners, "headliner");
+  const support = mapPerformers(event.associations?.supportingActs, "support");
+
+  const resolvedHeadliners =
+    headliners.length > 0 ? headliners : titleFallback(event.title?.headlinersText, "headliner");
+  const resolvedSupport =
+    support.length > 0 ? support : titleFallback(event.title?.supportingText, "support");
+
+  return [...resolvedHeadliners, ...resolvedSupport];
 }
 
 /**
@@ -306,7 +332,7 @@ export function normalizeAxsEvent(event: AxsEvent): NormalizedEvent | null {
   const venueName = event.venue?.title;
   if (!venueName) return null;
 
-  const artists = resolveArtists(event.associations);
+  const artists = resolveArtists(event);
   if (artists.length === 0) return null;
 
   const ticketUrlRaw = event.ticketing?.url ?? event.ticketing?.eventUrl;
