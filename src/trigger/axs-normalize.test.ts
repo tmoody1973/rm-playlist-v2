@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { AxsResponse } from "./axs-normalize";
-import { stripHtml } from "./axs-normalize";
+import { stripHtml, appendTrackingCode } from "./axs-normalize";
 import fixture from "./fixtures/axs-sample-event.json";
 
 test("fixture parses as an AXS response with one event", () => {
@@ -20,4 +20,22 @@ test("stripHtml collapses whitespace and trims", () => {
 
 test("stripHtml returns empty string for empty input", () => {
   expect(stripHtml("")).toBe("");
+});
+
+test("appendTrackingCode uses ? when the URL has no query string", () => {
+  expect(appendTrackingCode("http://www.axs.com/events/123")).toBe(
+    "http://www.axs.com/events/123?cid=usaffradiomilwaukee",
+  );
+});
+
+test("appendTrackingCode uses & when the URL already has a query string", () => {
+  expect(appendTrackingCode("http://www.axs.com/events/123?ref=x")).toBe(
+    "http://www.axs.com/events/123?ref=x&cid=usaffradiomilwaukee",
+  );
+});
+
+test("appendTrackingCode is a no-op when the code is already present", () => {
+  expect(appendTrackingCode("http://www.axs.com/e?cid=usaffradiomilwaukee")).toBe(
+    "http://www.axs.com/e?cid=usaffradiomilwaukee",
+  );
 });

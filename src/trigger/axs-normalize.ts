@@ -119,3 +119,14 @@ export function stripHtml(html: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/**
+ * Append the Radio Milwaukee affiliate tracking code to an AXS ticket
+ * URL. Picks `?` or `&` based on whether the URL already has a query
+ * string. No-op if the code is already present.
+ */
+export function appendTrackingCode(url: string): string {
+  if (url.includes(TRACKING_CODE)) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}${TRACKING_CODE}`;
+}
