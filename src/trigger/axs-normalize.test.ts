@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import type { AxsResponse } from "./axs-normalize";
-import { stripHtml, appendTrackingCode, mapAxsStatus } from "./axs-normalize";
+import { stripHtml, appendTrackingCode, mapAxsStatus, mapGenre } from "./axs-normalize";
 import fixture from "./fixtures/axs-sample-event.json";
 
 test("fixture parses as an AXS response with one event", () => {
@@ -67,4 +67,18 @@ test("mapAxsStatus falls back to other for unknown or unmapped ids", () => {
   expect(mapAxsStatus(36)).toBe("other");
   expect(mapAxsStatus(999)).toBe("other");
   expect(mapAxsStatus(undefined)).toBe("other");
+});
+
+test("mapGenre maps known music minorCategory ids to labels", () => {
+  expect(mapGenre("12")).toBe("Rock");
+  expect(mapGenre("25")).toBe("Pop");
+  expect(mapGenre("20")).toBe("Hip Hop/Rap");
+  expect(mapGenre("23")).toBe("Jazz/Blues");
+  expect(mapGenre("21")).toBe("Indie/Emo");
+});
+
+test("mapGenre returns undefined for unknown or missing ids", () => {
+  expect(mapGenre("99999")).toBeUndefined();
+  expect(mapGenre(undefined)).toBeUndefined();
+  expect(mapGenre("")).toBeUndefined();
 });

@@ -162,3 +162,38 @@ export function mapAxsStatus(statusId: number | undefined): EventStatus {
   if (statusId === undefined) return "other";
   return AXS_STATUS_BY_ID[statusId] ?? "other";
 }
+
+/**
+ * AXS `minorCategoryId1` → human genre label, from AXS doc Appendix 2
+ * (Music minor categories). Returns undefined for unknown ids — genre is
+ * an optional, display-only field.
+ */
+const AXS_GENRE_BY_ID: Record<string, string> = {
+  "10": "Alternative/Punk",
+  "11": "Christian",
+  "12": "Rock",
+  "13": "Classical",
+  "15": "Country",
+  "16": "International",
+  "17": "Dance/Electronic",
+  "18": "Festivals",
+  "19": "Folk/Acoustic",
+  "20": "Hip Hop/Rap",
+  "21": "Indie/Emo",
+  "22": "Hard Rock/Metal",
+  "23": "Jazz/Blues",
+  "24": "Latin",
+  "25": "Pop",
+  "26": "R&B",
+  "27": "Reggae",
+  "28": "Other",
+  "49": "Kpop",
+  "51": "Award Shows",
+  "53": "Soundtrack",
+  "54": "Bollywood/Desi",
+};
+
+export function mapGenre(minorCategoryId: string | undefined): string | undefined {
+  if (!minorCategoryId) return undefined;
+  return AXS_GENRE_BY_ID[minorCategoryId];
+}
