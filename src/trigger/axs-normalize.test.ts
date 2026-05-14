@@ -177,6 +177,15 @@ test("normalizeAxsEvent returns null when there is no venue title", () => {
   expect(normalizeAxsEvent(axsEvent)).toBeNull();
 });
 
+test("normalizeAxsEvent returns null when eventId is missing", () => {
+  const axsEvent: AxsEvent = {
+    eventDateTimeUTC: "2026-09-01T00:00:00",
+    venue: { title: "Pabst Theater", city: "Milwaukee", state: "WI" },
+    associations: { headliners: [{ performerId: "9", name: "X" }] },
+  };
+  expect(normalizeAxsEvent(axsEvent)).toBeNull();
+});
+
 test("normalizeAxsEvent returns null when there are no named artists", () => {
   const axsEvent: AxsEvent = {
     eventId: "1",

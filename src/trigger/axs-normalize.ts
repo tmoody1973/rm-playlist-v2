@@ -63,6 +63,12 @@ export interface AxsResponse {
 }
 
 // ---- Normalized output types (match events.ts NORMALIZED_EVENT) ---- //
+//
+// This is a subset of the authoritative NormalizedEvent in
+// packages/convex/convex/events.ts — every field here is accepted by
+// events.upsertBatch. `doorsAt` is intentionally omitted: AXS only
+// provides a venue-local doorDateTime with no UTC variant, so deriving
+// it reliably needs timezone math (see the design doc's "Out of scope").
 
 export type EventStatus =
   | "buyTickets"
@@ -292,6 +298,10 @@ function resolveArtists(associations: AxsEvent["associations"]): NormalizedArtis
  * mirror the skip rules in poll-ticketmaster.ts's normalizeTmEvent.
  */
 export function normalizeAxsEvent(event: AxsEvent): NormalizedEvent | null {
+  // eventId is the upsert dedup key — without it the event is unstoreable,
+  // so check it before doing any other work.
+  if (!event.eventId) return null;
+
   const startsAt = parseAxsUtc(event.eventDateTimeUTC);
   if (startsAt === null) return null;
 
@@ -300,8 +310,6 @@ export function normalizeAxsEvent(event: AxsEvent): NormalizedEvent | null {
 
   const artists = resolveArtists(event.associations);
   if (artists.length === 0) return null;
-
-  if (!event.eventId) return null;
 
   const ticketUrlRaw = event.ticketing?.url ?? event.ticketing?.eventUrl;
   const lat = event.venue?.latitude ? parseFloat(event.venue.latitude) : undefined;
