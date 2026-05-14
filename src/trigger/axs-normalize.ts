@@ -105,3 +105,17 @@ export type NormalizedEvent = {
 /** Affiliate tracking code appended to every ticket URL so Radio
  *  Milwaukee gets click-through attribution. */
 export const TRACKING_CODE = "cid=usaffradiomilwaukee";
+
+// ---- Pure text normalization functions ---- //
+
+/**
+ * AXS title fields (`headliners`, `eventTitle`) embed `<a>` tags. Strip
+ * all tags and collapse whitespace. Used as a fallback when the plain
+ * `eventTitleText` field is absent.
+ */
+export function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
