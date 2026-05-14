@@ -34,6 +34,9 @@ const PAGE_SIZE = 100;
 /** Defensive cap on pagination — AXS shouldn't return 50+ pages for one
  *  venue group's 90-day horizon, but stop rather than loop forever. */
 const HARD_PAGE_CAP = 50;
+/** Per-request timeout. Without it, a stalled AXS page would block the
+ *  whole task until maxDuration kills it — no error, no partial result. */
+const AXS_REQUEST_TIMEOUT_MS = 30_000;
 
 const ORG_SLUG = "radiomilwaukee";
 
@@ -65,9 +68,18 @@ async function fetchAllAxsEvents(accessToken: string): Promise<AxsEvent[]> {
     // The AXS doc shows http://; use https:// so the access_token is
     // never sent in plaintext. If AXS rejects https, escalate to them —
     // do not downgrade to http.
-    const response = await fetch(`https://api.axs.com/v1/events?${params}`);
+    //
+    // AXS authenticates only via the access_token query param — their
+    // docs document no Authorization-header alternative. The token is
+    // therefore in the URL, so never log the full request URL anywhere
+    // in this file (the error below interpolates status + page only).
+    //
+    // AbortSignal.timeout guards against a stalled page hanging the task.
+    const response = await fetch(`https://api.axs.com/v1/events?${params}`, {
+      signal: AbortSignal.timeout(AXS_REQUEST_TIMEOUT_MS),
+    });
     if (!response.ok) {
-      throw new Error(`AXS API ${response.status}: ${response.statusText}`);
+      throw new Error(`AXS API page ${page} ${response.status}: ${response.statusText}`);
     }
 
     const data = (await response.json()) as AxsResponse;
@@ -124,6 +136,7 @@ export const pollAxs = schedules.task({
         dedupedNew: 0,
         dedupedExisting: 0,
         skipped: 0,
+        skippedReason: "org-not-found" as const,
       };
     }
 
@@ -151,6 +164,7 @@ export const pollAxs = schedules.task({
         dedupedNew: 0,
         dedupedExisting: 0,
         skipped,
+        skippedReason: "no-normalizable-events" as const,
       };
     }
 
