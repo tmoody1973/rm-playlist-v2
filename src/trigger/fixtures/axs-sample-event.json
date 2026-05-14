@@ -1,0 +1,46 @@
+{
+  "events": [
+    {
+      "eventId": "959",
+      "title": {
+        "presentedBy": "Radio Milwaukee",
+        "headliners": "<a href=\"http://www.axs.com/artists/117030/x\">Phoebe Bridgers</a>",
+        "supporting": null,
+        "eventTitle": "<a href=\"http://www.axs.com/artists/117030/x\">Phoebe Bridgers</a>",
+        "eventTitleText": "Phoebe Bridgers"
+      },
+      "eventDateTimeUTC": "2026-08-20T01:00:00",
+      "eventDateTimeZone": "America/Chicago",
+      "dateOnly": false,
+      "onsaleDateTimeUTC": "2026-05-01T15:00:00",
+      "ticketing": {
+        "statusId": 1,
+        "status": "Buy Tickets",
+        "url": "http://www.axs.com/events/123/phoebe-bridgers-tickets"
+      },
+      "minorCategoryId1": "21",
+      "majorCategoryId1": "2",
+      "venue": {
+        "venueId": "55001",
+        "title": "Pabst Theater",
+        "city": "Milwaukee",
+        "state": "WI",
+        "country": "United States",
+        "latitude": "43.041500",
+        "longitude": "-87.910400"
+      },
+      "associations": {
+        "headliners": [
+          { "performerId": "117030", "name": "Phoebe Bridgers" }
+        ],
+        "supportingActs": [
+          { "performerId": "117031", "name": "Christian Lee Hutson" }
+        ]
+      },
+      "relatedMedia": {
+        "1": { "media_id": "1", "width": "678", "height": "399", "file_name": "https://images.discovery-prod.axs.com/primary-678.jpg" },
+        "2": { "media_id": "2", "width": "238", "height": "140", "file_name": "https://images.discovery-prod.axs.com/small-238.jpg" }
+      }
+    }
+  ]
+}

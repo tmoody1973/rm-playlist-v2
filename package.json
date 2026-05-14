@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "typecheck": "bun --filter='@rm/*' run typecheck",
-    "test": "bun --filter='@rm/*' run test",
+    "test": "bun --filter='@rm/*' run test && bun test src/trigger/",
     "lint": "bun --filter='@rm/*' run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\" --ignore-path .prettierignore"
