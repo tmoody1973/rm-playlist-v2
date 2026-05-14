@@ -130,3 +130,35 @@ export function appendTrackingCode(url: string): string {
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}${TRACKING_CODE}`;
 }
+
+// ---- Field mapping functions ---- //
+
+/**
+ * AXS `ticketing.statusId` → our `EventStatus` enum. statusId values are
+ * from AXS doc Appendix 1. Unmapped ids (TBD=8, Unavailable=12, Box
+ * Office Only=14, Suspended=36, etc.) collapse to "other".
+ */
+const AXS_STATUS_BY_ID: Record<number, EventStatus> = {
+  1: "buyTickets",
+  27: "buyTickets",
+  29: "buyTickets",
+  30: "buyTickets",
+  31: "buyTickets",
+  32: "buyTickets",
+  33: "buyTickets",
+  7: "soldOut",
+  2: "cancelled",
+  5: "postponed",
+  37: "postponed",
+  6: "rescheduled",
+  38: "rescheduled",
+  11: "venueChange",
+  3: "free",
+  9: "free",
+  10: "private",
+};
+
+export function mapAxsStatus(statusId: number | undefined): EventStatus {
+  if (statusId === undefined) return "other";
+  return AXS_STATUS_BY_ID[statusId] ?? "other";
+}
