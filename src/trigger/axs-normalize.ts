@@ -197,3 +197,26 @@ export function mapGenre(minorCategoryId: string | undefined): string | undefine
   if (!minorCategoryId) return undefined;
   return AXS_GENRE_BY_ID[minorCategoryId];
 }
+
+/** AXS doc: the primary event image width is 678 (678x399). */
+const AXS_PRIMARY_IMAGE_WIDTH = 678;
+
+/**
+ * Pick the best image URL from an AXS `relatedMedia` map. Prefers the
+ * 678-wide primary; otherwise the widest available. `relatedMedia`
+ * follows the event→tour→performer→venue inheritance hierarchy, so it is
+ * the AXS-recommended source over the raw `media` field.
+ */
+export function pickBestImage(
+  relatedMedia: Record<string, AxsMediaEntry> | undefined,
+): string | undefined {
+  if (!relatedMedia) return undefined;
+  const entries = Object.values(relatedMedia);
+  if (entries.length === 0) return undefined;
+
+  const primary = entries.find((e) => Number(e.width) === AXS_PRIMARY_IMAGE_WIDTH);
+  if (primary) return primary.file_name;
+
+  const widest = [...entries].sort((a, b) => Number(b.width) - Number(a.width))[0];
+  return widest?.file_name;
+}

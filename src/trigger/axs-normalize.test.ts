@@ -1,6 +1,12 @@
 import { test, expect } from "bun:test";
 import type { AxsResponse } from "./axs-normalize";
-import { stripHtml, appendTrackingCode, mapAxsStatus, mapGenre } from "./axs-normalize";
+import {
+  stripHtml,
+  appendTrackingCode,
+  mapAxsStatus,
+  mapGenre,
+  pickBestImage,
+} from "./axs-normalize";
 import fixture from "./fixtures/axs-sample-event.json";
 
 test("fixture parses as an AXS response with one event", () => {
@@ -81,4 +87,25 @@ test("mapGenre returns undefined for unknown or missing ids", () => {
   expect(mapGenre("99999")).toBeUndefined();
   expect(mapGenre(undefined)).toBeUndefined();
   expect(mapGenre("")).toBeUndefined();
+});
+
+test("pickBestImage prefers the 678-wide primary image", () => {
+  const media = {
+    "1": { width: "678", height: "399", file_name: "https://x.com/primary.jpg" },
+    "2": { width: "238", height: "140", file_name: "https://x.com/small.jpg" },
+  };
+  expect(pickBestImage(media)).toBe("https://x.com/primary.jpg");
+});
+
+test("pickBestImage falls back to the widest available image", () => {
+  const media = {
+    "1": { width: "238", height: "140", file_name: "https://x.com/small.jpg" },
+    "2": { width: "322", height: "322", file_name: "https://x.com/medium.jpg" },
+  };
+  expect(pickBestImage(media)).toBe("https://x.com/medium.jpg");
+});
+
+test("pickBestImage returns undefined for empty or missing media", () => {
+  expect(pickBestImage({})).toBeUndefined();
+  expect(pickBestImage(undefined)).toBeUndefined();
 });
