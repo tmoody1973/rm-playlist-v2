@@ -30,16 +30,22 @@
         "longitude": "-87.910400"
       },
       "associations": {
-        "headliners": [
-          { "performerId": "117030", "name": "Phoebe Bridgers" }
-        ],
-        "supportingActs": [
-          { "performerId": "117031", "name": "Christian Lee Hutson" }
-        ]
+        "headliners": [{ "performerId": "117030", "name": "Phoebe Bridgers" }],
+        "supportingActs": [{ "performerId": "117031", "name": "Christian Lee Hutson" }]
       },
       "relatedMedia": {
-        "1": { "media_id": "1", "width": "678", "height": "399", "file_name": "https://images.discovery-prod.axs.com/primary-678.jpg" },
-        "2": { "media_id": "2", "width": "238", "height": "140", "file_name": "https://images.discovery-prod.axs.com/small-238.jpg" }
+        "1": {
+          "media_id": "1",
+          "width": "678",
+          "height": "399",
+          "file_name": "https://images.discovery-prod.axs.com/primary-678.jpg"
+        },
+        "2": {
+          "media_id": "2",
+          "width": "238",
+          "height": "140",
+          "file_name": "https://images.discovery-prod.axs.com/small-238.jpg"
+        }
       }
     }
   ]

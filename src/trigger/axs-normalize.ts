@@ -270,8 +270,7 @@ function resolveTitle(title: AxsTitle | undefined): string | undefined {
 function resolveArtists(associations: AxsEvent["associations"]): NormalizedArtist[] {
   const headliners = (associations?.headliners ?? [])
     .filter(
-      (p): p is AxsPerformer & { name: string } =>
-        typeof p.name === "string" && p.name.length > 0,
+      (p): p is AxsPerformer & { name: string } => typeof p.name === "string" && p.name.length > 0,
     )
     .map((p) => ({
       artistNameRaw: p.name,
@@ -280,8 +279,7 @@ function resolveArtists(associations: AxsEvent["associations"]): NormalizedArtis
     }));
   const support = (associations?.supportingActs ?? [])
     .filter(
-      (p): p is AxsPerformer & { name: string } =>
-        typeof p.name === "string" && p.name.length > 0,
+      (p): p is AxsPerformer & { name: string } => typeof p.name === "string" && p.name.length > 0,
     )
     .map((p) => ({
       artistNameRaw: p.name,
