@@ -175,9 +175,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
         )}
       </div>
 
-      {isModalOpen && (
-        <EventModal event={liveEvent} onClose={() => setIsModalOpen(false)} />
-      )}
+      {isModalOpen && <EventModal event={liveEvent} onClose={() => setIsModalOpen(false)} />}
     </Fragment>
   );
 }
