@@ -29,7 +29,7 @@ export function EventModal({ event, onClose }: EventModalProps) {
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  const isAxs = event.source === "axs";
+  const isAxs = (event.source ?? "ticketmaster") === "axs";
   const accentColor = isAxs ? AXS_BLUE : "var(--rmke-accent-live)";
 
   return (
@@ -77,9 +77,9 @@ export function EventModal({ event, onClose }: EventModalProps) {
             overflow: "hidden",
           }}
         >
-          {event.imageUrl !== null ? (
+          {(event.imageUrl ?? null) !== null ? (
             <img
-              src={event.imageUrl}
+              src={event.imageUrl ?? undefined}
               alt={event.title ?? event.artistName}
               loading="lazy"
               decoding="async"
@@ -198,7 +198,7 @@ export function EventModal({ event, onClose }: EventModalProps) {
           >
             {event.title ?? event.artistName}
           </h2>
-          {event.title !== null && event.headliners.length > 0 && (
+          {event.title !== null && (event.headliners ?? []).length > 0 && (
             <p
               style={{
                 margin: "4px 0 0",
@@ -206,7 +206,7 @@ export function EventModal({ event, onClose }: EventModalProps) {
                 color: "var(--rmke-text-secondary)",
               }}
             >
-              {event.headliners.join(", ")}
+              {(event.headliners ?? []).join(", ")}
             </p>
           )}
         </div>
@@ -226,8 +226,8 @@ export function EventModal({ event, onClose }: EventModalProps) {
             <DetailRow label="Doors" value={formatEventTime(event.doorsAt)} />
           )}
           {event.genre !== null && <DetailRow label="Genre" value={event.genre} />}
-          {event.supports.length > 0 && (
-            <DetailRow label="Also featuring" value={event.supports.join(", ")} />
+          {(event.supports ?? []).length > 0 && (
+            <DetailRow label="Also featuring" value={(event.supports ?? []).join(", ")} />
           )}
         </div>
 

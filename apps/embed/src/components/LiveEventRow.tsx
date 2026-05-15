@@ -29,7 +29,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
 
   if (liveEvent === null) return null;
 
-  const isAxs = liveEvent.source === "axs";
+  const isAxs = (liveEvent.source ?? "ticketmaster") === "axs";
 
   const dateLabel = new Date(liveEvent.startsAtMs).toLocaleDateString("en-US", {
     month: "short",
@@ -63,7 +63,7 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
       >
         {/* Event thumbnail — 48×48, square per DESIGN.md */}
         <AlbumArt
-          src={liveEvent.imageUrl}
+          src={liveEvent.imageUrl ?? null}
           alt={liveEvent.title ?? liveEvent.artistName}
           size={48}
         />
