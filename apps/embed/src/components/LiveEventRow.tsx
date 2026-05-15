@@ -150,29 +150,54 @@ export function LiveEventRow({ liveEvent }: LiveEventRowProps) {
           </span>
         </div>
 
-        {/* Ticket link — stopPropagation so the modal doesn't also open */}
-        {liveEvent.ticketUrl !== null && (
-          <a
-            href={liveEvent.ticketUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              marginLeft: "auto",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: isAxs ? AXS_BLUE : "var(--rmke-accent-cta)",
-              textDecoration: "none",
-              padding: "var(--rmke-space-xs) var(--rmke-space-sm)",
-              border: `1px solid ${isAxs ? AXS_BLUE : "var(--rmke-accent-cta)"}`,
-              borderRadius: "var(--rmke-radius-sm)",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            Tickets
-          </a>
-        )}
+        {/* AXS: pill opens the modal (full brand experience before external link).
+            TM/custom: pill links directly to ticketing URL. */}
+        {liveEvent.ticketUrl !== null &&
+          (isAxs ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsModalOpen(true);
+              }}
+              style={{
+                marginLeft: "auto",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: AXS_BLUE,
+                background: "transparent",
+                padding: "var(--rmke-space-xs) var(--rmke-space-sm)",
+                border: `1px solid ${AXS_BLUE}`,
+                borderRadius: "var(--rmke-radius-sm)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                cursor: "pointer",
+              }}
+            >
+              Tickets
+            </button>
+          ) : (
+            <a
+              href={liveEvent.ticketUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                marginLeft: "auto",
+                fontSize: "13px",
+                fontWeight: 600,
+                color: "var(--rmke-accent-cta)",
+                textDecoration: "none",
+                padding: "var(--rmke-space-xs) var(--rmke-space-sm)",
+                border: "1px solid var(--rmke-accent-cta)",
+                borderRadius: "var(--rmke-radius-sm)",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              Tickets
+            </a>
+          ))}
       </div>
 
       {isModalOpen && <EventModal event={liveEvent} onClose={() => setIsModalOpen(false)} />}
