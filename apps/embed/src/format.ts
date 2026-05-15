@@ -3,6 +3,12 @@
  * the embed bundle budget is 30KB gzip (see vite.config.ts comment).
  */
 
+const DAY_DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
 const TIME_FMT = new Intl.DateTimeFormat(undefined, {
   hour: "numeric",
   minute: "2-digit",
@@ -35,6 +41,19 @@ export function formatPlayedAt(epochMs: number): string {
  *
  * Examples: "3:42 PM", "12:05 AM", "3:42 PM · Apr 22".
  */
+/** "Fri, Jul 11 · 8:00 PM" — or just "Fri, Jul 11" when dateOnly. */
+export function formatEventDate(startsAtMs: number, dateOnly: boolean): string {
+  const d = new Date(startsAtMs);
+  const dateStr = DAY_DATE_FMT.format(d);
+  if (dateOnly) return dateStr;
+  return `${dateStr} · ${TIME_FMT.format(d)}`;
+}
+
+/** "8:00 PM" — used for doorsAt label in the event modal. */
+export function formatEventTime(epochMs: number): string {
+  return TIME_FMT.format(new Date(epochMs));
+}
+
 export function formatPlayedAtClock(epochMs: number): string {
   const when = new Date(epochMs);
   const time = TIME_FMT.format(when);

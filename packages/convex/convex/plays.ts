@@ -345,6 +345,20 @@ export interface LiveEventSummary {
   readonly city: string;
   readonly startsAtMs: number;
   readonly ticketUrl: string | null;
+  /** Event poster / hero image from the ticketing source. */
+  readonly imageUrl: string | null;
+  /** Which upstream source provided this event — drives brand styling in the widget. */
+  readonly source: "ticketmaster" | "axs" | "custom";
+  /** True when the source reported no specific time (startsAt is midnight placeholder). */
+  readonly dateOnly: boolean;
+  /** Door-open time in ms. Shown below the start time in the event modal. */
+  readonly doorsAt: number | null;
+  /** Genre label from the source (e.g. "Alternative", "Hip-Hop"). */
+  readonly genre: string | null;
+  /** All headlining acts on this event (for the modal lineup section). */
+  readonly headliners: readonly string[];
+  /** All support acts on this event. */
+  readonly supports: readonly string[];
 }
 
 export interface PublicPlay {
@@ -432,6 +446,14 @@ async function findLiveEventForArtist(
 
   candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
   const winner = candidates[0]!;
+
+  const allArtists = await ctx.db
+    .query("eventArtists")
+    .withIndex("by_event", (q) => q.eq("eventId", winner.event._id))
+    .collect();
+  const headliners = allArtists.filter((a) => a.role === "headliner").map((a) => a.artistNameRaw);
+  const supports = allArtists.filter((a) => a.role === "support").map((a) => a.artistNameRaw);
+
   return {
     eventId: winner.event._id,
     title: winner.event.title ?? null,
@@ -441,6 +463,13 @@ async function findLiveEventForArtist(
     city: winner.event.city,
     startsAtMs: winner.event.startsAt,
     ticketUrl: winner.event.ticketUrl ?? null,
+    imageUrl: winner.event.imageUrl ?? null,
+    source: winner.event.source,
+    dateOnly: winner.event.dateOnly === true,
+    doorsAt: winner.event.doorsAt ?? null,
+    genre: winner.event.genre ?? null,
+    headliners,
+    supports,
   };
 }
 

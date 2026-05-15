@@ -75,6 +75,20 @@ export interface LiveEventSummary {
   readonly city: string;
   readonly startsAtMs: number;
   readonly ticketUrl: string | null;
+  /** Event poster / hero image. Shown as thumbnail in the row and full-width in the modal. */
+  readonly imageUrl: string | null;
+  /** Upstream ticketing source — drives brand styling (AXS Blue vs amber). */
+  readonly source: "ticketmaster" | "axs" | "custom";
+  /** True when the source has no specific time; display date only. */
+  readonly dateOnly: boolean;
+  /** Door-open time in ms. */
+  readonly doorsAt: number | null;
+  /** Genre label from the source (e.g. "Alternative"). */
+  readonly genre: string | null;
+  /** All headlining acts on this event. */
+  readonly headliners: readonly string[];
+  /** All support acts on this event. */
+  readonly supports: readonly string[];
 }
 
 export interface PublicPlay {

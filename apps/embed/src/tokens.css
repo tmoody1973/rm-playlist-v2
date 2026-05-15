@@ -26,6 +26,7 @@
   --rmke-bg-surface: #ffffff;
   --rmke-bg-elevated: #ffffff;
   --rmke-bg-event-tinted: #fff6e0;
+  --rmke-bg-event-tinted-axs: rgba(0, 84, 161, 0.07);
   --rmke-border: #e8e5de;
   --rmke-text-primary: #1a1a1a;
   --rmke-text-secondary: #6b6e73;
@@ -88,6 +89,7 @@
   --rmke-bg-surface: #16191d;
   --rmke-bg-elevated: #1f242a;
   --rmke-bg-event-tinted: #2a1f0a;
+  --rmke-bg-event-tinted-axs: rgba(0, 125, 255, 0.12);
   --rmke-border: #2a2f36;
   --rmke-text-primary: #f1efeb;
   --rmke-text-secondary: #8b9099;
@@ -105,6 +107,7 @@
     --rmke-bg-surface: #16191d;
     --rmke-bg-elevated: #1f242a;
     --rmke-bg-event-tinted: #2a1f0a;
+    --rmke-bg-event-tinted-axs: rgba(0, 125, 255, 0.12);
     --rmke-border: #2a2f36;
     --rmke-text-primary: #f1efeb;
     --rmke-text-secondary: #8b9099;
