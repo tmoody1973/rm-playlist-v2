@@ -1,0 +1,11 @@
+# Loader entry points have stable names across deploys.
+# Browsers must revalidate on every load so new deployments propagate immediately.
+/v1/widget.js
+  Cache-Control: public, no-cache
+
+/v1/widget-legacy.js
+  Cache-Control: public, no-cache
+
+# Content-hashed chunks change names on every deploy, so they are safe to cache forever.
+/v1/chunks/*
+  Cache-Control: public, max-age=31536000, immutable
