@@ -179,3 +179,84 @@ export const cmsThemes = internalMutation({
     };
   },
 });
+
+/**
+ * Seed a published HYFIN station-home page so the Phase 1 public render
+ * pipeline has something real to render on-theme. Content blocks only —
+ * live-data blocks (now-playing, playlist, ...) arrive in Phase 2.
+ *
+ * Run after rmOrg + cmsThemes: `bunx convex run seed:cmsStationHomeDemo`
+ * Idempotent — skips if HYFIN already has a station-home page.
+ */
+export const cmsStationHomeDemo = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", "radiomilwaukee"))
+      .first();
+    if (org === null) {
+      throw new Error("RM organization not seeded — run seed:rmOrg first");
+    }
+
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", "hyfin"))
+      .first();
+    if (station === null) {
+      throw new Error("HYFIN station not seeded — run seed:rmOrg first");
+    }
+
+    const existing = await ctx.db
+      .query("pages")
+      .withIndex("by_station_kind_slug", (q) =>
+        q.eq("stationId", station._id).eq("kind", "station-home").eq("slug", ""),
+      )
+      .first();
+    if (existing !== null) {
+      return { created: false, pageId: existing._id };
+    }
+
+    const now = Date.now();
+    const pageId = await ctx.db.insert("pages", {
+      orgId: org._id,
+      stationId: station._id,
+      kind: "station-home",
+      slug: "",
+      title: "HYFIN",
+      status: "published",
+      blocks: [
+        {
+          id: "hero-1",
+          type: "hero",
+          config: {
+            title: "HYFIN",
+            subtitle: "Diaspora music from Milwaukee.",
+            cta: { label: "Listen live", href: "https://hyfin.org" },
+          },
+        },
+        {
+          id: "richtext-1",
+          type: "rich-text",
+          config: {
+            html: "<p>HYFIN is Radio Milwaukee's home for the global Black music diaspora — hip-hop, Afrobeats, R&amp;B, reggae, and the sounds connecting Milwaukee to the world.</p>",
+          },
+        },
+        {
+          id: "cta-1",
+          type: "cta",
+          config: {
+            buttons: [
+              { label: "Explore events", href: "/hyfin/events" },
+              { label: "About HYFIN", href: "https://radiomilwaukee.org/hyfin" },
+            ],
+          },
+        },
+      ],
+      publishedAt: now,
+      createdAt: now,
+    });
+
+    return { created: true, pageId };
+  },
+});

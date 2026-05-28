@@ -18,6 +18,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+      <head>
+        {/* General Sans (Fontshare) — display face referenced by theme tokens. */}
+        <link rel="preconnect" href="https://api.fontshare.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@500,600,700&display=swap"
+        />
+      </head>
       <body className="min-h-full" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>

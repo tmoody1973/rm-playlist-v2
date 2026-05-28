@@ -574,7 +574,8 @@ export default defineSchema({
       }),
     ),
     publishedAt: v.optional(v.number()),
-    createdBy: v.id("users"),
+    /** Optional — system-seeded/imported pages have no author. Matches events.createdBy. */
+    createdBy: v.optional(v.id("users")),
     updatedBy: v.optional(v.id("users")),
     createdAt: v.number(),
   })

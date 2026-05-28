@@ -14,6 +14,7 @@ import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
+import type * as pages from "../pages.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as reports from "../reports.js";
@@ -35,6 +36,7 @@ declare const fullApi: ApiFromModules<{
   events: typeof events;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
+  pages: typeof pages;
   plays: typeof plays;
   preview: typeof preview;
   reports: typeof reports;
