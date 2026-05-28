@@ -9,16 +9,45 @@ import { PreviewRenderer } from "@/components/PreviewRenderer";
 import { BlockForm } from "@/components/editor/BlockForm";
 import { ADDABLE_BLOCK_TYPES, BLOCK_TYPE_LABELS, defaultConfig } from "@/lib/blockDefaults";
 import type { RawBlock } from "@/lib/blocks";
+import { applyOverrides, COLOR_TOKEN_FIELDS } from "@/lib/theme";
+import type { ColorTokenKey, ThemeOverrides, ThemeTokens } from "@/lib/theme";
 
 function errMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-type EditState = { title: string; blocks: RawBlock[] };
+type OverrideState = Record<ColorTokenKey, { on: boolean; value: string }>;
+
+type EditState = {
+  title: string;
+  blocks: RawBlock[];
+  themeId: string | null;
+  overrides: OverrideState;
+};
+
+function initOverrides(
+  base: ThemeTokens,
+  saved: Partial<Record<ColorTokenKey, string>> | null,
+): OverrideState {
+  const out = {} as OverrideState;
+  for (const { key } of COLOR_TOKEN_FIELDS) {
+    const savedValue = saved?.[key];
+    out[key] = {
+      on: typeof savedValue === "string" && savedValue.length > 0,
+      value: savedValue ?? base[key],
+    };
+  }
+  return out;
+}
 
 export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
   const page = useQuery(api.pages.getPageForEdit, { pageId });
+  const themes = useQuery(
+    api.themes.listForStation,
+    page ? { stationSlug: page.stationSlug } : "skip",
+  );
   const updatePage = useMutation(api.pages.updatePage);
+  const setPageTheme = useMutation(api.pages.setPageTheme);
   const setStatus = useMutation(api.pages.setStatus);
 
   const [state, setState] = useState<EditState | null>(null);
@@ -31,7 +60,12 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
   // re-emits (e.g. after save) must not clobber in-progress edits.
   useEffect(() => {
     if (page !== undefined && page !== null && state === null) {
-      setState({ title: page.title, blocks: page.blocks as RawBlock[] });
+      setState({
+        title: page.title,
+        blocks: page.blocks as RawBlock[],
+        themeId: page.themeId,
+        overrides: initOverrides(page.tokens, page.themeOverrides),
+      });
     }
   }, [page, state]);
 
@@ -58,11 +92,41 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
       { id: crypto.randomUUID(), type: addType, config: defaultConfig(addType) },
     ]);
 
+  // Resolve the preview's base tokens: the picked theme, else the station
+  // default, else whatever the server last resolved. Overrides layer on top —
+  // mirrors the server cascade so the preview tracks edits live.
+  const themeList = themes ?? [];
+  const pickedTheme = state.themeId ? themeList.find((t) => t._id === state.themeId) : undefined;
+  const stationDefault = themeList.find((t) => t.isStationDefault);
+  const baseTokens: ThemeTokens = pickedTheme?.tokens ?? stationDefault?.tokens ?? page.tokens;
+  const activeOverrides: ThemeOverrides = {};
+  for (const { key } of COLOR_TOKEN_FIELDS) {
+    const o = state.overrides[key];
+    if (o.on && o.value.length > 0) activeOverrides[key] = o.value;
+  }
+  const previewTokens = applyOverrides(baseTokens, activeOverrides);
+
+  const setOverride = (key: ColorTokenKey, patch: Partial<{ on: boolean; value: string }>) =>
+    setState({
+      ...state,
+      overrides: { ...state.overrides, [key]: { ...state.overrides[key], ...patch } },
+    });
+
   async function onSave() {
     setError(null);
     setSaving(true);
     try {
       await updatePage({ pageId, title: state!.title, blocks: state!.blocks });
+      const overrides: ThemeOverrides = {};
+      for (const { key } of COLOR_TOKEN_FIELDS) {
+        const o = state!.overrides[key];
+        if (o.on && o.value.length > 0) overrides[key] = o.value;
+      }
+      await setPageTheme({
+        pageId,
+        themeId: state!.themeId ? (state!.themeId as Id<"themes">) : undefined,
+        overrides,
+      });
       setSavedAt(Date.now());
     } catch (err) {
       setError(errMessage(err));
@@ -137,6 +201,54 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
             />
           </label>
 
+          {/* Theme controls */}
+          <fieldset className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-4">
+            <legend className="px-1 text-sm font-semibold">Theme</legend>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-neutral-500">Base theme</span>
+              <select
+                value={state.themeId ?? ""}
+                onChange={(e) => setState({ ...state, themeId: e.target.value || null })}
+                className="rounded-md border border-neutral-300 px-3 py-2"
+              >
+                <option value="">Inherit station default</option>
+                {themeList.map((t) => (
+                  <option key={t._id} value={t._id}>
+                    {t.name}
+                    {t.isStationDefault ? " (default)" : t.scope === "org" ? " (preset)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                Color overrides
+              </span>
+              {COLOR_TOKEN_FIELDS.map(({ key, label }) => {
+                const o = state.overrides[key];
+                return (
+                  <label key={key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={o.on}
+                      onChange={(e) => setOverride(key, { on: e.target.checked })}
+                    />
+                    <span className="w-24 text-neutral-600">{label}</span>
+                    <input
+                      type="color"
+                      value={o.value}
+                      disabled={!o.on}
+                      onChange={(e) => setOverride(key, { value: e.target.value })}
+                      className="h-7 w-9 cursor-pointer rounded border border-neutral-300 disabled:opacity-40"
+                      aria-label={`${label} override`}
+                    />
+                    {!o.on && <span className="text-xs text-neutral-400">inherit</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
           <ul className="flex flex-col gap-3">
             {blocks.map((block, index) => (
               <li key={block.id} className="rounded-lg border border-neutral-200 p-4">
@@ -207,7 +319,7 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
             Live preview
           </p>
           <div className="overflow-hidden rounded-lg border border-neutral-200">
-            <PreviewRenderer blocks={blocks} tokens={page.tokens} />
+            <PreviewRenderer blocks={blocks} tokens={previewTokens} />
           </div>
         </div>
       </div>

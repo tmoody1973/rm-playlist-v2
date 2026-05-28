@@ -1,22 +1,10 @@
 import { v } from "convex/values";
 import { getCmsUser, requireCmsUser } from "./cmsAuth";
+import { isCmsStation } from "./cmsStations";
 import { buildTemplate, isCmsPageKind } from "./cmsTemplates";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
-
-/**
- * Public read side of the Station Microsites CMS (apps/cms).
- *
- * Stations with public CMS pages. 414music is intentionally excluded — it has
- * no microsite (design doc 005).
- */
-const CMS_STATION_SLUGS = ["hyfin", "88nine", "rhythmlab"] as const;
-type CmsStationSlug = (typeof CMS_STATION_SLUGS)[number];
-
-function isCmsStation(slug: string): slug is CmsStationSlug {
-  return (CMS_STATION_SLUGS as readonly string[]).includes(slug);
-}
 
 type ThemeTokens = Doc<"themes">["tokens"];
 
@@ -298,7 +286,74 @@ export const getPageForEdit = query({
       status: page.status,
       blocks: page.blocks,
       tokens,
+      themeId: page.themeId ?? null,
+      themeOverrides: (page.themeOverrides ?? null) as PageThemeOverrides | null,
     };
+  },
+});
+
+/**
+ * Page-level theme override = a subset of color tokens layered over the resolved
+ * theme. Font/radius are preset-only (design decision); a `v.object` of optional
+ * color strings makes Convex reject any unknown key at the mutation boundary.
+ */
+const pageThemeOverridesValidator = v.object({
+  colorPrimary: v.optional(v.string()),
+  colorBg: v.optional(v.string()),
+  colorCard: v.optional(v.string()),
+  colorAccent: v.optional(v.string()),
+  colorText: v.optional(v.string()),
+});
+
+type PageThemeOverrides = {
+  colorPrimary?: string;
+  colorBg?: string;
+  colorCard?: string;
+  colorAccent?: string;
+  colorText?: string;
+};
+
+/**
+ * Set a page's theme + token overrides. operator+ (page theming is part of page
+ * editing). `themeId` omitted = inherit the station default. `overrides` carries
+ * only color keys; empty values are dropped, and an all-empty set clears them.
+ * A themeId must be org-wide or belong to the page's own station.
+ */
+export const setPageTheme = mutation({
+  args: {
+    pageId: v.id("pages"),
+    themeId: v.optional(v.id("themes")),
+    overrides: v.optional(pageThemeOverridesValidator),
+  },
+  handler: async (ctx, { pageId, themeId, overrides }) => {
+    const user = await requireCmsUser(ctx);
+    const page = await ctx.db.get(pageId);
+    if (page === null) throw new Error("Page not found");
+
+    if (themeId !== undefined) {
+      const theme = await ctx.db.get(themeId);
+      if (theme === null) throw new Error("Theme not found");
+      if (theme.stationId !== undefined && theme.stationId !== page.stationId) {
+        throw new Error("That theme belongs to a different station.");
+      }
+    }
+
+    let cleaned: PageThemeOverrides | undefined;
+    if (overrides !== undefined) {
+      const entries = Object.entries(overrides).filter(
+        ([, val]) => typeof val === "string" && val.trim().length > 0,
+      );
+      cleaned =
+        entries.length > 0 ? (Object.fromEntries(entries) as PageThemeOverrides) : undefined;
+    }
+
+    // patch with `undefined` clears the optional field → page inherits default.
+    await ctx.db.patch(pageId, {
+      themeId,
+      themeOverrides: cleaned,
+      updatedBy: user._id,
+    });
+    return { ok: true };
   },
 });
 

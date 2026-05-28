@@ -1,5 +1,6 @@
 import { SignOutButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
+import Link from "next/link";
 import { PageManager } from "./PageManager";
 
 /**
@@ -20,6 +21,12 @@ export default async function AdminHome() {
           <h1 className="text-2xl font-bold tracking-tight">Pages</h1>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/admin/themes"
+            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm font-semibold"
+          >
+            Themes
+          </Link>
           {email !== null && <span className="text-sm text-neutral-500">{email}</span>}
           <SignOutButton redirectUrl="/">
             <button
