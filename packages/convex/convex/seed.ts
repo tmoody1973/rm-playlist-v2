@@ -1,3 +1,4 @@
+import { buildTemplate } from "./cmsTemplates";
 import { internalMutation } from "./_generated/server";
 
 /**
@@ -207,38 +208,13 @@ export const cmsStationHomeDemo = internalMutation({
       throw new Error("HYFIN station not seeded — run seed:rmOrg first");
     }
 
-    // Canonical station-home template (design doc 005): hero → intro →
-    // now-playing → playlist → upcoming-events → touring → cta. Content blocks
-    // carry data; live-data blocks read @rm/convex at render.
-    const blocks = [
-      {
-        id: "hero-1",
-        type: "hero",
-        config: {
-          title: "HYFIN",
-          subtitle: "Diaspora music from Milwaukee.",
-          cta: { label: "Listen live", href: "https://hyfin.org" },
-        },
-      },
-      {
-        id: "richtext-1",
-        type: "rich-text",
-        config: {
-          html: "<p>HYFIN is Radio Milwaukee's home for the global Black music diaspora — hip-hop, Afrobeats, R&amp;B, reggae, and the sounds connecting Milwaukee to the world.</p>",
-        },
-      },
-      { id: "nowplaying-1", type: "now-playing", config: {} },
-      { id: "playlist-1", type: "playlist", config: { limit: 8 } },
-      { id: "events-1", type: "upcoming-events", config: { limit: 4 } },
-      { id: "touring-1", type: "touring", config: { limit: 4 } },
-      {
-        id: "cta-1",
-        type: "cta",
-        config: {
-          buttons: [{ label: "About HYFIN", href: "https://radiomilwaukee.org/hyfin" }],
-        },
-      },
-    ];
+    // Canonical station-home template (design doc 005), shared with
+    // pages.create so the demo stays in lockstep with what staff get.
+    const blocks = buildTemplate("station-home", {
+      slug: station.slug,
+      name: station.name,
+      tagline: station.tagline,
+    });
 
     const existing = await ctx.db
       .query("pages")

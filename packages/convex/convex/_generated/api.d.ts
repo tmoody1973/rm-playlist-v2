@@ -10,6 +10,8 @@
 
 import type * as appleMusic from "../appleMusic.js";
 import type * as backfills from "../backfills.js";
+import type * as cmsAuth from "../cmsAuth.js";
+import type * as cmsTemplates from "../cmsTemplates.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
@@ -32,6 +34,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   appleMusic: typeof appleMusic;
   backfills: typeof backfills;
+  cmsAuth: typeof cmsAuth;
+  cmsTemplates: typeof cmsTemplates;
   enrichment: typeof enrichment;
   events: typeof events;
   ingestionEvents: typeof ingestionEvents;
