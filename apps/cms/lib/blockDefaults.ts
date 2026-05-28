@@ -19,7 +19,7 @@ export function defaultConfig(type: string): unknown {
     case "hero":
       return { title: "Heading" };
     case "rich-text":
-      return { text: "" };
+      return { doc: { type: "doc", content: [{ type: "paragraph" }] } };
     case "image":
       return { url: "" };
     case "cta":

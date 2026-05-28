@@ -23,10 +23,11 @@ export const heroConfig = z.object({
 });
 
 export const richTextConfig = z.object({
-  // Plain text, rendered escaped by React (XSS-safe by construction — no raw
-  // HTML). Phase 3b-2 replaces this with a structured Tiptap/ProseMirror doc
-  // + allowlist serializer for real formatting.
-  text: z.string(),
+  // Structured Tiptap/ProseMirror doc JSON. Rendered via lib/richtext.tsx's
+  // allowlist serializer (no raw HTML → XSS-safe). `doc` is validated
+  // structurally by the serializer, so we keep it loose here. Legacy {text}
+  // blocks parse with doc undefined and render nothing until re-edited.
+  doc: z.unknown(),
 });
 
 export const imageConfig = z.object({

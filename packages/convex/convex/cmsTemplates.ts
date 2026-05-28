@@ -15,6 +15,19 @@ export type TemplateBlock = { id: string; type: string; config: unknown };
 
 export type StationLite = { slug: string; name: string; tagline?: string };
 
+/**
+ * Build a minimal Tiptap/ProseMirror doc from plain text — one paragraph.
+ * Rich-text blocks store this `doc` shape (Phase 3b-2); the renderer serializes
+ * it via an allowlist (apps/cms/lib/richtext.tsx). Staff get full formatting
+ * once they edit it in the Tiptap editor.
+ */
+function textToDoc(text: string) {
+  return {
+    type: "doc",
+    content: [{ type: "paragraph", content: text.length > 0 ? [{ type: "text", text }] : [] }],
+  };
+}
+
 export const CMS_PAGE_KINDS = ["station-home", "event", "fundraiser"] as const;
 export type CmsPageKind = (typeof CMS_PAGE_KINDS)[number];
 
@@ -36,7 +49,7 @@ function stationHomeTemplate(station: StationLite): TemplateBlock[] {
     {
       id: "richtext-1",
       type: "rich-text",
-      config: { text: `Welcome to ${station.name}.` },
+      config: { doc: textToDoc(`Welcome to ${station.name}.`) },
     },
     { id: "nowplaying-1", type: "now-playing", config: {} },
     { id: "playlist-1", type: "playlist", config: { limit: 8 } },
@@ -61,7 +74,7 @@ function eventTemplate(station: StationLite): TemplateBlock[] {
         cta: { label: "Get tickets", href: "#" },
       },
     },
-    { id: "richtext-1", type: "rich-text", config: { text: "Event details." } },
+    { id: "richtext-1", type: "rich-text", config: { doc: textToDoc("Event details.") } },
     {
       id: "cta-1",
       type: "cta",
@@ -87,7 +100,11 @@ function fundraiserTemplate(station: StationLite): TemplateBlock[] {
       type: "fundraiser-progress",
       config: { goal: 0, raised: 0, donateHref: "#" },
     },
-    { id: "richtext-1", type: "rich-text", config: { text: "Why your support matters." } },
+    {
+      id: "richtext-1",
+      type: "rich-text",
+      config: { doc: textToDoc("Why your support matters.") },
+    },
     {
       id: "cta-1",
       type: "cta",

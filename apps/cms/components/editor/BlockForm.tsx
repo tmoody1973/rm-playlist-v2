@@ -1,5 +1,7 @@
 "use client";
 
+import { RichTextEditor } from "./RichTextEditor";
+
 function rec(config: unknown): Record<string, unknown> {
   return config !== null && typeof config === "object" ? (config as Record<string, unknown>) : {};
 }
@@ -126,15 +128,10 @@ export function BlockForm({
     }
     case "rich-text":
       return (
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-500">Text (plain text — rich formatting in 3b-2)</span>
-          <textarea
-            value={str(c.text)}
-            rows={4}
-            onChange={(e) => onChange({ ...c, text: e.target.value })}
-            className="rounded-md border border-neutral-300 px-3 py-2"
-          />
-        </label>
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="text-neutral-500">Content</span>
+          <RichTextEditor value={c.doc} onChange={(doc) => onChange({ doc })} />
+        </div>
       );
     case "image":
       return (
