@@ -17,7 +17,7 @@ export type FontOption = {
   /** CSS font-family stack stored in tokens.font. */
   stack: string;
   /** Rough classification, for grouping/labelling in the picker. */
-  category: "sans" | "serif" | "display" | "mono";
+  category: "sans" | "serif" | "display" | "mono" | "custom";
 };
 
 const SANS_FALLBACK = "ui-sans-serif, system-ui, sans-serif";
@@ -74,4 +74,18 @@ export const FONT_OPTIONS: FontOption[] = [
 
 export function findFontByStack(stack: string): FontOption | undefined {
   return FONT_OPTIONS.find((f) => f.stack === stack);
+}
+
+/** Turn an admin-uploaded font row into a picker option. */
+export function uploadedFontToOption(font: {
+  _id: string;
+  label: string;
+  family: string;
+}): FontOption {
+  return {
+    id: font._id,
+    label: font.label,
+    stack: `"${font.family}", ${SANS_FALLBACK}`,
+    category: "custom",
+  };
 }

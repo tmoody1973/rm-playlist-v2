@@ -15,6 +15,7 @@ import type * as cmsStations from "../cmsStations.js";
 import type * as cmsTemplates from "../cmsTemplates.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
+import type * as fonts from "../fonts.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as pages from "../pages.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   cmsTemplates: typeof cmsTemplates;
   enrichment: typeof enrichment;
   events: typeof events;
+  fonts: typeof fonts;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
   pages: typeof pages;

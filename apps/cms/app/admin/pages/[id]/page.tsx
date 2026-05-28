@@ -1,4 +1,5 @@
 import type { Id } from "@rm/convex/values";
+import { UploadedFontFaces } from "@/components/UploadedFontFaces";
 import { PageEditor } from "./PageEditor";
 
 /**
@@ -10,6 +11,7 @@ export default async function EditPageRoute({ params }: { params: Promise<{ id: 
   const { id } = await params;
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
+      <UploadedFontFaces />
       <PageEditor pageId={id as Id<"pages">} />
     </main>
   );

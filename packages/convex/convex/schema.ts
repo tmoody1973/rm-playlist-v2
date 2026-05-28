@@ -581,4 +581,24 @@ export default defineSchema({
   })
     .index("by_station_kind_slug", ["stationId", "kind", "slug"])
     .index("by_station_status", ["stationId", "status"]),
+
+  /**
+   * Admin-uploaded custom fonts (Canva-style). The file lives in Convex storage
+   * (served from our own infra — no third-party CDN), and `family` is the
+   * font-family name emitted in an @font-face rule and referenced by a theme's
+   * `tokens.font` stack. Upload/delete is admin-only; operators pick uploaded
+   * faces when theming. `licenseAck` records the uploader's attestation that RM
+   * holds web-embedding rights for the face.
+   */
+  fonts: defineTable({
+    orgId: v.id("organizations"),
+    label: v.string(), // human label in the picker, e.g. "RM Brand Sans"
+    family: v.string(), // CSS font-family name used in @font-face + the stack
+    storageId: v.id("_storage"),
+    format: v.union(v.literal("woff2"), v.literal("ttf"), v.literal("otf")),
+    /** Uploader attested RM is licensed to embed this font. */
+    licenseAck: v.boolean(),
+    uploadedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+  }).index("by_org", ["orgId"]),
 });

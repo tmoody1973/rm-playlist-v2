@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UploadedFontFaces } from "@/components/UploadedFontFaces";
 import { ThemeManager } from "./ThemeManager";
 
 /**
@@ -10,6 +11,7 @@ import { ThemeManager } from "./ThemeManager";
 export default function ThemesPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-8 px-6 py-12">
+      <UploadedFontFaces />
       <header className="flex flex-col gap-1">
         <Link href="/admin" className="text-sm text-neutral-500 underline">
           ← All pages

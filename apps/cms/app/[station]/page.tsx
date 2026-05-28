@@ -3,6 +3,7 @@ import { fetchQuery } from "convex/nextjs";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
+import { UploadedFontFaces } from "@/components/UploadedFontFaces";
 import { isCmsStation } from "@/lib/stations";
 
 type Params = { params: Promise<{ station: string }> };
@@ -39,5 +40,10 @@ export default async function StationHome({ params }: Params) {
   });
   if (data === null) notFound();
 
-  return <PageRenderer blocks={data.page.blocks} tokens={data.tokens} stationSlug={station} />;
+  return (
+    <>
+      <UploadedFontFaces />
+      <PageRenderer blocks={data.page.blocks} tokens={data.tokens} stationSlug={station} />
+    </>
+  );
 }

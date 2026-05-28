@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FONT_OPTIONS, findFontByStack } from "@/lib/fonts";
+import { FONT_OPTIONS } from "@/lib/fonts";
+import type { FontOption } from "@/lib/fonts";
 
 /**
  * Font picker with per-option live preview. A native <select> can't do this —
@@ -9,16 +10,19 @@ import { FONT_OPTIONS, findFontByStack } from "@/lib/fonts";
  * is a small custom listbox: each row renders its own label in its own face,
  * and the trigger button shows the current selection in that face too.
  *
- * Value is the CSS font stack stored in tokens.font; an unmatched value (a
- * legacy free-text font) is preserved as a "Custom (current)" row so picking
- * never silently drops it.
+ * `options` defaults to the curated catalog; callers pass curated + admin-
+ * uploaded fonts merged. Value is the CSS font stack stored in tokens.font; an
+ * unmatched value (a legacy free-text font) is preserved as a "Custom (current)"
+ * row so picking never silently drops it.
  */
 export function FontSelect({
   value,
   onChange,
+  options = FONT_OPTIONS,
 }: {
   value: string;
   onChange: (stack: string) => void;
+  options?: FontOption[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -32,12 +36,12 @@ export function FontSelect({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const matched = findFontByStack(value);
-  const options = matched
-    ? FONT_OPTIONS
+  const matched = options.find((o) => o.stack === value);
+  const rows: FontOption[] = matched
+    ? options
     : [
-        { id: "__custom", label: "Custom (current)", stack: value, category: "sans" as const },
-        ...FONT_OPTIONS,
+        { id: "__custom", label: "Custom (current)", stack: value, category: "custom" as const },
+        ...options,
       ];
 
   return (
@@ -55,7 +59,7 @@ export function FontSelect({
       </button>
       {open && (
         <ul className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
-          {options.map((f) => {
+          {rows.map((f) => {
             const selected = f.stack === value;
             return (
               <li key={f.id}>

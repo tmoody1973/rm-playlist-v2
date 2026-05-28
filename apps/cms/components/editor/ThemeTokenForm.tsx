@@ -1,5 +1,6 @@
 "use client";
 
+import type { FontOption } from "@/lib/fonts";
 import { COLOR_TOKEN_FIELDS } from "@/lib/theme";
 import type { ThemeTokens } from "@/lib/theme";
 import { FontSelect } from "./FontSelect";
@@ -8,14 +9,16 @@ import { FontSelect } from "./FontSelect";
  * Edit a full theme token set — color pickers for the five color tokens, a
  * font picker with live preview, and a radius text input. Used by the theme
  * manager (Phase 4) for both creating and editing presets. Controlled: parent
- * owns `value`.
+ * owns `value`. `fontOptions` (curated + uploaded) flows to the font picker.
  */
 export function ThemeTokenForm({
   value,
   onChange,
+  fontOptions,
 }: {
   value: ThemeTokens;
   onChange: (next: ThemeTokens) => void;
+  fontOptions?: FontOption[];
 }) {
   const set = (key: keyof ThemeTokens, v: string) => onChange({ ...value, [key]: v });
 
@@ -44,7 +47,11 @@ export function ThemeTokenForm({
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-neutral-500">Font</span>
-          <FontSelect value={value.font} onChange={(font) => set("font", font)} />
+          <FontSelect
+            value={value.font}
+            onChange={(font) => set("font", font)}
+            options={fontOptions}
+          />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-neutral-500">Radius</span>
