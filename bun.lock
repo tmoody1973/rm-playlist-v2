@@ -17,6 +17,26 @@
         "typescript-eslint": "^8.20.0",
       },
     },
+    "apps/cms": {
+      "name": "@rm/cms",
+      "version": "0.0.0",
+      "dependencies": {
+        "@clerk/nextjs": "^6.20.0",
+        "@rm/convex": "workspace:*",
+        "convex": "^1.17.0",
+        "next": "16.2.4",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+      },
+      "devDependencies": {
+        "@tailwindcss/postcss": "^4",
+        "@types/node": "^22",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "tailwindcss": "^4",
+        "typescript": "^5",
+      },
+    },
     "apps/embed": {
       "name": "@rm/embed",
       "version": "0.0.0",
@@ -406,6 +426,8 @@
     "@protobufjs/pool": ["@protobufjs/pool@1.1.0", "", {}, "sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw=="],
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.0", "", {}, "sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw=="],
+
+    "@rm/cms": ["@rm/cms@workspace:apps/cms"],
 
     "@rm/convex": ["@rm/convex@workspace:packages/convex"],
 
