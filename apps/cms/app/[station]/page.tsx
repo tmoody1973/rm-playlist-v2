@@ -3,13 +3,7 @@ import { fetchQuery } from "convex/nextjs";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PageRenderer } from "@/components/PageRenderer";
-
-/** Stations with public microsites. 414music has none (design doc 005). */
-const CMS_STATIONS = ["hyfin", "88nine", "rhythmlab"] as const;
-
-function isCmsStation(slug: string): boolean {
-  return (CMS_STATIONS as readonly string[]).includes(slug);
-}
+import { isCmsStation } from "@/lib/stations";
 
 type Params = { params: Promise<{ station: string }> };
 
@@ -45,5 +39,5 @@ export default async function StationHome({ params }: Params) {
   });
   if (data === null) notFound();
 
-  return <PageRenderer blocks={data.page.blocks} tokens={data.tokens} />;
+  return <PageRenderer blocks={data.page.blocks} tokens={data.tokens} stationSlug={station} />;
 }

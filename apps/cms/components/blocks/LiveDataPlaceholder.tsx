@@ -1,18 +1,9 @@
-import type { LiveDataBlockType } from "@/lib/blocks";
-
-const LABELS: Record<LiveDataBlockType, string> = {
-  "now-playing": "Now playing",
-  playlist: "Recent playlist",
-  "upcoming-events": "Upcoming events",
-  touring: "Artists we play, coming to town",
-  "fundraiser-progress": "Fundraiser progress",
-};
-
 /**
- * Stand-in for live-data / campaign blocks until Phase 2 wires them to
- * @rm/convex queries. Keeps a station-home template renderable today.
+ * Stand-in for blocks not yet implemented. Used for `fundraiser-progress`
+ * until Phase 5. The Phase 2 live-data blocks (now-playing, playlist,
+ * upcoming-events, touring) now have real components.
  */
-export function LiveDataPlaceholder({ type }: { type: LiveDataBlockType }) {
+export function LiveDataPlaceholder({ label }: { label: string }) {
   return (
     <section className="px-6 py-8">
       <div
@@ -22,7 +13,7 @@ export function LiveDataPlaceholder({ type }: { type: LiveDataBlockType }) {
           borderRadius: "var(--rm-radius)",
         }}
       >
-        {LABELS[type]} — live data coming soon.
+        {label} — coming soon.
       </div>
     </section>
   );

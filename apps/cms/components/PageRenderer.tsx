@@ -1,12 +1,17 @@
 import { parseBlock, type RawBlock, type RenderableBlock } from "@/lib/blocks";
+import type { CmsStationSlug } from "@/lib/stations";
 import { tokensToCssVars, type ThemeTokens } from "@/lib/theme";
 import { Cta } from "./blocks/Cta";
 import { Hero } from "./blocks/Hero";
 import { ImageBlock } from "./blocks/ImageBlock";
 import { LiveDataPlaceholder } from "./blocks/LiveDataPlaceholder";
+import { NowPlaying } from "./blocks/NowPlaying";
+import { Playlist } from "./blocks/Playlist";
 import { RichText } from "./blocks/RichText";
+import { Touring } from "./blocks/Touring";
+import { UpcomingEvents } from "./blocks/UpcomingEvents";
 
-function renderBlock(block: RenderableBlock) {
+function renderBlock(block: RenderableBlock, stationSlug: CmsStationSlug) {
   switch (block.type) {
     case "hero":
       return <Hero key={block.id} config={block.config} />;
@@ -16,17 +21,36 @@ function renderBlock(block: RenderableBlock) {
       return <ImageBlock key={block.id} config={block.config} />;
     case "cta":
       return <Cta key={block.id} config={block.config} />;
+    case "now-playing":
+      return <NowPlaying key={block.id} stationSlug={stationSlug} />;
+    case "playlist":
+      return <Playlist key={block.id} stationSlug={stationSlug} limit={block.config.limit} />;
+    case "upcoming-events":
+      return (
+        <UpcomingEvents key={block.id} limit={block.config.limit} region={block.config.region} />
+      );
+    case "touring":
+      return <Touring key={block.id} limit={block.config.limit} />;
     default:
-      return <LiveDataPlaceholder key={block.id} type={block.type} />;
+      return <LiveDataPlaceholder key={block.id} label="Fundraiser progress" />;
   }
 }
 
 /**
  * Renders a CMS page: applies the resolved theme as CSS variables on a single
  * wrapper, then renders the ordered block stack. Invalid/unknown blocks are
- * dropped by parseBlock. Server component — no client JS for static pages.
+ * dropped by parseBlock. Server component — live-data blocks fetch their own
+ * data (now-playing hydrates client-side for realtime).
  */
-export function PageRenderer({ blocks, tokens }: { blocks: RawBlock[]; tokens: ThemeTokens }) {
+export function PageRenderer({
+  blocks,
+  tokens,
+  stationSlug,
+}: {
+  blocks: RawBlock[];
+  tokens: ThemeTokens;
+  stationSlug: CmsStationSlug;
+}) {
   const parsed = blocks.map(parseBlock).filter((block): block is RenderableBlock => block !== null);
 
   return (
@@ -39,7 +63,7 @@ export function PageRenderer({ blocks, tokens }: { blocks: RawBlock[]; tokens: T
         fontFamily: "var(--rm-font)",
       }}
     >
-      {parsed.map(renderBlock)}
+      {parsed.map((block) => renderBlock(block, stationSlug))}
     </main>
   );
 }

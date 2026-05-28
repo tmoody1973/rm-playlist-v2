@@ -207,17 +207,55 @@ export const cmsStationHomeDemo = internalMutation({
       throw new Error("HYFIN station not seeded — run seed:rmOrg first");
     }
 
+    // Canonical station-home template (design doc 005): hero → intro →
+    // now-playing → playlist → upcoming-events → touring → cta. Content blocks
+    // carry data; live-data blocks read @rm/convex at render.
+    const blocks = [
+      {
+        id: "hero-1",
+        type: "hero",
+        config: {
+          title: "HYFIN",
+          subtitle: "Diaspora music from Milwaukee.",
+          cta: { label: "Listen live", href: "https://hyfin.org" },
+        },
+      },
+      {
+        id: "richtext-1",
+        type: "rich-text",
+        config: {
+          html: "<p>HYFIN is Radio Milwaukee's home for the global Black music diaspora — hip-hop, Afrobeats, R&amp;B, reggae, and the sounds connecting Milwaukee to the world.</p>",
+        },
+      },
+      { id: "nowplaying-1", type: "now-playing", config: {} },
+      { id: "playlist-1", type: "playlist", config: { limit: 8 } },
+      { id: "events-1", type: "upcoming-events", config: { limit: 4 } },
+      { id: "touring-1", type: "touring", config: { limit: 4 } },
+      {
+        id: "cta-1",
+        type: "cta",
+        config: {
+          buttons: [{ label: "About HYFIN", href: "https://radiomilwaukee.org/hyfin" }],
+        },
+      },
+    ];
+
     const existing = await ctx.db
       .query("pages")
       .withIndex("by_station_kind_slug", (q) =>
         q.eq("stationId", station._id).eq("kind", "station-home").eq("slug", ""),
       )
       .first();
-    if (existing !== null) {
-      return { created: false, pageId: existing._id };
-    }
 
     const now = Date.now();
+
+    // Upsert: refresh the demo page's blocks so re-running this seed converges
+    // to the current template as new block types come online phase to phase.
+    if (existing !== null) {
+      await ctx.db.patch(existing._id, { blocks, title: "HYFIN", status: "published" });
+      return { created: false, updated: true, pageId: existing._id };
+    }
+
     const pageId = await ctx.db.insert("pages", {
       orgId: org._id,
       stationId: station._id,
@@ -225,38 +263,11 @@ export const cmsStationHomeDemo = internalMutation({
       slug: "",
       title: "HYFIN",
       status: "published",
-      blocks: [
-        {
-          id: "hero-1",
-          type: "hero",
-          config: {
-            title: "HYFIN",
-            subtitle: "Diaspora music from Milwaukee.",
-            cta: { label: "Listen live", href: "https://hyfin.org" },
-          },
-        },
-        {
-          id: "richtext-1",
-          type: "rich-text",
-          config: {
-            html: "<p>HYFIN is Radio Milwaukee's home for the global Black music diaspora — hip-hop, Afrobeats, R&amp;B, reggae, and the sounds connecting Milwaukee to the world.</p>",
-          },
-        },
-        {
-          id: "cta-1",
-          type: "cta",
-          config: {
-            buttons: [
-              { label: "Explore events", href: "/hyfin/events" },
-              { label: "About HYFIN", href: "https://radiomilwaukee.org/hyfin" },
-            ],
-          },
-        },
-      ],
+      blocks,
       publishedAt: now,
       createdAt: now,
     });
 
-    return { created: true, pageId };
+    return { created: true, updated: false, pageId };
   },
 });

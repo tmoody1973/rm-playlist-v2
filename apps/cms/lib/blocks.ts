@@ -47,33 +47,36 @@ export const ctaConfig = z.object({
     .min(1),
 });
 
+// Live-data blocks read @rm/convex. Configs are small and all-optional;
+// an absent config (`undefined`) parses to `{}`.
+const limitField = z.number().int().positive().max(50).optional();
+
+export const nowPlayingConfig = z.object({});
+export const playlistConfig = z.object({ limit: limitField });
+export const upcomingEventsConfig = z.object({ limit: limitField, region: z.string().optional() });
+export const touringConfig = z.object({ limit: limitField });
+
 export type HeroConfig = z.infer<typeof heroConfig>;
 export type RichTextConfig = z.infer<typeof richTextConfig>;
 export type ImageConfig = z.infer<typeof imageConfig>;
 export type CtaConfig = z.infer<typeof ctaConfig>;
-
-/** Block types that read live @rm/convex data — rendered in Phase 2. */
-export const LIVE_DATA_BLOCK_TYPES = [
-  "now-playing",
-  "playlist",
-  "upcoming-events",
-  "touring",
-  "fundraiser-progress",
-] as const;
-export type LiveDataBlockType = (typeof LIVE_DATA_BLOCK_TYPES)[number];
+export type NowPlayingConfig = z.infer<typeof nowPlayingConfig>;
+export type PlaylistConfig = z.infer<typeof playlistConfig>;
+export type UpcomingEventsConfig = z.infer<typeof upcomingEventsConfig>;
+export type TouringConfig = z.infer<typeof touringConfig>;
 
 export type RenderableBlock =
   | { id: string; type: "hero"; config: HeroConfig }
   | { id: string; type: "rich-text"; config: RichTextConfig }
   | { id: string; type: "image"; config: ImageConfig }
   | { id: string; type: "cta"; config: CtaConfig }
-  | { id: string; type: LiveDataBlockType; config: unknown };
+  | { id: string; type: "now-playing"; config: NowPlayingConfig }
+  | { id: string; type: "playlist"; config: PlaylistConfig }
+  | { id: string; type: "upcoming-events"; config: UpcomingEventsConfig }
+  | { id: string; type: "touring"; config: TouringConfig }
+  | { id: string; type: "fundraiser-progress"; config: unknown };
 
 export type RawBlock = { id: string; type: string; config: unknown };
-
-function isLiveDataType(type: string): type is LiveDataBlockType {
-  return (LIVE_DATA_BLOCK_TYPES as readonly string[]).includes(type);
-}
 
 /**
  * Validate a stored block. Returns a typed renderable block, or `null` for
@@ -97,10 +100,25 @@ export function parseBlock(raw: RawBlock): RenderableBlock | null {
       const r = ctaConfig.safeParse(raw.config);
       return r.success ? { id: raw.id, type: "cta", config: r.data } : null;
     }
+    case "now-playing": {
+      const r = nowPlayingConfig.safeParse(raw.config ?? {});
+      return r.success ? { id: raw.id, type: "now-playing", config: r.data } : null;
+    }
+    case "playlist": {
+      const r = playlistConfig.safeParse(raw.config ?? {});
+      return r.success ? { id: raw.id, type: "playlist", config: r.data } : null;
+    }
+    case "upcoming-events": {
+      const r = upcomingEventsConfig.safeParse(raw.config ?? {});
+      return r.success ? { id: raw.id, type: "upcoming-events", config: r.data } : null;
+    }
+    case "touring": {
+      const r = touringConfig.safeParse(raw.config ?? {});
+      return r.success ? { id: raw.id, type: "touring", config: r.data } : null;
+    }
+    case "fundraiser-progress":
+      return { id: raw.id, type: "fundraiser-progress", config: raw.config };
     default:
-      if (isLiveDataType(raw.type)) {
-        return { id: raw.id, type: raw.type, config: raw.config };
-      }
       return null;
   }
 }
