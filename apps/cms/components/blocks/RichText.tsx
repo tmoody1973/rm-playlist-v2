@@ -1,18 +1,27 @@
 import type { RichTextConfig } from "@/lib/blocks";
 
 /**
- * Renders Tiptap HTML. The HTML is trusted in Phase 1 (only the seed writes
- * pages). When the admin builder lands in Phase 3, it MUST sanitize on write
- * (server-side allowlist) before this is fed user-authored content.
+ * Renders plain-text rich-text as escaped paragraphs. React escapes the text,
+ * so there's no XSS surface. Paragraphs split on blank lines.
+ *
+ * Phase 3b-2 upgrades this to a structured Tiptap/ProseMirror doc rendered via
+ * an allowlist serializer (bold/italic/links/lists), still without raw HTML.
  */
 export function RichText({ config }: { config: RichTextConfig }) {
+  const paragraphs = config.text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (paragraphs.length === 0) return null;
+
   return (
     <section className="px-6 py-10">
-      <div
-        className="mx-auto max-w-2xl text-base leading-relaxed [&_a]:underline [&_p]:mb-4"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: trusted seed HTML; Phase 3 sanitizes on write.
-        dangerouslySetInnerHTML={{ __html: config.html }}
-      />
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 text-base leading-relaxed">
+        {paragraphs.map((paragraph, i) => (
+          <p key={i}>{paragraph}</p>
+        ))}
+      </div>
     </section>
   );
 }

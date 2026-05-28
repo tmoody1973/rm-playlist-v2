@@ -23,9 +23,10 @@ export const heroConfig = z.object({
 });
 
 export const richTextConfig = z.object({
-  // Tiptap HTML. Phase 3 (admin write path) MUST sanitize on write; in Phase 1
-  // the only writer is the seed, so this content is trusted.
-  html: z.string(),
+  // Plain text, rendered escaped by React (XSS-safe by construction — no raw
+  // HTML). Phase 3b-2 replaces this with a structured Tiptap/ProseMirror doc
+  // + allowlist serializer for real formatting.
+  text: z.string(),
 });
 
 export const imageConfig = z.object({

@@ -270,3 +270,72 @@ export const remove = mutation({
     return { ok: true };
   },
 });
+
+/**
+ * Load a single page for the admin block-stack editor — includes drafts and
+ * the resolved theme tokens so the live preview renders on-theme. Auth-gated;
+ * returns null if no CMS user or page missing.
+ */
+export const getPageForEdit = query({
+  args: { pageId: v.id("pages") },
+  handler: async (ctx, { pageId }) => {
+    const user = await getCmsUser(ctx);
+    if (user === null) return null;
+
+    const page = await ctx.db.get(pageId);
+    if (page === null) return null;
+
+    const station = await ctx.db.get(page.stationId);
+    const tokens = await resolveThemeTokens(ctx, page.stationId, page);
+
+    return {
+      _id: page._id,
+      stationSlug: station?.slug ?? "unknown",
+      stationName: station?.name ?? "Unknown",
+      kind: page.kind,
+      slug: page.slug,
+      title: page.title,
+      status: page.status,
+      blocks: page.blocks,
+      tokens,
+    };
+  },
+});
+
+const blockValidator = v.object({
+  id: v.string(),
+  type: v.string(),
+  config: v.any(),
+});
+
+/**
+ * Update a page's editable content — title and/or block stack. operator+.
+ * Does not change status (use setStatus) or theme (Phase 4). Block `config`
+ * shapes are validated for rendering by the client's Zod parser; here we only
+ * enforce the structural { id, type, config } envelope.
+ */
+export const updatePage = mutation({
+  args: {
+    pageId: v.id("pages"),
+    title: v.optional(v.string()),
+    blocks: v.optional(v.array(blockValidator)),
+  },
+  handler: async (ctx, { pageId, title, blocks }) => {
+    const user = await requireCmsUser(ctx);
+    const page = await ctx.db.get(pageId);
+    if (page === null) throw new Error("Page not found");
+
+    const patch: { updatedBy: Id<"users">; title?: string; blocks?: typeof blocks } = {
+      updatedBy: user._id,
+    };
+    if (title !== undefined) {
+      const trimmed = title.trim();
+      if (trimmed.length === 0) throw new Error("Title cannot be empty.");
+      patch.title = trimmed;
+    }
+    if (blocks !== undefined) patch.blocks = blocks;
+
+    await ctx.db.patch(pageId, patch);
+    return { ok: true };
+  },
+});

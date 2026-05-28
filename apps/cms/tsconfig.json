@@ -21,7 +21,8 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@rm/convex/api": ["../../packages/convex/convex/_generated/api"]
+      "@rm/convex/api": ["../../packages/convex/convex/_generated/api"],
+      "@rm/convex/values": ["../../packages/convex/convex/_generated/dataModel"]
     }
   },
   "include": [

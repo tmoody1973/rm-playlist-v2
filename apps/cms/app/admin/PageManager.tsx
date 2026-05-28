@@ -160,6 +160,12 @@ export function PageManager() {
                   >
                     {page.status}
                   </span>
+                  <a
+                    href={`/admin/pages/${page._id}`}
+                    className="text-sm text-neutral-600 underline"
+                  >
+                    Edit
+                  </a>
                   {canView && (
                     <a
                       href={`/${page.stationSlug}`}

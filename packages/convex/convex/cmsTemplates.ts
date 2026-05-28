@@ -36,7 +36,7 @@ function stationHomeTemplate(station: StationLite): TemplateBlock[] {
     {
       id: "richtext-1",
       type: "rich-text",
-      config: { html: `<p>Welcome to ${station.name}.</p>` },
+      config: { text: `Welcome to ${station.name}.` },
     },
     { id: "nowplaying-1", type: "now-playing", config: {} },
     { id: "playlist-1", type: "playlist", config: { limit: 8 } },
@@ -61,7 +61,7 @@ function eventTemplate(station: StationLite): TemplateBlock[] {
         cta: { label: "Get tickets", href: "#" },
       },
     },
-    { id: "richtext-1", type: "rich-text", config: { html: "<p>Event details.</p>" } },
+    { id: "richtext-1", type: "rich-text", config: { text: "Event details." } },
     {
       id: "cta-1",
       type: "cta",
@@ -87,7 +87,7 @@ function fundraiserTemplate(station: StationLite): TemplateBlock[] {
       type: "fundraiser-progress",
       config: { goal: 0, raised: 0, donateHref: "#" },
     },
-    { id: "richtext-1", type: "rich-text", config: { html: "<p>Why your support matters.</p>" } },
+    { id: "richtext-1", type: "rich-text", config: { text: "Why your support matters." } },
     {
       id: "cta-1",
       type: "cta",
