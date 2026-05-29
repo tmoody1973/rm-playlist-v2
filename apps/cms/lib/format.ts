@@ -24,3 +24,14 @@ export function formatDateTime(ms: number, dateOnly: boolean): string {
 export function formatClock(ms: number): string {
   return TIME_FMT.format(new Date(ms));
 }
+
+const USD_FMT = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+/** "$12,500" — whole-dollar USD, for fundraiser goal/raised amounts. */
+export function formatUsd(amount: number): string {
+  return USD_FMT.format(Math.max(0, Math.round(amount)));
+}

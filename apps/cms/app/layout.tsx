@@ -40,7 +40,14 @@ const fontVariables = [
   jetBrainsMono.variable,
 ].join(" ");
 
+// Origin for resolving relative metadata URLs (og:image, twitter:image) to
+// absolute — social crawlers require absolute URLs. The public microsite domain
+// is still TBD (design doc 005 open item), so this reads an env var and falls
+// back to the dev origin. Production MUST set NEXT_PUBLIC_SITE_URL.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Radio Milwaukee — Station Microsites",
   description:
     "Themeable microsites and campaign pages for HYFIN, 88Nine, and Rhythm Lab. Powered by Radio Milwaukee.",

@@ -58,6 +58,17 @@ export const playlistConfig = z.object({ limit: limitField });
 export const upcomingEventsConfig = z.object({ limit: limitField, region: z.string().optional() });
 export const touringConfig = z.object({ limit: limitField });
 
+// Campaign block. Manual entry (design doc 005 — no live donation integration):
+// staff set goal/raised dollars + a donate link. Amounts are whole-dollar USD;
+// negatives are rejected so the progress math stays sane.
+export const fundraiserProgressConfig = z.object({
+  goal: z.number().min(0),
+  raised: z.number().min(0),
+  donateHref: z.string(),
+  title: z.string().optional(),
+  caption: z.string().optional(),
+});
+
 export type HeroConfig = z.infer<typeof heroConfig>;
 export type RichTextConfig = z.infer<typeof richTextConfig>;
 export type ImageConfig = z.infer<typeof imageConfig>;
@@ -66,6 +77,7 @@ export type NowPlayingConfig = z.infer<typeof nowPlayingConfig>;
 export type PlaylistConfig = z.infer<typeof playlistConfig>;
 export type UpcomingEventsConfig = z.infer<typeof upcomingEventsConfig>;
 export type TouringConfig = z.infer<typeof touringConfig>;
+export type FundraiserProgressConfig = z.infer<typeof fundraiserProgressConfig>;
 
 export type RenderableBlock =
   | { id: string; type: "hero"; config: HeroConfig }
@@ -76,7 +88,7 @@ export type RenderableBlock =
   | { id: string; type: "playlist"; config: PlaylistConfig }
   | { id: string; type: "upcoming-events"; config: UpcomingEventsConfig }
   | { id: string; type: "touring"; config: TouringConfig }
-  | { id: string; type: "fundraiser-progress"; config: unknown };
+  | { id: string; type: "fundraiser-progress"; config: FundraiserProgressConfig };
 
 export type RawBlock = { id: string; type: string; config: unknown };
 
@@ -118,8 +130,10 @@ export function parseBlock(raw: RawBlock): RenderableBlock | null {
       const r = touringConfig.safeParse(raw.config ?? {});
       return r.success ? { id: raw.id, type: "touring", config: r.data } : null;
     }
-    case "fundraiser-progress":
-      return { id: raw.id, type: "fundraiser-progress", config: raw.config };
+    case "fundraiser-progress": {
+      const r = fundraiserProgressConfig.safeParse(raw.config);
+      return r.success ? { id: raw.id, type: "fundraiser-progress", config: r.data } : null;
+    }
     default:
       return null;
   }

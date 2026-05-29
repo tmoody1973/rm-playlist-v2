@@ -288,6 +288,7 @@ export const getPageForEdit = query({
       tokens,
       themeId: page.themeId ?? null,
       themeOverrides: (page.themeOverrides ?? null) as PageThemeOverrides | null,
+      seo: page.seo ?? null,
     };
   },
 });
@@ -363,24 +364,40 @@ const blockValidator = v.object({
   config: v.any(),
 });
 
+const seoValidator = v.object({
+  title: v.optional(v.string()),
+  description: v.optional(v.string()),
+  ogImage: v.optional(v.string()),
+});
+
+type PageSeo = { title?: string; description?: string; ogImage?: string };
+
 /**
- * Update a page's editable content — title and/or block stack. operator+.
- * Does not change status (use setStatus) or theme (Phase 4). Block `config`
- * shapes are validated for rendering by the client's Zod parser; here we only
- * enforce the structural { id, type, config } envelope.
+ * Update a page's editable content — title, block stack, and/or SEO. operator+.
+ * Does not change status (use setStatus) or theme (use setPageTheme). Block
+ * `config` shapes are validated for rendering by the client's Zod parser; here
+ * we only enforce the structural { id, type, config } envelope. Empty SEO fields
+ * are stripped so they don't override the station/tagline fallbacks in
+ * generateMetadata; an all-empty seo clears the column.
  */
 export const updatePage = mutation({
   args: {
     pageId: v.id("pages"),
     title: v.optional(v.string()),
     blocks: v.optional(v.array(blockValidator)),
+    seo: v.optional(seoValidator),
   },
-  handler: async (ctx, { pageId, title, blocks }) => {
+  handler: async (ctx, { pageId, title, blocks, seo }) => {
     const user = await requireCmsUser(ctx);
     const page = await ctx.db.get(pageId);
     if (page === null) throw new Error("Page not found");
 
-    const patch: { updatedBy: Id<"users">; title?: string; blocks?: typeof blocks } = {
+    const patch: {
+      updatedBy: Id<"users">;
+      title?: string;
+      blocks?: typeof blocks;
+      seo?: PageSeo;
+    } = {
       updatedBy: user._id,
     };
     if (title !== undefined) {
@@ -389,6 +406,13 @@ export const updatePage = mutation({
       patch.title = trimmed;
     }
     if (blocks !== undefined) patch.blocks = blocks;
+    if (seo !== undefined) {
+      const entries = Object.entries(seo).filter(
+        ([, val]) => typeof val === "string" && val.trim().length > 0,
+      );
+      // patch with `undefined` clears the optional column → inherits fallbacks.
+      patch.seo = entries.length > 0 ? (Object.fromEntries(entries) as PageSeo) : undefined;
+    }
 
     await ctx.db.patch(pageId, patch);
     return { ok: true };

@@ -4,6 +4,7 @@ import { BLOCK_TYPE_LABELS } from "@/lib/blockDefaults";
 import { parseBlock, type RawBlock, type RenderableBlock } from "@/lib/blocks";
 import { tokensToCssVars, type ThemeTokens } from "@/lib/theme";
 import { Cta } from "./blocks/Cta";
+import { FundraiserProgress } from "./blocks/FundraiserProgress";
 import { Hero } from "./blocks/Hero";
 import { ImageBlock } from "./blocks/ImageBlock";
 import { LiveDataPlaceholder } from "./blocks/LiveDataPlaceholder";
@@ -25,6 +26,8 @@ function previewBlock(block: RenderableBlock) {
       return <ImageBlock key={block.id} config={block.config} />;
     case "cta":
       return <Cta key={block.id} config={block.config} />;
+    case "fundraiser-progress":
+      return <FundraiserProgress key={block.id} config={block.config} />;
     default:
       return (
         <LiveDataPlaceholder

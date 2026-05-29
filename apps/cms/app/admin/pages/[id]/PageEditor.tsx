@@ -18,11 +18,14 @@ function errMessage(err: unknown): string {
 
 type OverrideState = Record<ColorTokenKey, { on: boolean; value: string }>;
 
+type SeoState = { title: string; description: string; ogImage: string };
+
 type EditState = {
   title: string;
   blocks: RawBlock[];
   themeId: string | null;
   overrides: OverrideState;
+  seo: SeoState;
 };
 
 function initOverrides(
@@ -65,6 +68,11 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
         blocks: page.blocks as RawBlock[],
         themeId: page.themeId,
         overrides: initOverrides(page.tokens, page.themeOverrides),
+        seo: {
+          title: page.seo?.title ?? "",
+          description: page.seo?.description ?? "",
+          ogImage: page.seo?.ogImage ?? "",
+        },
       });
     }
   }, [page, state]);
@@ -116,7 +124,17 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
     setError(null);
     setSaving(true);
     try {
-      await updatePage({ pageId, title: state!.title, blocks: state!.blocks });
+      await updatePage({
+        pageId,
+        title: state!.title,
+        blocks: state!.blocks,
+        // Empty fields are stripped server-side → page inherits station fallbacks.
+        seo: {
+          title: state!.seo.title,
+          description: state!.seo.description,
+          ogImage: state!.seo.ogImage,
+        },
+      });
       const overrides: ThemeOverrides = {};
       for (const { key } of COLOR_TOKEN_FIELDS) {
         const o = state!.overrides[key];
@@ -247,6 +265,46 @@ export function PageEditor({ pageId }: { pageId: Id<"pages"> }) {
                 );
               })}
             </div>
+          </fieldset>
+
+          {/* SEO / social share */}
+          <fieldset className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-4">
+            <legend className="px-1 text-sm font-semibold">SEO &amp; sharing</legend>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-neutral-500">Title (falls back to station name)</span>
+              <input
+                value={state.seo.title}
+                onChange={(e) =>
+                  setState({ ...state, seo: { ...state.seo, title: e.target.value } })
+                }
+                placeholder={page.title}
+                className="rounded-md border border-neutral-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-neutral-500">Description</span>
+              <textarea
+                value={state.seo.description}
+                onChange={(e) =>
+                  setState({ ...state, seo: { ...state.seo, description: e.target.value } })
+                }
+                rows={2}
+                className="rounded-md border border-neutral-300 px-3 py-2"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-neutral-500">
+                Share image URL (optional — overrides the auto-generated one)
+              </span>
+              <input
+                value={state.seo.ogImage}
+                onChange={(e) =>
+                  setState({ ...state, seo: { ...state.seo, ogImage: e.target.value } })
+                }
+                placeholder="https://…"
+                className="rounded-md border border-neutral-300 px-3 py-2"
+              />
+            </label>
           </fieldset>
 
           <ul className="flex flex-col gap-3">

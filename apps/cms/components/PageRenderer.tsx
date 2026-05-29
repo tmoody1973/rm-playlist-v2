@@ -2,9 +2,9 @@ import { parseBlock, type RawBlock, type RenderableBlock } from "@/lib/blocks";
 import type { CmsStationSlug } from "@/lib/stations";
 import { tokensToCssVars, type ThemeTokens } from "@/lib/theme";
 import { Cta } from "./blocks/Cta";
+import { FundraiserProgress } from "./blocks/FundraiserProgress";
 import { Hero } from "./blocks/Hero";
 import { ImageBlock } from "./blocks/ImageBlock";
-import { LiveDataPlaceholder } from "./blocks/LiveDataPlaceholder";
 import { NowPlaying } from "./blocks/NowPlaying";
 import { Playlist } from "./blocks/Playlist";
 import { RichText } from "./blocks/RichText";
@@ -31,8 +31,10 @@ function renderBlock(block: RenderableBlock, stationSlug: CmsStationSlug) {
       );
     case "touring":
       return <Touring key={block.id} limit={block.config.limit} />;
+    case "fundraiser-progress":
+      return <FundraiserProgress key={block.id} config={block.config} />;
     default:
-      return <LiveDataPlaceholder key={block.id} label="Fundraiser progress" />;
+      return null;
   }
 }
 
