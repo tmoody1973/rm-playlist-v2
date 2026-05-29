@@ -247,3 +247,86 @@ export const cmsStationHomeDemo = internalMutation({
     return { created: true, updated: false, pageId };
   },
 });
+
+/**
+ * Seed a published HYFIN fundraiser page so the Phase-5 fundraiser-progress block
+ * and the public /[station]/fundraisers/[slug] route have a real example to
+ * render (and a live OG card to share).
+ *
+ * Run after rmOrg + cmsThemes: `bunx convex run seed:cmsFundraiserDemo`
+ * Idempotent — upserts the HYFIN `year-end` fundraiser page.
+ */
+export const cmsFundraiserDemo = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const org = await ctx.db
+      .query("organizations")
+      .withIndex("by_slug", (q) => q.eq("slug", "radiomilwaukee"))
+      .first();
+    if (org === null) {
+      throw new Error("RM organization not seeded — run seed:rmOrg first");
+    }
+
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", "hyfin"))
+      .first();
+    if (station === null) {
+      throw new Error("HYFIN station not seeded — run seed:rmOrg first");
+    }
+
+    const slug = "year-end";
+
+    // Fundraiser template, with real goal/raised on the progress block so the
+    // bar (and the OG card) show actual progress instead of 0%.
+    const blocks = buildTemplate("fundraiser", {
+      slug: station.slug,
+      name: station.name,
+      tagline: station.tagline,
+    }).map((block) =>
+      block.type === "fundraiser-progress"
+        ? {
+            ...block,
+            config: {
+              goal: 25000,
+              raised: 16200,
+              donateHref: "https://radiomilwaukee.org/donate",
+              caption: "Help keep HYFIN's diaspora sound on the air.",
+            },
+          }
+        : block,
+    );
+
+    const existing = await ctx.db
+      .query("pages")
+      .withIndex("by_station_kind_slug", (q) =>
+        q.eq("stationId", station._id).eq("kind", "fundraiser").eq("slug", slug),
+      )
+      .first();
+
+    const now = Date.now();
+
+    if (existing !== null) {
+      await ctx.db.patch(existing._id, {
+        blocks,
+        title: "Year-End Drive",
+        status: "published",
+      });
+      return { created: false, updated: true, pageId: existing._id };
+    }
+
+    const pageId = await ctx.db.insert("pages", {
+      orgId: org._id,
+      stationId: station._id,
+      kind: "fundraiser",
+      slug,
+      title: "Year-End Drive",
+      status: "published",
+      blocks,
+      publishedAt: now,
+      createdAt: now,
+    });
+
+    return { created: true, updated: false, pageId };
+  },
+});

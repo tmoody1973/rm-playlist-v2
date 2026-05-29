@@ -13,6 +13,18 @@ function errMessage(err: unknown): string {
 }
 
 /**
+ * Public URL for a page by kind. station-home lives at /[station]; event and
+ * fundraiser pages at /[station]/{events|fundraisers}/[slug]. Returns null for
+ * kinds without a public route yet.
+ */
+function publicPath(stationSlug: string, kind: string, slug: string): string | null {
+  if (kind === "station-home") return `/${stationSlug}`;
+  if (kind === "event") return `/${stationSlug}/events/${slug}`;
+  if (kind === "fundraiser") return `/${stationSlug}/fundraisers/${slug}`;
+  return null;
+}
+
+/**
  * Phase 3a admin: create pages from templates, publish/unpublish, delete.
  * The block-stack editor (per-block config + live preview) lands in Phase 3b.
  * All writes are role-checked server-side; this UI only mirrors the rules.
@@ -141,7 +153,8 @@ export function PageManager() {
           <ul className="flex flex-col divide-y divide-neutral-200 rounded-lg border border-neutral-200">
             {pages.map((page) => {
               const published = page.status === "published";
-              const canView = published && page.kind === "station-home";
+              const viewHref = publicPath(page.stationSlug, page.kind, page.slug);
+              const canView = published && viewHref !== null;
               return (
                 <li key={page._id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
@@ -166,9 +179,9 @@ export function PageManager() {
                   >
                     Edit
                   </a>
-                  {canView && (
+                  {canView && viewHref !== null && (
                     <a
-                      href={`/${page.stationSlug}`}
+                      href={viewHref}
                       target="_blank"
                       rel="noreferrer"
                       className="text-sm text-neutral-600 underline"

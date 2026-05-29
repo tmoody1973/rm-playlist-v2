@@ -47,7 +47,11 @@ function fundraiserFrom(blocks: Block[]): { pct: number; raised: number; goal: n
 }
 
 export async function GET(request: Request) {
-  const station = new URL(request.url).searchParams.get("station") ?? "";
+  const params = new URL(request.url).searchParams;
+  const station = params.get("station") ?? "";
+  // Default to the station hub so existing /api/og?station=X callers are unchanged.
+  const kind = params.get("kind") ?? "station-home";
+  const slug = params.get("slug") ?? "";
 
   let title = "Radio Milwaukee";
   let stationName = "Radio Milwaukee";
@@ -60,8 +64,8 @@ export async function GET(request: Request) {
       const client = new ConvexHttpClient(url);
       const data = await client.query(api.pages.getPublishedPage, {
         stationSlug: station,
-        kind: "station-home",
-        slug: "",
+        kind,
+        slug,
       });
       if (data !== null) {
         title = data.page.title;
