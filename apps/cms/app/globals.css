@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Phase 0 baseline. Public microsite pages resolve their own theme tokens
+ * into CSS variables on the page wrapper (Phase 1 — theme cascade). This is
+ * just a sane default so the scaffold renders legibly before that lands. */
+:root {
+  --font-display: "General Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: #ffffff;
+  color: #16191d;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}

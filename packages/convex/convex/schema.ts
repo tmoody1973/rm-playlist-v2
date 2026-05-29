@@ -493,4 +493,112 @@ export default defineSchema({
   })
     .index("by_station", ["stationId", "computedAt"])
     .index("by_artist", ["artistId"]),
+
+  // ------------------------------------------------------------------
+  // Station Microsites CMS (apps/cms) — owns `themes` + `pages`.
+  // Reads-only against plays/tracks/events/touringFromRotation; never
+  // mutates core tables. See docs/design/005-station-microsites-cms.md.
+  // ------------------------------------------------------------------
+
+  /**
+   * A reusable visual theme. A theme with `stationId` set is scoped to that
+   * station; `isStationDefault` marks the fallback theme rendered when a page
+   * specifies no themeId. Org-level themes (no stationId) are shared presets.
+   *
+   * Theme cascade at render: station default → page.themeId → page.themeOverrides.
+   * `tokens` are emitted as CSS variables on the page wrapper.
+   */
+  themes: defineTable({
+    orgId: v.id("organizations"),
+    /** Set = station-scoped; omitted = org-wide shared preset. */
+    stationId: v.optional(v.id("stations")),
+    name: v.string(), // "HYFIN Brand", "Fundraiser Red"
+    /** Fallback theme for the station when a page sets no themeId. */
+    isStationDefault: v.boolean(),
+    tokens: v.object({
+      colorPrimary: v.string(),
+      colorBg: v.string(),
+      colorCard: v.string(),
+      colorAccent: v.string(),
+      colorText: v.string(),
+      font: v.string(),
+      radius: v.string(),
+    }),
+    createdAt: v.number(),
+  })
+    .index("by_station", ["stationId"])
+    .index("by_org", ["orgId"]),
+
+  /**
+   * A public microsite page = an ordered stack of blocks. The station hub is
+   * one page with kind `station-home` and slug `''`. Event/fundraiser pages
+   * carry a slug.
+   *
+   * `kind` is an intentionally open string enum (`station-home` | `event` |
+   * `fundraiser`, with `giveaway` arriving in the Phase-2 contest module) —
+   * forward-compat per docs/decisions/001-single-tenant-first.md.
+   *
+   * `blocks` is an embedded ordered array; each block is `{ id, type, config }`
+   * where `config` is validated with a Zod discriminated union at the mutation
+   * boundary (admin builder, Phase 3). `themeOverrides` are token-level tweaks
+   * validated the same way.
+   */
+  pages: defineTable({
+    orgId: v.id("organizations"),
+    stationId: v.id("stations"),
+    /** 'station-home' | 'event' | 'fundraiser' (open enum; 'giveaway' later). */
+    kind: v.string(),
+    /** '' for the station hub; e.g. 'summerfest-2026' otherwise. */
+    slug: v.string(),
+    title: v.string(),
+    status: v.union(v.literal("draft"), v.literal("published")),
+    /** Page-level theme override; falls back to the station default theme. */
+    themeId: v.optional(v.id("themes")),
+    /** Token-level tweaks layered over the resolved theme. Zod-validated. */
+    themeOverrides: v.optional(v.any()),
+    /** Ordered page body. config is Zod-validated per block type at write time. */
+    blocks: v.array(
+      v.object({
+        id: v.string(),
+        type: v.string(),
+        config: v.any(),
+      }),
+    ),
+    /** Event pages link to an ingested `events` row. */
+    eventId: v.optional(v.id("events")),
+    seo: v.optional(
+      v.object({
+        title: v.optional(v.string()),
+        description: v.optional(v.string()),
+        ogImage: v.optional(v.string()),
+      }),
+    ),
+    publishedAt: v.optional(v.number()),
+    /** Optional — system-seeded/imported pages have no author. Matches events.createdBy. */
+    createdBy: v.optional(v.id("users")),
+    updatedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+  })
+    .index("by_station_kind_slug", ["stationId", "kind", "slug"])
+    .index("by_station_status", ["stationId", "status"]),
+
+  /**
+   * Admin-uploaded custom fonts (Canva-style). The file lives in Convex storage
+   * (served from our own infra — no third-party CDN), and `family` is the
+   * font-family name emitted in an @font-face rule and referenced by a theme's
+   * `tokens.font` stack. Upload/delete is admin-only; operators pick uploaded
+   * faces when theming. `licenseAck` records the uploader's attestation that RM
+   * holds web-embedding rights for the face.
+   */
+  fonts: defineTable({
+    orgId: v.id("organizations"),
+    label: v.string(), // human label in the picker, e.g. "RM Brand Sans"
+    family: v.string(), // CSS font-family name used in @font-face + the stack
+    storageId: v.id("_storage"),
+    format: v.union(v.literal("woff2"), v.literal("ttf"), v.literal("otf")),
+    /** Uploader attested RM is licensed to embed this font. */
+    licenseAck: v.boolean(),
+    uploadedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+  }).index("by_org", ["orgId"]),
 });

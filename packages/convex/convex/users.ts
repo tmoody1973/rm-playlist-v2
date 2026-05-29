@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 /**
  * Ensure a `users` row exists for the currently-signed-in Clerk identity.
@@ -51,6 +51,38 @@ export const ensureUserRecord = mutation({
     });
 
     return { userId, role };
+  },
+});
+
+/**
+ * Set a user's role by email — the founding-admin bootstrap + role management.
+ *
+ * `ensureUserRecord` creates every row as `operator`, and there is no public
+ * promotion path by design (role assignment is privileged). This internal
+ * mutation is the mechanism: run it via `bunx convex run users:setRoleByEmail`
+ * (deploy creds) or the Convex dashboard. Idempotent — only patches on change.
+ */
+export const setRoleByEmail = internalMutation({
+  args: {
+    email: v.string(),
+    role: v.union(v.literal("operator"), v.literal("admin")),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    email: v.string(),
+    role: v.union(v.literal("operator"), v.literal("admin")),
+    changed: v.boolean(),
+  }),
+  handler: async (ctx, { email, role }) => {
+    const target = email.trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    const user = users.find((u) => u.email.toLowerCase() === target);
+    if (user === undefined) {
+      throw new Error(`No user with email ${email} — they must sign in once first.`);
+    }
+    const changed = user.role !== role;
+    if (changed) await ctx.db.patch(user._id, { role });
+    return { userId: user._id, email: user.email, role, changed };
   },
 });
 

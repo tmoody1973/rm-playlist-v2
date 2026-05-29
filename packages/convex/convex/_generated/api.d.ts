@@ -10,16 +10,22 @@
 
 import type * as appleMusic from "../appleMusic.js";
 import type * as backfills from "../backfills.js";
+import type * as cmsAuth from "../cmsAuth.js";
+import type * as cmsStations from "../cmsStations.js";
+import type * as cmsTemplates from "../cmsTemplates.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
+import type * as fonts from "../fonts.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
+import type * as pages from "../pages.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as stationRegions from "../stationRegions.js";
 import type * as stations from "../stations.js";
+import type * as themes from "../themes.js";
 import type * as users from "../users.js";
 
 import type {
@@ -31,16 +37,22 @@ import type {
 declare const fullApi: ApiFromModules<{
   appleMusic: typeof appleMusic;
   backfills: typeof backfills;
+  cmsAuth: typeof cmsAuth;
+  cmsStations: typeof cmsStations;
+  cmsTemplates: typeof cmsTemplates;
   enrichment: typeof enrichment;
   events: typeof events;
+  fonts: typeof fonts;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
+  pages: typeof pages;
   plays: typeof plays;
   preview: typeof preview;
   reports: typeof reports;
   seed: typeof seed;
   stationRegions: typeof stationRegions;
   stations: typeof stations;
+  themes: typeof themes;
   users: typeof users;
 }>;
 
