@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 /**
  * Ensure a `users` row exists for the currently-signed-in Clerk identity.
@@ -51,6 +51,26 @@ export const ensureUserRecord = mutation({
     });
 
     return { userId, role };
+  },
+});
+
+/**
+ * Operator-role admin tooling. Internal-only — never callable from
+ * clients; invoke from the CLI:
+ *   bunx convex run users:setRole '{"userId": "<users _id>", "role": "admin"}'
+ */
+export const setRole = internalMutation({
+  args: {
+    userId: v.id("users"),
+    role: v.union(v.literal("operator"), v.literal("admin")),
+  },
+  handler: async (ctx, { userId, role }) => {
+    const user = await ctx.db.get(userId);
+    if (user === null) {
+      throw new Error(`No users row with id ${userId}`);
+    }
+    await ctx.db.patch(userId, { role });
+    return { email: user.email, previousRole: user.role, role };
   },
 });
 
