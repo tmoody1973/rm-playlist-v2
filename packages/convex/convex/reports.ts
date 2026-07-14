@@ -108,14 +108,11 @@ export const soundExchangePlaylist = query({
     if (station === null) return emptyResult;
 
     const legacyCap = Math.min(limit ?? 10_000, 50_000);
-    const { page: plays, isDone, continueCursor } = await fetchPlaysPage(
-      ctx,
-      station._id,
-      startMs,
-      endMs,
-      cursor,
-      legacyCap,
-    );
+    const {
+      page: plays,
+      isDone,
+      continueCursor,
+    } = await fetchPlaysPage(ctx, station._id, startMs, endMs, cursor, legacyCap);
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
     const artistCache = new Map<string, Doc<"artists"> | null>();
@@ -208,14 +205,11 @@ export const soundExchangePlaylistSummary = query({
       .first();
     if (station === null) return emptyResult;
 
-    const { page: plays, isDone, continueCursor } = await fetchPlaysPage(
-      ctx,
-      station._id,
-      startMs,
-      endMs,
-      cursor,
-      50_000,
-    );
+    const {
+      page: plays,
+      isDone,
+      continueCursor,
+    } = await fetchPlaysPage(ctx, station._id, startMs, endMs, cursor, 50_000);
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
     let resolvedPlays = 0;
