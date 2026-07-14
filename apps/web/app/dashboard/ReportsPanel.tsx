@@ -1,10 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAction, useQuery, useConvex } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
+import { useAction, useConvex } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { api } from "@rm/convex/api";
 
+type SummaryPage = FunctionReturnType<typeof api.reports.soundExchangePlaylistSummary>;
+type PlaylistPage = FunctionReturnType<typeof api.reports.soundExchangePlaylist>;
+
 type StationSlug = "hyfin" | "88nine" | "414music" | "rhythmlab";
+
+interface SummaryTotals {
+  resolvedPlays: number;
+  missingLabel: number;
+  missingIsrc: number;
+  missingDuration: number;
+}
+
+const EMPTY_TOTALS: SummaryTotals = {
+  resolvedPlays: 0,
+  missingLabel: 0,
+  missingIsrc: 0,
+  missingDuration: 0,
+};
 
 const STATIONS: ReadonlyArray<{ slug: StationSlug; label: string }> = [
   { slug: "88nine", label: "88Nine" },
@@ -43,13 +61,56 @@ export function ReportsPanel() {
   const [backfilling, setBackfilling] = useState(false);
   const range = useMemo(() => toEpochRange(startDate, endDate), [startDate, endDate]);
 
-  const summary = useQuery(
-    api.reports.soundExchangePlaylistSummary,
-    range === null ? "skip" : { stationSlug: station, startMs: range.startMs, endMs: range.endMs },
-  );
+  // Imperative paginated fetch instead of a reactive useQuery: a busy
+  // station over a month exceeds Convex's per-execution read limits in
+  // one shot, and a throwing useQuery crashed the whole panel. The
+  // preview no longer live-updates as plays enrich — fine for a report
+  // preview; re-pick the range to refresh. undefined = loading,
+  // null = failed (message lands in the shared error block).
+  const [summary, setSummary] = useState<SummaryTotals | undefined | null>(undefined);
+
+  useEffect(() => {
+    if (range === null) {
+      setSummary(undefined);
+      return;
+    }
+    let cancelled = false;
+    setSummary(undefined);
+    setError(null);
+    (async () => {
+      try {
+        let totals = EMPTY_TOTALS;
+        let cursor: string | null = null;
+        do {
+          const page: SummaryPage = await convex.query(api.reports.soundExchangePlaylistSummary, {
+            stationSlug: station,
+            startMs: range.startMs,
+            endMs: range.endMs,
+            cursor,
+          });
+          if (cancelled) return;
+          totals = {
+            resolvedPlays: totals.resolvedPlays + page.resolvedPlays,
+            missingLabel: totals.missingLabel + page.missingLabel,
+            missingIsrc: totals.missingIsrc + page.missingIsrc,
+            missingDuration: totals.missingDuration + page.missingDuration,
+          };
+          cursor = page.isDone ? null : page.continueCursor;
+        } while (cursor !== null);
+        setSummary(totals);
+      } catch (err) {
+        if (cancelled) return;
+        setSummary(null);
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, station, range]);
 
   const rangeValid = range !== null;
-  const hasData = summary !== undefined && summary.resolvedPlays > 0;
+  const hasData = summary !== undefined && summary !== null && summary.resolvedPlays > 0;
   const missingDurationCount = summary?.missingDuration ?? 0;
 
   const onBackfillDurations = async () => {
@@ -84,16 +145,25 @@ export function ReportsPanel() {
     setDownloading(true);
     setError(null);
     try {
-      const result = await convex.query(api.reports.soundExchangePlaylist, {
-        stationSlug: station,
-        startMs: range.startMs,
-        endMs: range.endMs,
-      });
-      if (result.rows.length === 0) {
+      // Pages arrive in playedAt order (index order server-side), so
+      // straight concatenation keeps the log chronological.
+      const rows: PlaylistRow[] = [];
+      let cursor: string | null = null;
+      do {
+        const page: PlaylistPage = await convex.query(api.reports.soundExchangePlaylist, {
+          stationSlug: station,
+          startMs: range.startMs,
+          endMs: range.endMs,
+          cursor,
+        });
+        rows.push(...page.rows);
+        cursor = page.isDone ? null : page.continueCursor;
+      } while (cursor !== null);
+      if (rows.length === 0) {
         setError("No resolved plays in that range.");
         return;
       }
-      const txt = toPlaylistTxt(result.rows);
+      const txt = toPlaylistTxt(rows);
       const filename = `playlist-log-${station}-${startDate}-to-${endDate}.txt`;
       downloadTxt(txt, filename);
     } catch (err) {
@@ -210,14 +280,7 @@ function SummaryLine({
   summary,
   rangeValid,
 }: {
-  summary:
-    | {
-        resolvedPlays: number;
-        missingLabel: number;
-        missingIsrc: number;
-        missingDuration: number;
-      }
-    | undefined;
+  summary: SummaryTotals | undefined | null;
   rangeValid: boolean;
 }) {
   if (!rangeValid) {
@@ -230,6 +293,8 @@ function SummaryLine({
   if (summary === undefined) {
     return <div className="h-4 w-full animate-pulse rounded-sm bg-bg-elevated/60" />;
   }
+  // null = fetch failed; the panel's shared error block shows the message.
+  if (summary === null) return null;
   if (summary.resolvedPlays === 0) {
     return (
       <p className="text-[10px] text-text-muted" style={{ fontFamily: "var(--font-mono)" }}>

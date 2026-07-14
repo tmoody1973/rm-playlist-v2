@@ -1,6 +1,50 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
-import { query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { query, type QueryCtx } from "./_generated/server";
+
+/**
+ * Plays scanned per paginated page. Sized so one execution stays far
+ * under Convex's per-execution limits (16 MiB bytes read, 32k docs,
+ * 4096 query calls): worst case is PAGE_SIZE play docs + PAGE_SIZE
+ * unique-track `db.get`s ≈ 2001 calls / a few MB.
+ */
+const REPORT_PAGE_SIZE = 2000;
+
+/**
+ * `cursor === undefined` means the caller predates pagination (a stale
+ * browser tab whose reactive subscription re-ran against this code) —
+ * serve the old single-shot scan so it never silently receives a
+ * one-page-truncated report. `null` starts a paginated read; a string
+ * continues one. The legacy path can be dropped once old sessions have
+ * cycled out.
+ */
+const cursorArg = v.optional(v.union(v.string(), v.null()));
+
+interface PlaysPage {
+  page: Doc<"plays">[];
+  isDone: boolean;
+  continueCursor: string | null;
+}
+
+async function fetchPlaysPage(
+  ctx: QueryCtx,
+  stationId: Id<"stations">,
+  startMs: number,
+  endMs: number,
+  cursor: string | null | undefined,
+  legacyCap: number,
+): Promise<PlaysPage> {
+  const range = ctx.db
+    .query("plays")
+    .withIndex("by_station_played_at", (q) =>
+      q.eq("stationId", stationId).gte("playedAt", startMs).lt("playedAt", endMs),
+    );
+  if (cursor === undefined) {
+    return { page: await range.take(legacyCap), isDone: true, continueCursor: null };
+  }
+  const result = await range.paginate({ numItems: REPORT_PAGE_SIZE, cursor });
+  return { page: result.page, isDone: result.isDone, continueCursor: result.continueCursor };
+}
 
 /**
  * SoundExchange Report of Use (playlist format) — one row per resolved
@@ -28,6 +72,11 @@ import { query } from "./_generated/server";
  *   - PLAY_TIME                → HH:MM:SS UTC from playedAt
  *   - CHANNEL_NAME             → station.name (e.g. "HYFIN")
  *   - DURATION_SECONDS         → track.durationSec (may be blank)
+ *
+ * Paginated: pass `cursor: null` for the first page, then the returned
+ * `continueCursor` until `isDone`. A busy station over a month exceeds
+ * Convex's 16 MiB per-execution read limit in one shot, so callers must
+ * accumulate pages client-side.
  */
 export const soundExchangePlaylist = query({
   args: {
@@ -40,24 +89,33 @@ export const soundExchangePlaylist = query({
     startMs: v.number(),
     endMs: v.number(),
     limit: v.optional(v.number()),
+    cursor: cursorArg,
   },
-  handler: async (ctx, { stationSlug, startMs, endMs, limit }) => {
-    if (endMs <= startMs) return { rows: [], stationName: null, totalPlays: 0 };
+  handler: async (ctx, { stationSlug, startMs, endMs, limit, cursor }) => {
+    const emptyResult = {
+      rows: [],
+      stationName: null,
+      totalPlays: 0,
+      isDone: true,
+      continueCursor: null,
+    };
+    if (endMs <= startMs) return emptyResult;
 
     const station = await ctx.db
       .query("stations")
       .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
       .first();
-    if (station === null) return { rows: [], stationName: null, totalPlays: 0 };
+    if (station === null) return emptyResult;
 
-    const cap = Math.min(limit ?? 10_000, 50_000);
-
-    const plays = await ctx.db
-      .query("plays")
-      .withIndex("by_station_played_at", (q) =>
-        q.eq("stationId", station._id).gte("playedAt", startMs).lt("playedAt", endMs),
-      )
-      .take(cap);
+    const legacyCap = Math.min(limit ?? 10_000, 50_000);
+    const { page: plays, isDone, continueCursor } = await fetchPlaysPage(
+      ctx,
+      station._id,
+      startMs,
+      endMs,
+      cursor,
+      legacyCap,
+    );
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
     const artistCache = new Map<string, Doc<"artists"> | null>();
@@ -106,15 +164,19 @@ export const soundExchangePlaylist = query({
       });
     }
 
+    // The by_station_played_at index already yields ascending playedAt,
+    // so pages concatenate in order on the client; this sort is a
+    // per-page no-op kept for the legacy single-shot path.
     rows.sort((a, b) => a.playedAt - b.playedAt);
-    return { rows, stationName: station.name, totalPlays: rows.length };
+    return { rows, stationName: station.name, totalPlays: rows.length, isDone, continueCursor };
   },
 });
 
 /**
- * Count-only companion to `soundExchangePlaylist` — cheap enough to
- * call from the UI to populate "preview: N plays, M missing label"
- * without fetching every row. Same filters as the full query.
+ * Count-only companion to `soundExchangePlaylist` — populates
+ * "preview: N plays, M missing label" without shipping every row to
+ * the browser. Same filters and pagination contract as the full query;
+ * callers sum the per-page counts.
  */
 export const soundExchangePlaylistSummary = query({
   args: {
@@ -126,37 +188,34 @@ export const soundExchangePlaylistSummary = query({
     ),
     startMs: v.number(),
     endMs: v.number(),
+    cursor: cursorArg,
   },
-  handler: async (ctx, { stationSlug, startMs, endMs }) => {
-    if (endMs <= startMs) {
-      return {
-        stationName: null,
-        resolvedPlays: 0,
-        missingLabel: 0,
-        missingIsrc: 0,
-        missingDuration: 0,
-      };
-    }
+  handler: async (ctx, { stationSlug, startMs, endMs, cursor }) => {
+    const emptyResult = {
+      stationName: null,
+      resolvedPlays: 0,
+      missingLabel: 0,
+      missingIsrc: 0,
+      missingDuration: 0,
+      isDone: true,
+      continueCursor: null,
+    };
+    if (endMs <= startMs) return emptyResult;
+
     const station = await ctx.db
       .query("stations")
       .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
       .first();
-    if (station === null) {
-      return {
-        stationName: null,
-        resolvedPlays: 0,
-        missingLabel: 0,
-        missingIsrc: 0,
-        missingDuration: 0,
-      };
-    }
+    if (station === null) return emptyResult;
 
-    const plays = await ctx.db
-      .query("plays")
-      .withIndex("by_station_played_at", (q) =>
-        q.eq("stationId", station._id).gte("playedAt", startMs).lt("playedAt", endMs),
-      )
-      .take(50_000);
+    const { page: plays, isDone, continueCursor } = await fetchPlaysPage(
+      ctx,
+      station._id,
+      startMs,
+      endMs,
+      cursor,
+      50_000,
+    );
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
     let resolvedPlays = 0;
@@ -189,6 +248,8 @@ export const soundExchangePlaylistSummary = query({
       missingLabel,
       missingIsrc,
       missingDuration,
+      isDone,
+      continueCursor,
     };
   },
 });
