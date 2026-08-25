@@ -10,10 +10,14 @@
 
 import type * as appleMusic from "../appleMusic.js";
 import type * as backfills from "../backfills.js";
+import type * as crons from "../crons.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
+import type * as health from "../health.js";
+import type * as healthRules from "../healthRules.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
+import type * as notifications from "../notifications.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as reports from "../reports.js";
@@ -31,10 +35,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   appleMusic: typeof appleMusic;
   backfills: typeof backfills;
+  crons: typeof crons;
   enrichment: typeof enrichment;
   events: typeof events;
+  health: typeof health;
+  healthRules: typeof healthRules;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
+  notifications: typeof notifications;
   plays: typeof plays;
   preview: typeof preview;
   reports: typeof reports;

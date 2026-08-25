@@ -11,7 +11,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "echo 'no tests in @rm/convex (Convex runtime — tested via integration in apps/web)'",
+    "test": "bun test test/",
     "codegen": "convex codegen",
     "dev": "convex dev"
   },

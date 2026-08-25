@@ -121,6 +121,49 @@ export default defineSchema({
     .index("by_kind", ["kind"]),
 
   // ------------------------------------------------------------------
+  // Operational alerting
+  // ------------------------------------------------------------------
+
+  /**
+   * Who gets emailed when a health check fails. Managed from the operator
+   * settings page, read by the health cron in `health.ts`.
+   *
+   * Deliberately its own table rather than a flag on `users` — the people who
+   * need to know the playlist stopped are not always the people who have
+   * dashboard logins (engineering on-call, a shared ops inbox).
+   */
+  alertRecipients: defineTable({
+    orgId: v.id("organizations"),
+    email: v.string(),
+    /** Optional human label, e.g. "ops inbox" or "Tarik (mobile)". */
+    label: v.optional(v.string()),
+    /** Uncheck to silence someone without losing the row. */
+    enabled: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_org", ["orgId"])
+    .index("by_org_email", ["orgId", "email"]),
+
+  /**
+   * Current state of each named alert, one row per (org, key).
+   *
+   * Exists purely so the health cron emails once when a problem starts and
+   * once when it clears, instead of once per tick for the whole outage. An
+   * alert people mute is worse than no alert.
+   */
+  systemAlerts: defineTable({
+    orgId: v.id("organizations"),
+    /** Stable alert identifier, e.g. "ingestion_stalled". */
+    key: v.string(),
+    firing: v.boolean(),
+    /** Unix ms the current firing/clear state began. */
+    since: v.number(),
+    /** Human-readable summary from the most recent evaluation. */
+    detail: v.string(),
+    updatedAt: v.number(),
+  }).index("by_org_key", ["orgId", "key"]),
+
+  // ------------------------------------------------------------------
   // Plays (the core time-series)
   // ------------------------------------------------------------------
 
