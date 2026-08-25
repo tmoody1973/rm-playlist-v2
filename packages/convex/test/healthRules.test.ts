@@ -12,6 +12,7 @@ function source(overrides: Partial<IngestionSourceHealthInput> = {}): IngestionS
   return {
     sourceId: "src1",
     label: "88nine/sgmetadata",
+    stationSlug: "88nine",
     adapter: "sgmetadata",
     enabled: true,
     lastSuccessAt: NOW - MINUTE,
@@ -52,27 +53,71 @@ describe("evaluateIngestionHealth", () => {
 
   test("ignores ICY sources — the Fly worker never sets lastSuccessAt", () => {
     const verdict = evaluateIngestionHealth(
-      [source({ adapter: "icy", lastSuccessAt: undefined, createdAt: NOW - 90 * MINUTE })],
+      [
+        source(),
+        source({
+          sourceId: "icy1",
+          stationSlug: "rhythmlab",
+          adapter: "icy",
+          lastSuccessAt: undefined,
+          createdAt: NOW - 90 * MINUTE,
+        }),
+        source({ sourceId: "sg2", stationSlug: "rhythmlab" }),
+      ],
       NOW,
     );
-    expect(verdict.watchedCount).toBe(0);
-    // No watched sources at all is itself an alert — see the next test.
+    expect(verdict.watchedCount).toBe(2);
+    expect(verdict.firing).toBe(false);
+  });
+
+  test("an ICY-only station counts as uncovered — we cannot verify it polls", () => {
+    const verdict = evaluateIngestionHealth(
+      [source(), source({ sourceId: "icy1", stationSlug: "rhythmlab", adapter: "icy" })],
+      NOW,
+    );
+    expect(verdict.uncovered).toEqual(["rhythmlab"]);
     expect(verdict.firing).toBe(true);
   });
 
-  test("ignores disabled sources", () => {
+  test("ignores a disabled source while its station still has a live one", () => {
     const verdict = evaluateIngestionHealth(
       [source(), source({ sourceId: "src2", enabled: false, lastSuccessAt: NOW - 99 * MINUTE })],
       NOW,
     );
     expect(verdict.firing).toBe(false);
     expect(verdict.watchedCount).toBe(1);
+    expect(verdict.uncovered).toEqual([]);
+  });
+
+  test("reproduces switching HYFIN off: a station with nothing enabled fires", () => {
+    const verdict = evaluateIngestionHealth(
+      [
+        source({ sourceId: "a", stationSlug: "88nine" }),
+        source({ sourceId: "b", stationSlug: "rhythmlab" }),
+        source({ sourceId: "c", stationSlug: "414music" }),
+        source({ sourceId: "d", stationSlug: "hyfin", enabled: false }),
+      ],
+      NOW,
+    );
+    expect(verdict.firing).toBe(true);
+    expect(verdict.uncovered).toEqual(["hyfin"]);
+    expect(verdict.detail).toContain("recording nothing: hyfin");
+  });
+
+  test("a switched-off station is reported even while every live source is healthy", () => {
+    const verdict = evaluateIngestionHealth(
+      [source({ sourceId: "a" }), source({ sourceId: "d", stationSlug: "hyfin", enabled: false })],
+      NOW,
+    );
+    expect(verdict.stale).toHaveLength(0);
+    expect(verdict.firing).toBe(true);
+    expect(verdict.detail).toContain("The other 1 source(s) polled recently");
   });
 
   test("fires when no pollable source is enabled at all", () => {
     const verdict = evaluateIngestionHealth([source({ enabled: false })], NOW);
     expect(verdict.firing).toBe(true);
-    expect(verdict.detail).toContain("No enabled pollable ingestion sources");
+    expect(verdict.detail).toContain("No enabled pollable ingestion sources exist anywhere");
   });
 
   test("a brand new source that has never polled gets its grace period", () => {
@@ -99,5 +144,6 @@ describe("evaluateIngestionHealth", () => {
     );
     expect(verdict.stale.map((s) => s.label)).toEqual(["88nine/sgmetadata", "hyfin/sgmetadata"]);
     expect(verdict.detail).toContain("2 of 3");
+    expect(verdict.uncovered).toEqual([]);
   });
 });

@@ -27,10 +27,9 @@ import {
 const FIRING_SUBJECT = "[Playlist] Ingestion has stopped recording songs";
 const RESOLVED_SUBJECT = "[Playlist] Ingestion is recording again";
 
-async function labelFor(ctx: MutationCtx, source: Doc<"ingestionSources">): Promise<string> {
+async function stationSlugFor(ctx: MutationCtx, source: Doc<"ingestionSources">): Promise<string> {
   const station = await ctx.db.get(source.stationId);
-  const slug = station?.slug ?? "unknown-station";
-  return `${slug}/${source.adapter}`;
+  return station?.slug ?? "unknown-station";
 }
 
 function firingBody(verdict: IngestionHealthVerdict, since: number): string {
@@ -48,6 +47,9 @@ function firingBody(verdict: IngestionHealthVerdict, since: number): string {
     "",
     verdict.detail,
     "",
+    verdict.uncovered.length > 0
+      ? `Switched off entirely (recording nothing): ${verdict.uncovered.join(", ")}`
+      : "",
     staleLines.length > 0 ? `Stalled sources:\n${staleLines}` : "",
     "",
     `Detected at: ${new Date(since).toISOString()}`,
@@ -57,9 +59,10 @@ function firingBody(verdict: IngestionHealthVerdict, since: number): string {
     "outage is lost unless the station also logs to Spinitron.",
     "",
     "Where to look first:",
-    "  1. Trigger.dev runs for `poll-all-sources` — are runs happening every minute?",
-    "  2. Trigger.dev billing — a plan over its limit throttles the scheduler.",
-    "  3. The dashboard's Needs Attention panel for poll errors.",
+    "  1. Settings -> Ingestion sources: is every station still switched on?",
+    "  2. Trigger.dev runs for `poll-all-sources` — are runs happening every minute?",
+    "  3. Trigger.dev billing — a plan over its limit throttles the scheduler.",
+    "  4. The dashboard's Needs Attention panel for poll errors.",
     "",
     "You will get one more email when this clears. No reminders in between.",
   ]
@@ -96,14 +99,18 @@ async function checkOrg(
     .collect();
 
   const inputs: IngestionSourceHealthInput[] = await Promise.all(
-    sources.map(async (source) => ({
-      sourceId: source._id,
-      label: await labelFor(ctx, source),
-      adapter: source.adapter,
-      enabled: source.enabled,
-      lastSuccessAt: source.lastSuccessAt,
-      createdAt: source.createdAt,
-    })),
+    sources.map(async (source) => {
+      const stationSlug = await stationSlugFor(ctx, source);
+      return {
+        sourceId: source._id,
+        label: `${stationSlug}/${source.adapter}`,
+        stationSlug,
+        adapter: source.adapter,
+        enabled: source.enabled,
+        lastSuccessAt: source.lastSuccessAt,
+        createdAt: source.createdAt,
+      };
+    }),
   );
 
   const now = Date.now();
