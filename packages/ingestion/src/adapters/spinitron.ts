@@ -35,8 +35,23 @@ const SpinitronResponseSchema = z
 export interface SpinitronPollConfig {
   /** Per-station Spinitron API key. */
   apiKey: string;
-  /** How many recent spins to fetch. Defaults to 20. */
+  /**
+   * How many spins per request. Defaults to 20, max 200.
+   *
+   * Note this is `count`, not the `limit` the published OpenAPI spec names.
+   * Verified against the live API on 2026-08-25: `limit` is silently ignored
+   * and you get 20 rows back regardless.
+   */
   count?: number;
+  /**
+   * Optional history window, e.g. "2026-08-25 05:18:00" in the station's own
+   * timezone. Spinitron keeps a permanent log, unlike SGmetadata's ~17-minute
+   * view, so a range query is how a gap gets refilled after an outage.
+   */
+  start?: string;
+  end?: string;
+  /** 1-based page, for walking a window wider than `count`. */
+  page?: number;
   /** Base URL override for testing; production always uses spinitron.com. */
   baseUrl?: string;
 }
@@ -83,8 +98,11 @@ async function pollSpinitron(
   context: AdapterParseContext,
 ): Promise<NormalizedPlay[]> {
   const base = config.baseUrl ?? "https://spinitron.com";
-  const count = config.count ?? 20;
-  const url = `${base}/api/spins?count=${encodeURIComponent(count)}`;
+  const params = new URLSearchParams({ count: String(config.count ?? 20) });
+  if (config.start !== undefined) params.set("start", config.start);
+  if (config.end !== undefined) params.set("end", config.end);
+  if (config.page !== undefined) params.set("page", String(config.page));
+  const url = `${base}/api/spins?${params.toString()}`;
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${config.apiKey}` },
   });

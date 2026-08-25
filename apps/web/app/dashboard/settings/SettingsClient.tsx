@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@rm/convex/api";
 import type { FunctionReturnType } from "convex/server";
+import { AlertRecipientsSection } from "./AlertRecipientsSection";
+import { Skeleton, eyebrowStyle, tableHeaderStyle } from "./settingsChrome";
 
 type StationSlug = "hyfin" | "88nine" | "414music" | "rhythmlab";
 
@@ -23,6 +25,7 @@ export function SettingsClient() {
       <OperatorsSection />
       <IngestionSourcesSection />
       <StationRegionsSection />
+      <AlertRecipientsSection />
       <EnvReferenceSection />
     </div>
   );
@@ -779,23 +782,6 @@ function TargetBadge({ target }: { target: "Vercel" | "Trigger.dev" | "Convex" }
 const inputClass =
   "rounded-md border border-border bg-bg-base px-3 py-2 text-sm focus:border-accent-cta focus:outline-none";
 
-const eyebrowStyle: React.CSSProperties = {
-  fontFamily: "var(--font-mono)",
-  fontSize: "11px",
-  fontWeight: 600,
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  color: "var(--text-muted)",
-};
-
-const tableHeaderStyle: React.CSSProperties = {
-  fontFamily: "var(--font-mono)",
-  fontSize: "11px",
-  letterSpacing: "0.06em",
-  textTransform: "uppercase",
-  color: "var(--text-muted)",
-};
-
 function SectionHeader({
   eyebrow,
   title,
@@ -849,20 +835,5 @@ function FormField({
       </span>
       {children}
     </label>
-  );
-}
-
-function Skeleton({ rows }: { rows: number }) {
-  return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div
-          key={i}
-          className="h-12 animate-pulse rounded-md bg-bg-surface"
-          style={{ opacity: 0.6 }}
-          aria-hidden="true"
-        />
-      ))}
-    </div>
   );
 }
