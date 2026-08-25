@@ -44,6 +44,11 @@ export function AlertRecipientsSection() {
           <code style={{ fontFamily: "var(--font-mono)" }}>ALERT_EMAIL_FROM</code> set on the Convex
           deployment.
         </p>
+        <p className="max-w-3xl text-sm text-text-secondary" style={{ lineHeight: 1.55 }}>
+          Every address gets a test email the moment it is added, and you can re-send one any time
+          with <strong>Send test</strong>. An alert nobody has ever received is a guess, not a
+          safety net — a typo or a spam filter stays invisible until the day it matters.
+        </p>
       </header>
 
       <AddRecipientForm />
@@ -82,11 +87,13 @@ function AddRecipientForm() {
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
+    setSentTo(null);
     setSaving(true);
     try {
       await addRecipient({
@@ -94,6 +101,7 @@ function AddRecipientForm() {
         email,
         label: label.trim().length > 0 ? label.trim() : undefined,
       });
+      setSentTo(email.trim().toLowerCase());
       setEmail("");
       setLabel("");
     } catch (err) {
@@ -152,6 +160,11 @@ function AddRecipientForm() {
           {error}
         </p>
       )}
+      {sentTo !== null && (
+        <p role="status" className="text-sm text-text-secondary">
+          Added. A test email is on its way to {sentTo} — check spam if it does not arrive.
+        </p>
+      )}
     </form>
   );
 }
@@ -159,12 +172,27 @@ function AddRecipientForm() {
 function RecipientTableRow({ row }: { row: RecipientRow }) {
   const setEnabled = useMutation(api.notifications.setRecipientEnabled);
   const removeRecipient = useMutation(api.notifications.removeRecipient);
+  const sendTestAlert = useMutation(api.notifications.sendTestAlert);
   const [busy, setBusy] = useState(false);
+  const [testState, setTestState] = useState<"idle" | "sent" | "failed">("idle");
 
   async function toggle(): Promise<void> {
     setBusy(true);
     try {
       await setEnabled({ recipientId: row._id, enabled: !row.enabled });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest(): Promise<void> {
+    setBusy(true);
+    setTestState("idle");
+    try {
+      await sendTestAlert({ recipientId: row._id });
+      setTestState("sent");
+    } catch {
+      setTestState("failed");
     } finally {
       setBusy(false);
     }
@@ -185,8 +213,29 @@ function RecipientTableRow({ row }: { row: RecipientRow }) {
         {row.email}
       </td>
       <td className="px-4 py-2 text-text-secondary">{row.label ?? "—"}</td>
-      <td className="px-4 py-2">{row.enabled ? "Receiving alerts" : "Silenced"}</td>
+      <td className="px-4 py-2">
+        {row.enabled ? "Receiving alerts" : "Silenced"}
+        {testState === "sent" && (
+          <span role="status" className="ml-2 text-text-secondary">
+            · test sent
+          </span>
+        )}
+        {testState === "failed" && (
+          <span role="alert" className="ml-2" style={{ color: "var(--accent-alert, #d33)" }}>
+            · test failed
+          </span>
+        )}
+      </td>
       <td className="px-4 py-2 text-right">
+        <button
+          type="button"
+          onClick={sendTest}
+          disabled={busy}
+          className="mr-3 text-xs font-semibold uppercase underline disabled:opacity-60"
+          style={{ fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}
+        >
+          Send test
+        </button>
         <button
           type="button"
           onClick={toggle}

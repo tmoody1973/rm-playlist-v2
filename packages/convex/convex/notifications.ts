@@ -1,6 +1,15 @@
 import { v } from "convex/values";
-import { internalAction, internalQuery, mutation, query } from "./_generated/server";
+import {
+  type ActionCtx,
+  type MutationCtx,
+  internalAction,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Auth } from "convex/server";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Operational email alerts.
@@ -24,6 +33,21 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
 /** Rough sanity check at the trust boundary; Resend does the real validation. */
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Anything that can cause an outbound email is gated on a signed-in identity.
+ *
+ * Most mutations in this codebase are still open (see the TODO in plays.ts),
+ * but "add an arbitrary address and make our verified domain email it" is a
+ * spam relay, not just an unauthenticated write. The gate goes here now rather
+ * than waiting for the project-wide auth pass.
+ */
+async function requireSignedIn(ctx: { auth: Auth }): Promise<void> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity === null) {
+    throw new Error("Not signed in");
+  }
+}
 
 // ---------------------------------------------------------------- //
 // Recipients — read
@@ -68,6 +92,74 @@ export const enabledRecipientEmails = internalQuery({
   },
 });
 
+/** A single recipient, used when sending a test to one address. */
+export const recipientById = internalQuery({
+  args: { recipientId: v.id("alertRecipients") },
+  handler: async (ctx, { recipientId }) => {
+    const row = await ctx.db.get(recipientId);
+    return row === null ? null : { email: row.email, orgId: row.orgId };
+  },
+});
+
+// ---------------------------------------------------------------- //
+// Test sends
+// ---------------------------------------------------------------- //
+
+const TEST_SUBJECT = "[Playlist] Test alert — you are on the outage list";
+
+const TEST_BODY = [
+  "This is a test. Nothing is wrong.",
+  "",
+  "You were just added to the playlist outage list, so this message proves two",
+  "things: the address works, and our alerts are not landing in your spam folder.",
+  "",
+  "If a real outage happens you will get one email when the playlist stops",
+  "recording songs, and one more when it starts again. Never a reminder in",
+  "between.",
+  "",
+  "If this landed in spam, mark it as not spam now — otherwise the one that",
+  "matters will land there too.",
+  "",
+  "To stop these, remove yourself in the playlist dashboard under",
+  "Settings -> Outage email recipients.",
+].join("\n");
+
+/**
+ * Send a test to one address as soon as it is added.
+ *
+ * An alert nobody has ever received is a guess, not a safety net — the failure
+ * modes (unverified domain, typo, spam filter) are all silent until the day it
+ * matters. Proving delivery at add-time costs one email.
+ */
+async function scheduleTestEmail(
+  ctx: MutationCtx,
+  orgId: Id<"organizations">,
+  recipientId: Id<"alertRecipients">,
+): Promise<void> {
+  await ctx.scheduler.runAfter(0, internal.notifications.sendAlertEmail, {
+    orgId,
+    subject: TEST_SUBJECT,
+    body: TEST_BODY,
+    onlyRecipientId: recipientId,
+  });
+}
+
+/**
+ * Re-send the test to one existing recipient. Useful long after setup — a
+ * bounced address or a changed sending domain is otherwise invisible until
+ * a real outage.
+ */
+export const sendTestAlert = mutation({
+  args: { recipientId: v.id("alertRecipients") },
+  handler: async (ctx, { recipientId }) => {
+    await requireSignedIn(ctx);
+    const row = await ctx.db.get(recipientId);
+    if (row === null) throw new Error("That recipient no longer exists.");
+    await scheduleTestEmail(ctx, row.orgId, recipientId);
+    return { sentTo: row.email };
+  },
+});
+
 // ---------------------------------------------------------------- //
 // Recipients — write
 // ---------------------------------------------------------------- //
@@ -79,6 +171,7 @@ export const addRecipient = mutation({
     label: v.optional(v.string()),
   },
   handler: async (ctx, { orgSlug, email, label }) => {
+    await requireSignedIn(ctx);
     const normalized = email.trim().toLowerCase();
     if (!EMAIL_PATTERN.test(normalized)) {
       throw new Error(`Not a valid email address: ${email}`);
@@ -96,6 +189,7 @@ export const addRecipient = mutation({
       .first();
     if (existing !== null) {
       await ctx.db.patch(existing._id, { enabled: true, label });
+      await scheduleTestEmail(ctx, org._id, existing._id);
       return { recipientId: existing._id, action: "reenabled" as const };
     }
 
@@ -106,6 +200,7 @@ export const addRecipient = mutation({
       enabled: true,
       createdAt: Date.now(),
     });
+    await scheduleTestEmail(ctx, org._id, recipientId);
     return { recipientId, action: "created" as const };
   },
 });
@@ -113,6 +208,7 @@ export const addRecipient = mutation({
 export const setRecipientEnabled = mutation({
   args: { recipientId: v.id("alertRecipients"), enabled: v.boolean() },
   handler: async (ctx, { recipientId, enabled }) => {
+    await requireSignedIn(ctx);
     await ctx.db.patch(recipientId, { enabled });
   },
 });
@@ -120,6 +216,7 @@ export const setRecipientEnabled = mutation({
 export const removeRecipient = mutation({
   args: { recipientId: v.id("alertRecipients") },
   handler: async (ctx, { recipientId }) => {
+    await requireSignedIn(ctx);
     await ctx.db.delete(recipientId);
   },
 });
@@ -157,6 +254,28 @@ async function postToResend(
 }
 
 /**
+ * Which addresses this send goes to.
+ *
+ * A targeted send (the test email) skips the enabled filter on purpose — you
+ * test a silenced address precisely to find out whether it still works. The
+ * org check stops a recipient id from one org addressing another's send.
+ */
+async function resolveRecipients(
+  ctx: { runQuery: ActionCtx["runQuery"] },
+  orgId: Id<"organizations">,
+  onlyRecipientId: Id<"alertRecipients"> | undefined,
+): Promise<string[]> {
+  if (onlyRecipientId === undefined) {
+    return await ctx.runQuery(internal.notifications.enabledRecipientEmails, { orgId });
+  }
+  const row = await ctx.runQuery(internal.notifications.recipientById, {
+    recipientId: onlyRecipientId,
+  });
+  if (row === null || row.orgId !== orgId) return [];
+  return [row.email];
+}
+
+/**
  * Email every enabled recipient for an org.
  *
  * One request per recipient rather than one request with everyone in `to`:
@@ -168,8 +287,10 @@ export const sendAlertEmail = internalAction({
     orgId: v.id("organizations"),
     subject: v.string(),
     body: v.string(),
+    /** When set, send to just this one recipient instead of the whole list. */
+    onlyRecipientId: v.optional(v.id("alertRecipients")),
   },
-  handler: async (ctx, { orgId, subject, body }): Promise<SendOutcome> => {
+  handler: async (ctx, { orgId, subject, body, onlyRecipientId }): Promise<SendOutcome> => {
     const apiKey = process.env.RESEND_API_KEY;
     const from = process.env.ALERT_EMAIL_FROM;
 
@@ -180,9 +301,7 @@ export const sendAlertEmail = internalAction({
       return { status: "skipped", attempted: 0, failed: [], reason };
     }
 
-    const recipients: string[] = await ctx.runQuery(internal.notifications.enabledRecipientEmails, {
-      orgId,
-    });
+    const recipients: string[] = await resolveRecipients(ctx, orgId, onlyRecipientId);
 
     if (recipients.length === 0) {
       const reason = "No enabled alert recipients configured — alert not delivered";
