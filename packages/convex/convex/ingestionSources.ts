@@ -233,13 +233,42 @@ export const disableById = internalMutation({
 // before partner stations onboard. Today the dashboard is allowlist-
 // gated to RM emails (apps/web/app/dashboard/layout.tsx) so this is
 // acceptable for shakedown.
+/**
+ * Switch a source on or off from the settings page.
+ *
+ * Writes a `source_paused` / `source_resumed` event, which the schema has
+ * always had room for and nothing ever wrote. On 2026-08-25 HYFIN's only live
+ * source was switched off here and spent twenty-five minutes recording
+ * nothing, and afterwards there was no way to tell from the data who had done
+ * it or when. A toggle that silently stops a station earning its royalty
+ * record deserves a line in the log.
+ */
 export const setEnabled = mutation({
   args: {
     sourceId: v.id("ingestionSources"),
     enabled: v.boolean(),
   },
   handler: async (ctx, { sourceId, enabled }) => {
+    const source = await ctx.db.get(sourceId);
+    if (source === null) throw new Error(`Unknown source: ${sourceId}`);
+    if (source.enabled === enabled) return;
+
     await ctx.db.patch(sourceId, { enabled });
+
+    const identity = await ctx.auth.getUserIdentity();
+    const actor = identity?.email ?? identity?.subject ?? "unknown (unauthenticated)";
+
+    await ctx.db.insert("ingestionEvents", {
+      orgId: source.orgId,
+      stationId: source.stationId,
+      sourceId,
+      kind: enabled ? "source_resumed" : "source_paused",
+      message: enabled
+        ? `Source switched on by ${actor}`
+        : `Source switched off by ${actor} — this station stops recording songs`,
+      context: { adapter: source.adapter, role: source.role, actor },
+      createdAt: Date.now(),
+    });
   },
 });
 

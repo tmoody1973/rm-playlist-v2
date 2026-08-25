@@ -34,6 +34,7 @@ export interface IngestionSourceHealthInput {
   readonly sourceId: string;
   /** Human label for the email body, e.g. "88nine/sgmetadata". */
   readonly label: string;
+  readonly stationSlug: string;
   readonly adapter: string;
   readonly enabled: boolean;
   readonly lastSuccessAt?: number;
@@ -52,7 +53,29 @@ export interface IngestionHealthVerdict {
   readonly firing: boolean;
   readonly watchedCount: number;
   readonly stale: readonly StaleSource[];
+  /** Stations with no enabled pollable source at all. */
+  readonly uncovered: readonly string[];
   readonly detail: string;
+}
+
+/**
+ * Stations with nothing left switched on.
+ *
+ * A stale source and a switched-off source are the same outage wearing
+ * different clothes, but only the first one is visible to a staleness check:
+ * disable a source and it drops out of the watched set entirely, so it can
+ * never be late. That is not hypothetical. On 2026-08-25, hours after this
+ * watchdog shipped, HYFIN's only live source was switched off from the
+ * settings page and the watchdog stayed green for twenty-five minutes.
+ *
+ * ICY does not count as coverage. It is a long-running listener owned by the
+ * Fly worker that never records a successful poll, so "an enabled ICY source"
+ * and "a station we cannot verify at all" are indistinguishable from here.
+ */
+function uncoveredStations(sources: readonly IngestionSourceHealthInput[]): string[] {
+  const known = new Set(sources.map((s) => s.stationSlug));
+  const covered = new Set(sources.filter(isWatched).map((s) => s.stationSlug));
+  return [...known].filter((slug) => !covered.has(slug)).sort();
 }
 
 function isWatched(source: IngestionSourceHealthInput): boolean {
@@ -68,12 +91,23 @@ function referencePoint(source: IngestionSourceHealthInput): number {
   return source.lastSuccessAt ?? source.createdAt;
 }
 
-function describe(stale: readonly StaleSource[], watchedCount: number): string {
+function describe(
+  stale: readonly StaleSource[],
+  watchedCount: number,
+  uncovered: readonly string[],
+): string {
+  const off =
+    uncovered.length === 0
+      ? ""
+      : `${uncovered.length} station(s) have no enabled source at all and are recording nothing: ${uncovered.join(", ")}. `;
+
   if (watchedCount === 0) {
-    return "No enabled pollable ingestion sources exist — nothing is being recorded.";
+    return `${off}No enabled pollable ingestion sources exist anywhere.`.trim();
   }
   if (stale.length === 0) {
-    return `All ${watchedCount} pollable source(s) polled recently.`;
+    return off.length > 0
+      ? `${off}The other ${watchedCount} source(s) polled recently.`
+      : `All ${watchedCount} pollable source(s) polled recently.`;
   }
   const lines = stale.map((s) => {
     const minutes = Math.floor(s.staleForMs / 60_000);
@@ -81,16 +115,15 @@ function describe(stale: readonly StaleSource[], watchedCount: number): string {
       ? `${s.label}: has never polled successfully (${minutes}m since it was added)`
       : `${s.label}: last successful poll ${minutes}m ago`;
   });
-  return `${stale.length} of ${watchedCount} source(s) stalled — ${lines.join("; ")}`;
+  return `${off}${stale.length} of ${watchedCount} source(s) stalled: ${lines.join("; ")}`;
 }
 
 /**
  * Decide whether ingestion is currently stalled.
  *
- * Fires when any watched source has not polled within `staleAfterMs`, and
- * also when there are no watched sources at all — an org with everything
- * disabled records nothing, and silence there is the same outage wearing a
- * different hat.
+ * Fires when any watched source has not polled within `staleAfterMs`, when a
+ * station has no enabled pollable source at all, or when nothing anywhere is
+ * enabled. All three mean songs are going unrecorded.
  */
 export function evaluateIngestionHealth(
   sources: readonly IngestionSourceHealthInput[],
@@ -108,10 +141,13 @@ export function evaluateIngestionHealth(
     }))
     .filter((candidate) => candidate.staleForMs > staleAfterMs);
 
+  const uncovered = uncoveredStations(sources);
+
   return {
-    firing: watched.length === 0 || stale.length > 0,
+    firing: watched.length === 0 || stale.length > 0 || uncovered.length > 0,
     watchedCount: watched.length,
     stale,
-    detail: describe(stale, watched.length),
+    uncovered,
+    detail: describe(stale, watched.length, uncovered),
   };
 }
