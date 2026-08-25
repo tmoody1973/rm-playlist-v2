@@ -7,7 +7,8 @@
 For about six hours this morning, the playlist stopped writing down the songs
 we played. The songs still went out over the air. We just did not record them.
 
-We lost roughly **340 songs** across all four stations.
+We lost roughly **340 songs** across all four stations. Later the same day we
+got **266 of them back** from Spinitron. 414 Music's are gone for good.
 
 Nothing was hacked. No data was deleted. We simply stopped taking notes.
 
@@ -42,14 +43,39 @@ recorded the song correctly.
 
 We were not broken. We were asleep.
 
-## Why we lost the songs for good
+## Why the songs looked gone
 
 StreamGuys only tells you what is playing **right now**. It keeps about
 seventeen minutes of history and then forgets. It is a window, not a logbook.
 
-So when we sleep through six hours, those six hours are gone. There is no
-"catch up" button. We checked our old V1 system as a possible backup — that
-database no longer exists.
+So when we sleep through six hours, those six hours are gone as far as
+StreamGuys is concerned. There is no "catch up" button. We checked our old V1
+system as a possible backup — that database no longer exists.
+
+## Then we got most of them back
+
+Spinitron **is** a logbook. It keeps every spin permanently, and three of our
+four stations already log to it. Its API lets you ask for a date range after
+the fact.
+
+So we asked it for 5:18 AM to 11:10 AM and wrote the answer back in:
+
+| Station | Songs recovered |
+|---|---|
+| HYFIN | 94 |
+| 88Nine | 88 |
+| Rhythm Lab | 84 |
+| 414 Music | 0 — not on Spinitron |
+| **Total** | **266** |
+
+Twenty-one songs were skipped because we already had them. The recovered
+records are *better* than what we normally get: Spinitron carries album, record
+label, release year and ISRC, while StreamGuys gives us one mashed
+"Artist - Title" string.
+
+**414 Music is the exception.** It does not log to Spinitron, so its share of
+the outage is permanently lost. If we want that station covered the same way,
+it needs a Spinitron account.
 
 ## What it cost us
 
@@ -64,10 +90,10 @@ database no longer exists.
 | 10:00 AM | 11 | ~65 |
 | 11:00 AM | back to normal | ~65 |
 
-Roughly 340 missing spins.
+Roughly 340 missing spins, of which 266 were recovered.
 
-This also means our **SoundExchange royalty report** for August 25 will be
-short by those spins. That matters and we should flag it before we file.
+The **SoundExchange royalty report** for August 25 is now nearly whole. It is
+still short 414 Music's share of that window — worth a note when we file.
 
 ## Why it probably happened
 
@@ -94,14 +120,20 @@ happened to look. That is the part we are fixing.
    The watchdog deliberately runs somewhere else. A smoke detector wired to the
    fuse that just blew is not a smoke detector.
 
-2. **A real logbook as a backup.** Spinitron — which some of our stations
-   already use — keeps a permanent record of every spin, not a seventeen-minute
-   window. If we hook it up, a future outage becomes a *delay* instead of a
-   *hole*: we can go back and ask "what did we miss between 5 and 11?" and fill
-   it in. This needs API keys from Spinitron.
+2. **A real logbook as a backup.** Done for three stations. Spinitron keeps a
+   permanent record of every spin, not a seventeen-minute window, so a future
+   outage becomes a *delay* instead of a *hole*. The recovery tool now lives in
+   the repo at `scripts/backfill-spinitron.ts` and can be pointed at any date
+   range.
+
+   Still manual — somebody has to notice and run it. Making it automatic is the
+   next step.
 
 ## Open questions for the team
 
-- Which of our four stations actually log spins in Spinitron today?
+- Should 414 Music get a Spinitron account? Today it is the only station with
+  no safety net.
 - Who should receive the outage emails?
-- Do we need to correct or annotate the August 25 SoundExchange report?
+- Do we annotate the August 25 SoundExchange report for the 414 Music gap?
+- Should the Spinitron catch-up run automatically every night, instead of
+  waiting for a human to notice?
