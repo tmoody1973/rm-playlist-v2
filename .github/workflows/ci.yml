@@ -103,15 +103,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
 
+      # No `--with-deps`. That flag runs apt-get, which on 2026-09-09 failed
+      # the whole job on a hash-sum mismatch in Google's Chrome apt repo — a
+      # repo preinstalled on GitHub runners and unrelated to anything we need.
+      # ubuntu-latest already ships the shared libraries Playwright's Chromium
+      # links against, so the browser download alone is enough and the job no
+      # longer depends on a third-party package index being healthy.
       - name: Install Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: cd apps/embed && bunx playwright install --with-deps chromium
-
-      # System deps are outside the cached directory, so they are needed even
-      # on a cache hit.
-      - name: Install Chromium system dependencies
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: cd apps/embed && bunx playwright install-deps chromium
+        run: cd apps/embed && bunx playwright install chromium
 
       # The real deployment URL, not the stub the `check` job uses. The test
       # renders actual rows, so it needs actual data. This value is public: it
