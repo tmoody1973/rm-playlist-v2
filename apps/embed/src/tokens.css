@@ -156,3 +156,126 @@
 :host [role="tab"]:focus-visible {
   outline-offset: -2px;
 }
+
+/*
+ * ---------------------------------------------------------------------
+ * Play-row layout (ListItem)
+ * ---------------------------------------------------------------------
+ *
+ * These rules live here, not inline on the component, for two reasons: a
+ * container query cannot be written as an inline style, and an inline
+ * style would out-specify anything we wrote here even if it could.
+ *
+ * Why a container query rather than a media query: what decides whether a
+ * song title fits is the width of the WIDGET, not the width of the phone.
+ * On radiomilwaukee.org the widget renders 350px wide inside a 390px
+ * viewport, and a partner site can drop the same widget into a 400px
+ * sidebar on a 1440px desktop. A container query fixes both; a viewport
+ * media query fixes only the first.
+ *
+ * docs/design/003-responsive-accessibility.md section B specifies the
+ * mobile play row as "Stacked: art + (track / artist / time)", and the
+ * content-edge-cases table says a long name "wraps at word boundary in
+ * list layout". That is what the narrow branch below does.
+ *
+ * The threshold is widget width rather than the doc's <640px viewport,
+ * for the reason above. 460px is where a title stops having roughly
+ * 180px to sit in, measured against the live page on 2026-09-09:
+ *
+ *   title space = widget width - 48 padding - 74 art - 119 time+button
+ *
+ * At the 350px the live page gives us that left 91px, about three
+ * characters once a preview button was present, which is the bug this
+ * fixes.
+ */
+
+:host {
+  container-type: inline-size;
+  container-name: rmke-widget;
+}
+
+.rmke-row {
+  display: flex;
+  align-items: center;
+  gap: var(--rmke-space-md);
+  padding: var(--rmke-space-sm) 0;
+  border-bottom: 1px solid var(--rmke-border);
+}
+
+/* Wide: text and meta sit side by side, which is the original row. */
+.rmke-row-body {
+  display: flex;
+  align-items: center;
+  gap: var(--rmke-space-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.rmke-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rmke-row-title,
+.rmke-row-artist {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rmke-row-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rmke-text-primary);
+}
+
+.rmke-row-artist {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--rmke-text-secondary);
+}
+
+.rmke-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--rmke-space-sm);
+  flex-shrink: 0;
+}
+
+.rmke-row-time {
+  font-size: 14px;
+  color: var(--rmke-text-muted);
+  font-family: var(--rmke-font-mono);
+}
+
+/*
+ * Narrow: the meta row drops below the song, so the title and artist get
+ * the full width beside the artwork instead of competing with a
+ * timestamp and a 44px preview button for it.
+ *
+ * The button keeps its 44px target. Shrinking it would undo the
+ * 2026-04-28 accessibility pass, and the audience skews older.
+ */
+@container rmke-widget (max-width: 460px) {
+  .rmke-row-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .rmke-row-title,
+  .rmke-row-artist {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    /* A single unbroken word (a URL-ish track name) still has to yield. */
+    overflow-wrap: anywhere;
+  }
+
+  .rmke-row-meta {
+    justify-content: space-between;
+  }
+}
