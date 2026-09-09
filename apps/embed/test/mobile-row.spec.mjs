@@ -126,9 +126,33 @@ for (const width of CASES) {
     const events = [...host.shadowRoot.querySelectorAll(".rmke-event")];
     check(events, [".rmke-event-title", ".rmke-event-venue", ".rmke-event-support"]);
 
+    // The tab strip is meant to scroll on narrow widths rather than fit, so
+    // the check is "can you reach the last tab", not "is nothing clipped".
+    // The right-edge fade is the only affordance saying more tabs exist, and
+    // it only reads as a fade if it ends on the colour actually behind it.
+    const nav = host.shadowRoot.querySelector('[role="tablist"]');
+    const tabs = nav ? [...nav.querySelectorAll('[role="tab"]')] : [];
+    let lastTabReachable = null;
+    if (tabs.length) {
+      const start = nav.scrollLeft;
+      nav.scrollLeft = nav.scrollWidth;
+      const navBox = nav.getBoundingClientRect();
+      const lastBox = tabs[tabs.length - 1].getBoundingClientRect();
+      lastTabReachable = lastBox.right <= navBox.right + 1 && lastBox.left >= navBox.left - 1;
+      nav.scrollLeft = start;
+    }
+    const fade = nav?.parentElement.querySelector('[aria-hidden="true"]');
+    const section = host.shadowRoot.querySelector("section");
+    const fadeEnd = fade
+      ? (getComputedStyle(fade).backgroundImage.match(/rgba?\([^)]*\)/g) || []).pop()
+      : null;
+
     const body = rows[0]?.querySelector(".rmke-row-body");
     const eventBody = events[0]?.querySelector(".rmke-event-body");
     return {
+      lastTabReachable,
+      fadeEnd,
+      sectionBg: section ? getComputedStyle(section).backgroundColor : null,
       widget: Math.round(host.getBoundingClientRect().width),
       stacked: body ? getComputedStyle(body).flexDirection === "column" : null,
       eventWrapped: eventBody ? getComputedStyle(eventBody).flexWrap === "wrap" : null,
@@ -146,16 +170,22 @@ for (const width of CASES) {
   // failure, it just means there was nothing to check.
   const eventLayoutOk = r.eventWrapped === null || r.eventWrapped === expectNarrow;
   const textOk = r.clipped.length === 0;
+  const tabsOk = r.lastTabReachable === null || r.lastTabReachable === true;
+  const fadeOk = r.fadeEnd === null || r.fadeEnd === r.sectionBg;
 
-  const verdict = layoutOk && eventLayoutOk && textOk ? "PASS" : "FAIL";
+  const verdict = layoutOk && eventLayoutOk && textOk && tabsOk && fadeOk ? "PASS" : "FAIL";
   console.log(
-    `  ${String(width).padStart(4)}px  ${verdict}  widget ${String(r.widget).padStart(4)}px  stacked:${String(r.stacked).padStart(5)} eventWrap:${String(r.eventWrapped).padStart(5)} (want ${expectNarrow})  rows ${r.rows} events ${r.events}  clipped ${r.clipped.length}`,
+    `  ${String(width).padStart(4)}px  ${verdict}  widget ${String(r.widget).padStart(4)}px  stacked:${String(r.stacked).padStart(5)} eventWrap:${String(r.eventWrapped).padStart(5)} (want ${expectNarrow})  rows ${r.rows} events ${r.events}  clipped ${r.clipped.length}  tabs:${r.lastTabReachable}  fade:${fadeOk ? "ok" : "MISMATCH"}`,
   );
   if (!layoutOk) failures.push(`${width}px: expected stacked=${expectNarrow}, got ${r.stacked}`);
   if (!eventLayoutOk) {
     failures.push(`${width}px: expected event wrap=${expectNarrow}, got ${r.eventWrapped}`);
   }
   if (!textOk) failures.push(`${width}px: ${r.clipped.length} clipped, e.g. ${r.clipped[0]}`);
+  if (!tabsOk) failures.push(`${width}px: last tab unreachable even after scrolling the strip`);
+  if (!fadeOk) {
+    failures.push(`${width}px: tab fade ends on ${r.fadeEnd} but sits on ${r.sectionBg}`);
+  }
 
   await ctx.close();
 }

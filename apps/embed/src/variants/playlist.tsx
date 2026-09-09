@@ -180,7 +180,15 @@ function TabNav({ activeTab, onSelect }: { activeTab: TabId; onSelect: (id: TabI
       </nav>
       {/* Right-edge fade. Sits on whitespace at wide viewports (invisible);
           becomes a visible gradient over clipped tab content at narrow
-          viewports so users know more tabs are scrollable to the right. */}
+          viewports so users know more tabs are scrollable to the right.
+
+          Fades to --bg-surface, not --bg-base. The widget section paints
+          itself with --bg-surface (#FFFFFF light), so fading to --bg-base
+          (#F7F3EE, warm cream) ended the gradient on a colour the strip is
+          not sitting on: on a 390px phone it read as a beige smudge over
+          "LAST 3" rather than as the tabs running off the edge. Verified
+          against the live page 2026-09-09. Dark mode had the same mismatch
+          (#0E0F11 base vs #16191D surface). */}
       <div
         aria-hidden="true"
         style={{
@@ -191,7 +199,7 @@ function TabNav({ activeTab, onSelect }: { activeTab: TabId; onSelect: (id: TabI
           width: "24px",
           pointerEvents: "none",
           background:
-            "linear-gradient(to right, color-mix(in oklab, var(--rmke-bg-base) 0%, transparent), var(--rmke-bg-base))",
+            "linear-gradient(to right, color-mix(in oklab, var(--rmke-bg-surface) 0%, transparent), var(--rmke-bg-surface))",
         }}
       />
     </div>
