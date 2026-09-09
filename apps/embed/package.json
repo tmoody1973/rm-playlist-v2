@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "echo 'no unit tests yet in @rm/embed — Playwright suite lands with widget variants'",
     "lint": "echo 'lint covered by root eslint runs'",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "node test/mobile-row.spec.mjs"
   },
   "dependencies": {
     "@rm/convex": "workspace:*",
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@preact/preset-vite": "^2.10.1",
     "@types/node": "^22.10.0",
+    "playwright": "1.63.0",
     "terser": "^5.37.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.7"

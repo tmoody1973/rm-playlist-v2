@@ -46,6 +46,17 @@ Widgets are tested against ALL four. Dashboard's required floor is `desktop` (op
 | Inline concert card | Full-width inset         | Full-width inset | Full-width inset               | Full-width inset, smaller padding      |
 | Load more           | Centered button          | Centered         | Centered                       | Full-width                             |
 
+**Play row trigger, corrected 2026-09-09.** The stacked play row switches on the
+**widget's** width, not the viewport's: at or below 460px of widget width. The
+viewport is the wrong measure here. On `radiomilwaukee.org` the widget renders
+350px wide inside a 390px phone because the host page adds its own margins, and
+a partner station can embed the same widget in a 400px sidebar on a 1440px
+desktop, where a viewport rule reads "desktop" and leaves the row broken. 460px
+is where a song title stops having roughly 180px to sit in. Implemented as a
+container query in `apps/embed/src/tokens.css`; see
+`docs/decisions/004-play-row-narrow-layout.md`. The other rows in the table
+above are still viewport-based.
+
 ## C. Widget `playlist` — grid layout responsive
 
 | Element                 | Wide         | Desktop      | Tablet               | Mobile              |
