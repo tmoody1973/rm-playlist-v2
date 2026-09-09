@@ -13,16 +13,19 @@
  * measure". jsdom has no layout engine and would pass while the widget was
  * broken.
  *
- * Not wired into `bun run test` yet. That script runs in CI, and CI has no
- * browser installed, so adding it there would turn every unrelated PR red.
- * Wiring it up needs a `playwright install chromium` step in ci.yml, which is
- * a separate decision.
+ * Runs in CI as its own job, `widget-e2e` in ci.yml, not as part of
+ * `bun run test`. It needs a browser and a live Convex read, so it has failure
+ * modes the other gates do not; keeping it separate means a brief Convex
+ * outage reddens this check alone rather than blocking a typo fix.
+ *
+ * Locally:
  *
  *   bun run build            # must run first, this reads dist/
  *   bun run test:e2e
  *
- * Requires VITE_CONVEX_URL at build time or the widget renders an error and
- * every case below skips rather than lying about passing.
+ * Requires VITE_CONVEX_URL at build time. Without it the widget renders an
+ * error, every case skips, and the run fails rather than reporting success on
+ * having measured nothing.
  */
 
 import { chromium } from "playwright";
@@ -70,6 +73,7 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(PORT, r));
 const browser = await chromium.launch();
 const failures = [];
+let skipped = 0;
 
 for (const width of CASES) {
   const ctx = await browser.newContext({
@@ -93,6 +97,7 @@ for (const width of CASES) {
     .catch(() => false);
 
   if (!rendered) {
+    skipped += 1;
     console.log(
       `  ${String(width).padStart(4)}px  SKIP — widget did not render (no network, or no VITE_CONVEX_URL at build)`,
     );
@@ -193,8 +198,20 @@ for (const width of CASES) {
 await browser.close();
 server.close();
 
+if (skipped === CASES.length) {
+  console.error(
+    "\nFAILED: the widget did not render at any width, so nothing was measured.\n" +
+      "  A run that checks nothing must not report success — that is the exact\n" +
+      "  failure this file guards against. Check that `bun run build` ran with\n" +
+      "  VITE_CONVEX_URL set, and that the Convex deployment is reachable.",
+  );
+  process.exit(1);
+}
+
 if (failures.length) {
   console.error("\nFAILED:\n" + failures.map((f) => "  - " + f).join("\n"));
   process.exit(1);
 }
-console.log("\nAll play-row width checks passed.");
+
+const measured = CASES.length - skipped;
+console.log(`\nAll width checks passed (${measured}/${CASES.length} widths measured).`);

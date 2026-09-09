@@ -60,3 +60,67 @@ jobs:
               exit 1
             fi
           done
+
+  # ------------------------------------------------------------------
+  # Widget layout regression check
+  # ------------------------------------------------------------------
+  #
+  # Added 2026-09-09 after three mobile bugs shipped to listeners in a row:
+  # song titles collapsing to "N..", live-event names wrapping one word per
+  # line, and the tab-strip fade ending on the wrong colour. All three were
+  # invisible to every existing gate, because nothing in CI had ever rendered
+  # this widget at a phone width. Typecheck, lint and unit tests cannot catch
+  # a layout that is only wrong once a real engine resolves widths.
+  #
+  # Deliberately a separate job, not a step in `check`. It needs a browser and
+  # a live Convex read, so it has failure modes the other gates do not; if
+  # Convex is briefly unreachable that should redden this check alone rather
+  # than block a typo fix. Note it is NOT a required check until someone adds
+  # it in branch protection — that is a manual GitHub settings step.
+  #
+  # Runs on every PR rather than only on apps/embed changes: the widget reads
+  # its data from Convex, so a query or schema change elsewhere can break it.
+  widget-e2e:
+    name: Widget layout (phone widths)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Browser binaries are ~150MB and change only when Playwright does.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('bun.lock') }}
+
+      - name: Install Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd apps/embed && bunx playwright install --with-deps chromium
+
+      # System deps are outside the cached directory, so they are needed even
+      # on a cache hit.
+      - name: Install Chromium system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd apps/embed && bunx playwright install-deps chromium
+
+      # The real deployment URL, not the stub the `check` job uses. The test
+      # renders actual rows, so it needs actual data. This value is public: it
+      # is compiled into the widget bundle every listener downloads, and
+      # widget-publish.yml already carries the same literal.
+      - name: Build the widget bundle
+        run: bun --filter='@rm/embed' run build
+        env:
+          VITE_CONVEX_URL: https://precise-fish-444.convex.cloud
+
+      - name: Measure the widget at 320 / 375 / 390 / 430 / 1024
+        run: cd apps/embed && bun run test:e2e
