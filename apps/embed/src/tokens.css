@@ -279,3 +279,89 @@
     justify-content: space-between;
   }
 }
+
+/*
+ * ---------------------------------------------------------------------
+ * Live-event row (LiveEventRow)
+ * ---------------------------------------------------------------------
+ *
+ * Same failure as the play row, one component over. Five things share one
+ * line: artwork, a LIVE badge, the event text, a Tickets button, and the
+ * gaps between them. Measured on the live page 2026-09-09, the event text
+ * got 320px at a 1024px viewport and 66px on a 390px phone, which wrapped
+ * "The Last Dinner Party opens for" to one word per line.
+ *
+ * docs/design/003 section B says only "full-width inset, smaller padding"
+ * for this row on mobile. Smaller padding alone buys 16px and does not
+ * fix a 66px column, so the narrow branch also lets the Tickets button
+ * wrap to its own line and lets the text wrap instead of ellipsing. The
+ * artwork and the badge stay put; they are what makes the row scannable
+ * as a concert rather than another song.
+ *
+ * Colours stay inline on the component because they fork on event source
+ * (AXS blue vs amber), which is data, not layout.
+ */
+
+.rmke-event {
+  display: flex;
+  align-items: center;
+  gap: var(--rmke-space-md);
+  padding: var(--rmke-space-sm) var(--rmke-space-md);
+  border-radius: var(--rmke-radius-sm);
+  margin-top: var(--rmke-space-sm);
+  cursor: pointer;
+}
+
+.rmke-event-body {
+  display: flex;
+  align-items: center;
+  gap: var(--rmke-space-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.rmke-event-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.rmke-event-title,
+.rmke-event-venue {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@container rmke-widget (max-width: 460px) {
+  /* Spec's "smaller padding" on mobile, and it is worth 16px of text. */
+  .rmke-event {
+    padding: var(--rmke-space-sm);
+    align-items: flex-start;
+  }
+
+  .rmke-event-body {
+    flex-wrap: wrap;
+    gap: var(--rmke-space-sm);
+  }
+
+  /*
+   * 60% basis keeps the badge and the event name on the same line while
+   * being wide enough that the Tickets button cannot also fit, so it
+   * wraps below and right-aligns on its own margin-left:auto.
+   */
+  .rmke-event-info {
+    flex: 1 1 60%;
+  }
+
+  .rmke-event-title,
+  .rmke-event-venue,
+  .rmke-event-support {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}
