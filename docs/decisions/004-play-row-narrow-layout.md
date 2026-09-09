@@ -96,9 +96,15 @@ browser running it is a current one.
 - **Narrow rows are taller.** Three lines instead of two, so fewer songs fit on
   screen before scrolling. Reading one title beats glancing at three we cannot
   read.
-- **Only the `list` layout was fixed.** The `grid` layout and the live-event
-  row were not touched. The live-event row is independently broken on narrow
-  screens, verified as pre-existing rather than caused by this change.
+- **Only the `list` layout was fixed.** The `grid` layout was not touched.
+
+  _Updated 2026-09-09, same day:_ the live-event row was originally left out of
+  this decision and is now fixed too, by applying the same container query at
+  the same 460px threshold. It failed the same way for the same reason: its
+  event name had 320px at a desktop width and 66px on a phone, because artwork,
+  a LIVE badge and a Tickets button take the row first. There it wraps the
+  Tickets button onto its own line rather than stacking, since the badge and
+  the artwork are what make the row scannable as a concert rather than a song.
 - **The regression test is not in CI.** It needs a browser, and CI has none, so
   wiring it up means adding a browser install step to `ci.yml`. Until that
   happens the check only runs when someone runs it by hand.

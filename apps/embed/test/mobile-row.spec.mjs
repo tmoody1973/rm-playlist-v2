@@ -109,32 +109,52 @@ for (const width of CASES) {
     // Clipped means the text is wider than the box it has to sit in. One
     // pixel of slack absorbs sub-pixel rounding.
     const clipped = [];
-    for (const li of rows) {
-      for (const sel of [".rmke-row-title", ".rmke-row-artist"]) {
-        const el = li.querySelector(sel);
-        if (el && el.scrollWidth > el.clientWidth + 1) clipped.push(`${sel} "${el.textContent}"`);
+    const check = (root, selectors) => {
+      for (const el of root) {
+        for (const sel of selectors) {
+          const node = el.querySelector(sel);
+          if (node && node.scrollWidth > node.clientWidth + 1) {
+            clipped.push(`${sel} "${node.textContent.trim().slice(0, 40)}"`);
+          }
+        }
       }
-    }
+    };
+    check(rows, [".rmke-row-title", ".rmke-row-artist"]);
+
+    // The live-event row is a separate component with the same failure mode:
+    // artwork, a LIVE badge and a Tickets button squeezing the event name.
+    const events = [...host.shadowRoot.querySelectorAll(".rmke-event")];
+    check(events, [".rmke-event-title", ".rmke-event-venue", ".rmke-event-support"]);
+
     const body = rows[0]?.querySelector(".rmke-row-body");
+    const eventBody = events[0]?.querySelector(".rmke-event-body");
     return {
       widget: Math.round(host.getBoundingClientRect().width),
       stacked: body ? getComputedStyle(body).flexDirection === "column" : null,
+      eventWrapped: eventBody ? getComputedStyle(eventBody).flexWrap === "wrap" : null,
       rows: rows.length,
+      events: events.length,
       clipped,
     };
   });
 
   // Wide must stay on one line; narrow must stack. A container query that
   // fires at every width would "fix" truncation by making desktop ugly.
-  const expectStacked = r.widget <= 460;
-  const layoutOk = r.stacked === expectStacked;
+  const expectNarrow = r.widget <= 460;
+  const layoutOk = r.stacked === expectNarrow;
+  // null when the page happened to serve no upcoming events; that is not a
+  // failure, it just means there was nothing to check.
+  const eventLayoutOk = r.eventWrapped === null || r.eventWrapped === expectNarrow;
   const textOk = r.clipped.length === 0;
 
-  const verdict = layoutOk && textOk ? "PASS" : "FAIL";
+  const verdict = layoutOk && eventLayoutOk && textOk ? "PASS" : "FAIL";
   console.log(
-    `  ${String(width).padStart(4)}px  ${verdict}  widget ${String(r.widget).padStart(4)}px  stacked:${String(r.stacked).padStart(5)} (want ${expectStacked})  rows ${r.rows}  clipped ${r.clipped.length}`,
+    `  ${String(width).padStart(4)}px  ${verdict}  widget ${String(r.widget).padStart(4)}px  stacked:${String(r.stacked).padStart(5)} eventWrap:${String(r.eventWrapped).padStart(5)} (want ${expectNarrow})  rows ${r.rows} events ${r.events}  clipped ${r.clipped.length}`,
   );
-  if (!layoutOk) failures.push(`${width}px: expected stacked=${expectStacked}, got ${r.stacked}`);
+  if (!layoutOk) failures.push(`${width}px: expected stacked=${expectNarrow}, got ${r.stacked}`);
+  if (!eventLayoutOk) {
+    failures.push(`${width}px: expected event wrap=${expectNarrow}, got ${r.eventWrapped}`);
+  }
   if (!textOk) failures.push(`${width}px: ${r.clipped.length} clipped, e.g. ${r.clipped[0]}`);
 
   await ctx.close();
