@@ -117,14 +117,17 @@ function eligibilityProblem(context: PlayContext | null): string | null {
 
 async function pushToCadence(ctx: ActionCtx, context: PlayContext): Promise<PushOutcome> {
   const { play, station, track, artist } = context;
-  const built = buildCadenceSong({
-    artistRaw: play.artistRaw,
-    titleRaw: play.titleRaw,
-    playedAt: play.playedAt,
-    durationSec: play.durationSec,
-    artist: artist ?? undefined,
-    track: track ?? undefined,
-  });
+  const built = buildCadenceSong(
+    {
+      artistRaw: play.artistRaw,
+      titleRaw: play.titleRaw,
+      playedAt: play.playedAt,
+      durationSec: play.durationSec,
+      artist: artist ?? undefined,
+      track: track ?? undefined,
+    },
+    CHANNEL_TIME_ZONE,
+  );
   if (!built.ok) return skipPush(ctx, play, `not pushed: ${built.reason}`);
 
   const token = await fetchToken();

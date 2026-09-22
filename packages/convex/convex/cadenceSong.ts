@@ -42,7 +42,13 @@ const MS_PER_SEC = 1000;
 /** Apple Music artwork URLs are templates; Cadence needs a concrete size. */
 const ARTWORK_PX = "600";
 
-export function buildCadenceSong(input: CadencePlayInput): BuildResult {
+/**
+ * `timeZone` is the Cadence channel's zone. Cadence's add-now compares the
+ * song start against the episode window as wall-clock time and rejected a
+ * UTC `Z` timestamp ("current time is outside episode bounds"), so `start`
+ * is rendered as channel-local time with an explicit offset.
+ */
+export function buildCadenceSong(input: CadencePlayInput, timeZone: string): BuildResult {
   const durationSec = input.track?.durationSec ?? input.durationSec ?? 0;
   if (durationSec <= 0) return { ok: false, reason: "no duration" };
   const start = new Date(input.playedAt);
@@ -51,7 +57,7 @@ export function buildCadenceSong(input: CadencePlayInput): BuildResult {
   const song: CadenceSong = {
     title: input.track?.displayTitle ?? input.titleRaw,
     artist: [input.artist?.displayName ?? input.artistRaw],
-    start: start.toISOString(),
+    start: localIso(input.playedAt, timeZone),
     duration: Math.round(durationSec * MS_PER_SEC),
   };
   return { ok: true, song: withOptional(song, input.track) };
@@ -91,15 +97,54 @@ export function pickEpisode(
   );
 }
 
-/** `yyyy-MM-dd` for the instant in the given IANA time zone. */
-export function localDateKey(ms: number, timeZone: string): string {
+interface LocalParts {
+  year: string;
+  month: string;
+  day: string;
+  hour: string;
+  minute: string;
+  second: string;
+}
+
+function localParts(ms: number, timeZone: string): LocalParts {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
+    hourCycle: "h23",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   }).formatToParts(new Date(ms));
   const get = (type: Intl.DateTimeFormatPart["type"]): string =>
     parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
+  return {
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    second: get("second"),
+  };
+}
+
+/** `yyyy-MM-dd` for the instant in the given IANA time zone. */
+export function localDateKey(ms: number, timeZone: string): string {
+  const p = localParts(ms, timeZone);
+  return `${p.year}-${p.month}-${p.day}`;
+}
+
+const MS_PER_MINUTE = 60_000;
+
+/** ISO-8601 wall-clock time with numeric offset, e.g. `2026-09-22T18:16:04-05:00`. */
+export function localIso(ms: number, timeZone: string): string {
+  const p = localParts(ms, timeZone);
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const offsetMin = Math.round((asUtc - Math.floor(ms / 1000) * 1000) / MS_PER_MINUTE);
+  const sign = offsetMin < 0 ? "-" : "+";
+  const abs = Math.abs(offsetMin);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}${sign}${hh}:${mm}`;
 }
