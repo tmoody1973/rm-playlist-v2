@@ -7,6 +7,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  query,
 } from "./_generated/server";
 import {
   buildCadenceSong,
@@ -15,6 +16,7 @@ import {
   type CadenceEpisode,
   type CadenceSong,
 } from "./cadenceSong";
+import { summarizePushEvents } from "./cadenceSummary";
 
 /**
  * Live push of resolved plays into NPR Cadence.
@@ -49,6 +51,43 @@ interface PushOutcome {
   status: "skipped" | "dry-run" | "pushed" | "error";
   detail?: string;
 }
+
+/** Events scanned for the Streams-page rollup; ~a day of 88Nine plays plus heartbeats. */
+const SUMMARY_SCAN_LIMIT = 600;
+
+/**
+ * Cadence push status for one station, for the Streams page. `mode` is
+ * "off" when no channel ID is configured for the station.
+ */
+export const pushSummary = query({
+  args: {
+    stationSlug: v.union(
+      v.literal("hyfin"),
+      v.literal("88nine"),
+      v.literal("414music"),
+      v.literal("rhythmlab"),
+    ),
+  },
+  handler: async (ctx, { stationSlug }) => {
+    const mode: "off" | "live" | "dry" =
+      channelIdFor(stationSlug) === undefined
+        ? "off"
+        : process.env.CADENCE_PUSH_MODE === "live"
+          ? "live"
+          : "dry";
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", stationSlug))
+      .first();
+    if (station === null) return { mode, ...summarizePushEvents([], Date.now()) };
+    const events = await ctx.db
+      .query("ingestionEvents")
+      .withIndex("by_station", (q) => q.eq("stationId", station._id))
+      .order("desc")
+      .take(SUMMARY_SCAN_LIMIT);
+    return { mode, ...summarizePushEvents(events, Date.now()) };
+  },
+});
 
 export const playContext = internalQuery({
   args: { playId: v.id("plays") },
