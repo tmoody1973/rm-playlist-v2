@@ -60,6 +60,21 @@ describe("buildCadenceSong", () => {
     });
   });
 
+  test("fills Apple's {w}x{h} artwork placeholder so Cadence gets a real image URL", () => {
+    const templated = "https://is1-ssl.mzstatic.com/image/thumb/abc/%7Bw%7Dx%7Bh%7Dbb.jpg";
+    const result = buildCadenceSong(
+      play({ track: { displayTitle: "x", durationSec: 10, artworkUrl: templated } }),
+    );
+    expect(result.ok && result.song.artworkUrl).toBe(
+      "https://is1-ssl.mzstatic.com/image/thumb/abc/600x600bb.jpg",
+    );
+    const literal = "https://example.test/{w}x{h}bb.jpg";
+    const result2 = buildCadenceSong(
+      play({ track: { displayTitle: "x", durationSec: 10, artworkUrl: literal } }),
+    );
+    expect(result2.ok && result2.song.artworkUrl).toBe("https://example.test/600x600bb.jpg");
+  });
+
   test("omits album/label/artwork keys entirely when blank", () => {
     const result = buildCadenceSong(
       play({

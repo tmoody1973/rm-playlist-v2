@@ -39,6 +39,9 @@ export type BuildResult = { ok: true; song: CadenceSong } | { ok: false; reason:
 
 const MS_PER_SEC = 1000;
 
+/** Apple Music artwork URLs are templates; Cadence needs a concrete size. */
+const ARTWORK_PX = "600";
+
 export function buildCadenceSong(input: CadencePlayInput): BuildResult {
   const durationSec = input.track?.durationSec ?? input.durationSec ?? 0;
   if (durationSec <= 0) return { ok: false, reason: "no duration" };
@@ -58,8 +61,12 @@ function withOptional(song: CadenceSong, track: CadencePlayInput["track"]): Cade
   const extras: Partial<CadenceSong> = {};
   if (nonEmpty(track?.albumDisplayName)) extras.album = track.albumDisplayName;
   if (nonEmpty(track?.recordLabel)) extras.label = track.recordLabel;
-  if (nonEmpty(track?.artworkUrl)) extras.artworkUrl = track.artworkUrl;
+  if (nonEmpty(track?.artworkUrl)) extras.artworkUrl = materializeArtwork(track.artworkUrl);
   return { ...song, ...extras };
+}
+
+function materializeArtwork(url: string): string {
+  return url.replace(/\{w\}|%7Bw%7D/g, ARTWORK_PX).replace(/\{h\}|%7Bh%7D/g, ARTWORK_PX);
 }
 
 function nonEmpty(value: string | undefined): value is string {
