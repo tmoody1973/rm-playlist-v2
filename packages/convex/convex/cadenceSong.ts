@@ -35,9 +35,18 @@ export interface CadenceSong {
   artworkUrl?: string;
 }
 
-export type BuildResult = { ok: true; song: CadenceSong } | { ok: false; reason: string };
+export type BuildResult =
+  | { ok: true; song: CadenceSong; durationEstimated: boolean }
+  | { ok: false; reason: string };
 
 const MS_PER_SEC = 1000;
+
+/**
+ * Cadence refuses a song without a duration. SGmetadata feeds carry none,
+ * so an unmatched local song gets a nominal length rather than being
+ * dropped from the live feed; the event flags it as estimated.
+ */
+const FALLBACK_DURATION_SEC = 180;
 
 /** Apple Music artwork URLs are templates; Cadence needs a concrete size. */
 const ARTWORK_PX = "600";
@@ -49,8 +58,9 @@ const ARTWORK_PX = "600";
  * is rendered as channel-local time with an explicit offset.
  */
 export function buildCadenceSong(input: CadencePlayInput, timeZone: string): BuildResult {
-  const durationSec = input.track?.durationSec ?? input.durationSec ?? 0;
-  if (durationSec <= 0) return { ok: false, reason: "no duration" };
+  const knownSec = input.track?.durationSec ?? input.durationSec ?? 0;
+  const durationEstimated = knownSec <= 0;
+  const durationSec = durationEstimated ? FALLBACK_DURATION_SEC : knownSec;
   const start = new Date(input.playedAt);
   if (Number.isNaN(start.getTime())) return { ok: false, reason: "invalid playedAt" };
 
@@ -60,7 +70,7 @@ export function buildCadenceSong(input: CadencePlayInput, timeZone: string): Bui
     start: localIso(input.playedAt, timeZone),
     duration: Math.round(durationSec * MS_PER_SEC),
   };
-  return { ok: true, song: withOptional(song, input.track) };
+  return { ok: true, song: withOptional(song, input.track), durationEstimated };
 }
 
 function withOptional(song: CadenceSong, track: CadencePlayInput["track"]): CadenceSong {

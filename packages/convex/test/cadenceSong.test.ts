@@ -35,6 +35,7 @@ describe("buildCadenceSong", () => {
     const result = buildCadenceSong(play(), TZ);
     expect(result).toEqual({
       ok: true,
+      durationEstimated: false,
       song: {
         title: "May Ninth",
         artist: ["Khruangbin"],
@@ -54,6 +55,7 @@ describe("buildCadenceSong", () => {
     );
     expect(result).toEqual({
       ok: true,
+      durationEstimated: false,
       song: {
         title: "may ninth",
         artist: ["khruangbin"],
@@ -94,12 +96,20 @@ describe("buildCadenceSong", () => {
     expect("artworkUrl" in result.song).toBe(false);
   });
 
-  test("refuses a play with no usable duration — Cadence rejects add-now without one", () => {
+  test("falls back to a nominal 3 minutes when neither track nor feed has a duration", () => {
     const result = buildCadenceSong(
       play({ durationSec: undefined, track: { displayTitle: "x", durationSec: 0 } }),
       TZ,
     );
-    expect(result).toEqual({ ok: false, reason: "no duration" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.durationEstimated).toBe(true);
+    expect(result.song.duration).toBe(180_000);
+  });
+
+  test("marks the duration as known when the track or feed supplies one", () => {
+    const fromTrack = buildCadenceSong(play(), TZ);
+    expect(fromTrack.ok && fromTrack.durationEstimated).toBe(false);
   });
 
   test("refuses a playedAt that can't be rendered as a date", () => {
