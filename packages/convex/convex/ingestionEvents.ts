@@ -21,6 +21,8 @@ export const log = internalMutation({
       v.literal("drift_detected"),
       v.literal("enrichment_ok"),
       v.literal("enrichment_error"),
+      v.literal("cadence_push_ok"),
+      v.literal("cadence_push_error"),
     ),
     message: v.string(),
     context: v.optional(v.any()),
