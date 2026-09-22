@@ -1,3 +1,4 @@
+import type { FunctionReturnType } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -19,8 +20,8 @@ import {
  * Live push of resolved plays into NPR Cadence.
  *
  * Flow: `enrichment.markPlayEnriched` schedules `pushPlay` for the play it
- * just resolved. The action loads the play with its track/artist/station,
- * finds the Cadence episode on air at `playedAt`, and calls add-now.
+ * just resolved. The action claims the play, loads it with track/artist/
+ * station, finds the Cadence episode on air at `playedAt`, and calls add-now.
  *
  * Config lives in the Convex env store:
  *   CADENCE_BASE_URL, CADENCE_CLIENT_ID, CADENCE_CLIENT_SECRET,
@@ -38,6 +39,17 @@ const CHANNEL_ENV_BY_STATION: Partial<Record<Doc<"stations">["slug"], string>> =
 
 const CHANNEL_TIME_ZONE = "America/Chicago";
 
+/** Value of `cadencePushedAt` while an action holds the play. */
+const CLAIMED = 0;
+
+/** Cadence episode search page size; a day has at most ~20 episodes. */
+const EPISODE_PAGE_SIZE = 100;
+
+interface PushOutcome {
+  status: "skipped" | "dry-run" | "pushed" | "error";
+  detail?: string;
+}
+
 export const playContext = internalQuery({
   args: { playId: v.id("plays") },
   handler: async (ctx, { playId }) => {
@@ -50,8 +62,25 @@ export const playContext = internalQuery({
   },
 });
 
-export const markPushed = internalMutation({
-  args: { playId: v.id("plays"), pushedAt: v.number() },
+type PlayContext = NonNullable<FunctionReturnType<typeof internal.cadence.playContext>>;
+
+/**
+ * Atomically take ownership of a play for pushing. Convex mutations are
+ * transactional, so two racing actions can't both see `undefined`.
+ */
+export const claimPush = internalMutation({
+  args: { playId: v.id("plays") },
+  handler: async (ctx, { playId }): Promise<boolean> => {
+    const play = await ctx.db.get(playId);
+    if (play === null || play.cadencePushedAt !== undefined) return false;
+    await ctx.db.patch(playId, { cadencePushedAt: CLAIMED });
+    return true;
+  },
+});
+
+/** Finalize (real timestamp) or release (undefined, so a retry can push). */
+export const settlePush = internalMutation({
+  args: { playId: v.id("plays"), pushedAt: v.optional(v.number()) },
   handler: async (ctx, { playId, pushedAt }) => {
     await ctx.db.patch(playId, { cadencePushedAt: pushedAt });
   },
@@ -59,71 +88,93 @@ export const markPushed = internalMutation({
 
 export const pushPlay = internalAction({
   args: { playId: v.id("plays") },
-  handler: async (ctx, { playId }): Promise<{ status: string; detail?: string }> => {
+  handler: async (ctx, { playId }): Promise<PushOutcome> => {
+    const claimed = await ctx.runMutation(internal.cadence.claimPush, { playId });
+    if (!claimed) return { status: "skipped", detail: "already pushed or claimed" };
+
     const context = await ctx.runQuery(internal.cadence.playContext, { playId });
-    if (context === null || context.station === null)
-      return { status: "skipped", detail: "no play" };
-    const { play, station, track, artist } = context;
-
-    // ponytail: guard only, not a lock. A retried markPlayEnriched can race
-    // two pushes through here; add a claim mutation if duplicates show up.
-    if (play.cadencePushedAt !== undefined) return { status: "skipped", detail: "already pushed" };
-    if (play.enrichmentStatus !== "resolved")
-      return { status: "skipped", detail: play.enrichmentStatus };
-
-    const channelId = channelIdFor(station.slug);
-    if (channelId === undefined)
-      return { status: "skipped", detail: `no channel for ${station.slug}` };
-
-    const built = buildCadenceSong({
-      artistRaw: play.artistRaw,
-      titleRaw: play.titleRaw,
-      playedAt: play.playedAt,
-      durationSec: play.durationSec,
-      artist: artist ?? undefined,
-      track: track ?? undefined,
-    });
-    if (!built.ok) {
-      await logEvent(ctx, play, "cadence_push_error", `not pushed: ${built.reason}`, { playId });
-      return { status: "skipped", detail: built.reason };
+    const problem = eligibilityProblem(context);
+    if (problem !== null || context === null) {
+      await release(ctx, playId);
+      return { status: "skipped", detail: problem ?? "no play" };
     }
-
     try {
-      const token = await fetchToken();
-      const episode = await findEpisode(token, channelId, play.playedAt);
-      if (episode === null) {
-        await logEvent(ctx, play, "cadence_push_error", "no Cadence episode on air at playedAt", {
-          playId,
-          playedAt: play.playedAt,
-        });
-        return { status: "error", detail: "no episode" };
-      }
-
-      const dryRun = process.env.CADENCE_PUSH_MODE !== "live";
-      if (!dryRun) await addSongNow(token, episode.episodeId, built.song);
-
-      await ctx.runMutation(internal.cadence.markPushed, { playId, pushedAt: Date.now() });
-      await logEvent(
-        ctx,
-        play,
-        "cadence_push_ok",
-        `${dryRun ? "dry-run: " : ""}${built.song.title}`,
-        {
-          playId,
-          dryRun,
-          episodeId: episode.episodeId,
-          programName: episode.programName,
-          song: built.song,
-        },
-      );
-      return { status: dryRun ? "dry-run" : "pushed", detail: episode.episodeId };
+      return await pushToCadence(ctx, context);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await logEvent(ctx, play, "cadence_push_error", message, { playId });
-      return { status: "error", detail: message };
+      return await failPush(ctx, context.play, err);
     }
   },
 });
+
+function eligibilityProblem(context: PlayContext | null): string | null {
+  if (context === null || context.station === null) return "no play";
+  if (context.play.enrichmentStatus !== "resolved") return context.play.enrichmentStatus;
+  if (channelIdFor(context.station.slug) === undefined) {
+    return `no channel for ${context.station.slug}`;
+  }
+  return null;
+}
+
+async function pushToCadence(ctx: ActionCtx, context: PlayContext): Promise<PushOutcome> {
+  const { play, station, track, artist } = context;
+  const built = buildCadenceSong({
+    artistRaw: play.artistRaw,
+    titleRaw: play.titleRaw,
+    playedAt: play.playedAt,
+    durationSec: play.durationSec,
+    artist: artist ?? undefined,
+    track: track ?? undefined,
+  });
+  if (!built.ok) return skipPush(ctx, play, `not pushed: ${built.reason}`);
+
+  const token = await fetchToken();
+  const channelId = channelIdFor(station!.slug) ?? "";
+  const episode = await findEpisode(token, channelId, play.playedAt);
+  if (episode === null) return skipPush(ctx, play, "no Cadence episode on air at playedAt");
+
+  return sendSong(ctx, play, episode, built.song, token);
+}
+
+async function sendSong(
+  ctx: ActionCtx,
+  play: Doc<"plays">,
+  episode: CadenceEpisode,
+  song: CadenceSong,
+  token: string,
+): Promise<PushOutcome> {
+  const dryRun = process.env.CADENCE_PUSH_MODE !== "live";
+  if (!dryRun) await addSongNow(token, episode.episodeId, song);
+  await ctx.runMutation(internal.cadence.settlePush, { playId: play._id, pushedAt: Date.now() });
+  await logEvent(ctx, play, "cadence_push_ok", `${dryRun ? "dry-run: " : ""}${song.title}`, {
+    playId: play._id,
+    dryRun,
+    episodeId: episode.episodeId,
+    programName: episode.programName,
+    song,
+  });
+  return { status: dryRun ? "dry-run" : "pushed", detail: episode.episodeId };
+}
+
+/** Release the claim and record why the play was not sent. */
+async function skipPush(ctx: ActionCtx, play: Doc<"plays">, reason: string): Promise<PushOutcome> {
+  await release(ctx, play._id);
+  await logEvent(ctx, play, "cadence_push_error", reason, {
+    playId: play._id,
+    playedAt: play.playedAt,
+  });
+  return { status: "skipped", detail: reason };
+}
+
+async function failPush(ctx: ActionCtx, play: Doc<"plays">, err: unknown): Promise<PushOutcome> {
+  const message = err instanceof Error ? err.message : String(err);
+  await release(ctx, play._id);
+  await logEvent(ctx, play, "cadence_push_error", message, { playId: play._id });
+  return { status: "error", detail: message };
+}
+
+async function release(ctx: ActionCtx, playId: Doc<"plays">["_id"]): Promise<void> {
+  await ctx.runMutation(internal.cadence.settlePush, { playId, pushedAt: undefined });
+}
 
 function channelIdFor(slug: Doc<"stations">["slug"]): string | undefined {
   const envKey = CHANNEL_ENV_BY_STATION[slug];
@@ -203,30 +254,22 @@ interface EpisodeSearchResponse {
   }>;
 }
 
-async function findEpisode(
-  token: string,
-  channelId: string,
-  playedAt: number,
-): Promise<CadenceEpisode | null> {
-  const day = localDateKey(playedAt, CHANNEL_TIME_ZONE);
-  const res = await cadenceFetch(
-    "/api/cadence/episode",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        channelId,
-        startDate: day,
-        endDate: day,
-        size: 100,
-        sort: "start:asc",
-      }),
-    },
-    token,
-  );
-  const data = (await res.json()) as EpisodeSearchResponse;
+async function searchEpisodes(token: string, channelId: string, day: string): Promise<unknown> {
+  const body = JSON.stringify({
+    channelId,
+    startDate: day,
+    endDate: day,
+    size: EPISODE_PAGE_SIZE,
+    sort: "start:asc",
+  });
+  const res = await cadenceFetch("/api/cadence/episode", { method: "POST", body }, token);
+  return res.json();
+}
+
+function parseEpisodes(data: unknown): CadenceEpisode[] {
+  const rows = (data as EpisodeSearchResponse).episodes ?? [];
   const episodes: CadenceEpisode[] = [];
-  for (const row of data.episodes ?? []) {
-    const e = row.episode;
+  for (const { episode: e } of rows) {
     if (e?.episodeId && e.start?.utc && e.end?.utc) {
       episodes.push({
         episodeId: e.episodeId,
@@ -236,7 +279,17 @@ async function findEpisode(
       });
     }
   }
-  return pickEpisode(episodes, playedAt);
+  return episodes;
+}
+
+async function findEpisode(
+  token: string,
+  channelId: string,
+  playedAt: number,
+): Promise<CadenceEpisode | null> {
+  const day = localDateKey(playedAt, CHANNEL_TIME_ZONE);
+  const data = await searchEpisodes(token, channelId, day);
+  return pickEpisode(parseEpisodes(data), playedAt);
 }
 
 async function addSongNow(token: string, episodeId: string, song: CadenceSong): Promise<void> {

@@ -42,11 +42,13 @@ const MS_PER_SEC = 1000;
 export function buildCadenceSong(input: CadencePlayInput): BuildResult {
   const durationSec = input.track?.durationSec ?? input.durationSec ?? 0;
   if (durationSec <= 0) return { ok: false, reason: "no duration" };
+  const start = new Date(input.playedAt);
+  if (Number.isNaN(start.getTime())) return { ok: false, reason: "invalid playedAt" };
 
   const song: CadenceSong = {
     title: input.track?.displayTitle ?? input.titleRaw,
     artist: [input.artist?.displayName ?? input.artistRaw],
-    start: new Date(input.playedAt).toISOString(),
+    start: start.toISOString(),
     duration: Math.round(durationSec * MS_PER_SEC),
   };
   return { ok: true, song: withOptional(song, input.track) };

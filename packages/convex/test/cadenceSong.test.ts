@@ -79,6 +79,17 @@ describe("buildCadenceSong", () => {
     );
     expect(result).toEqual({ ok: false, reason: "no duration" });
   });
+
+  test("refuses a playedAt that can't be rendered as a date", () => {
+    expect(buildCadenceSong(play({ playedAt: Number.NaN }))).toEqual({
+      ok: false,
+      reason: "invalid playedAt",
+    });
+    expect(buildCadenceSong(play({ playedAt: 8.64e15 + 1 }))).toEqual({
+      ok: false,
+      reason: "invalid playedAt",
+    });
+  });
 });
 
 describe("pickEpisode", () => {
