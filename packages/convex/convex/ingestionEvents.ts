@@ -130,6 +130,8 @@ export const recentByStation = query({
         inserted?: number;
         skipped?: number;
         total?: number;
+        programName?: string;
+        dryRun?: boolean;
       };
       return {
         _id: ev._id,
@@ -140,6 +142,8 @@ export const recentByStation = query({
         titleRaw: typeof c.titleRaw === "string" ? c.titleRaw : undefined,
         inserted: typeof c.inserted === "number" ? c.inserted : undefined,
         skipped: typeof c.skipped === "number" ? c.skipped : undefined,
+        programName: typeof c.programName === "string" ? c.programName : undefined,
+        dryRun: c.dryRun === true ? true : undefined,
       };
     });
   },

@@ -20,6 +20,7 @@ export function StreamsClient() {
     <div className="flex flex-col gap-6">
       <StationTabs active={active} onSelect={setActive} />
       <SourceHealthSection slug={active} />
+      <CadencePushSection slug={active} />
       <EventsSection slug={active} />
       <PlaysSection slug={active} />
     </div>
@@ -180,6 +181,110 @@ function SourcesSkeleton() {
 }
 
 // ---------------------------------------------------------------- //
+// NPR Cadence push
+// ---------------------------------------------------------------- //
+
+function CadencePushSection({ slug }: { slug: StationSlug }) {
+  const summary = useQuery(api.cadence.pushSummary, { stationSlug: slug });
+  if (summary === undefined || summary.mode === "off") return null;
+
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionHeader
+        eyebrow="NPR Cadence"
+        title="Live playlist push"
+        body="Every play that finishes enrichment is posted to the on-air Cadence episode. Dry mode does every step except the final send; errors here mean Cadence refused the song."
+      />
+      <div className="overflow-x-auto rounded-md border border-border bg-bg-surface">
+        <table className="w-full text-sm">
+          <thead>
+            <tr
+              className="border-b border-border"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "11px",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                color: "var(--text-muted)",
+              }}
+            >
+              <th className="px-4 py-2 text-left font-semibold">Mode</th>
+              <th className="px-4 py-2 text-left font-semibold">Last 24h</th>
+              <th className="px-4 py-2 text-left font-semibold">Last push</th>
+              <th className="px-4 py-2 text-left font-semibold">Last error</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="px-4 py-3">
+                <ModeBadge mode={summary.mode} />
+              </td>
+              <td
+                className="px-4 py-3 text-text-secondary"
+                style={{ fontFamily: "var(--font-mono)", fontSize: "13px" }}
+              >
+                {summary.okLast24h} ok
+                {summary.errorLast24h > 0 && (
+                  <span style={{ color: "var(--status-error)" }}>
+                    {" "}
+                    · {summary.errorLast24h} failed
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3" style={{ fontSize: "13px" }}>
+                {summary.lastOk === null ? (
+                  <span className="text-text-muted">—</span>
+                ) : (
+                  <span>
+                    <span style={{ color: "var(--text-primary)" }}>{summary.lastOk.title}</span>
+                    <span className="text-text-muted"> → {summary.lastOk.programName}</span>
+                    <span
+                      className="text-text-muted"
+                      style={{ fontFamily: "var(--font-mono)", fontSize: "11px" }}
+                    >
+                      {" "}
+                      {formatRelative(summary.lastOk.at)}
+                      {summary.lastOk.dryRun ? " (dry)" : ""}
+                    </span>
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3" style={{ fontSize: "12px" }}>
+                {summary.lastError === null ? (
+                  <span className="text-text-muted">none</span>
+                ) : (
+                  <span style={{ color: "var(--status-error)" }}>
+                    {formatRelative(summary.lastError.at)} · {summary.lastError.message}
+                  </span>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ModeBadge({ mode }: { mode: "live" | "dry" | "off" }) {
+  const isLive = mode === "live";
+  return (
+    <span
+      className="rounded px-2 py-0.5 text-xs"
+      style={{
+        fontFamily: "var(--font-mono)",
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        background: isLive ? "var(--accent-cta)" : "var(--bg-elevated)",
+        color: isLive ? "var(--bg-base)" : "var(--text-muted)",
+      }}
+    >
+      {mode}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------- //
 // Events log
 // ---------------------------------------------------------------- //
 
@@ -272,6 +377,18 @@ function EventsSection({ slug }: { slug: StationSlug }) {
                   +{ev.inserted}
                 </span>
               )}
+              {ev.programName !== undefined && (
+                <span
+                  className="rounded px-1.5 py-0.5 text-xs"
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    background: "var(--bg-elevated)",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  → {ev.programName}
+                </span>
+              )}
               {ev.artistRaw !== undefined && ev.titleRaw !== undefined && (
                 <span
                   style={{ fontSize: "12px", color: "var(--text-secondary)", flexBasis: "100%" }}
@@ -288,7 +405,7 @@ function EventsSection({ slug }: { slug: StationSlug }) {
 }
 
 function KindBadge({ kind }: { kind: string }) {
-  const isOk = kind === "poll_ok" || kind === "enrichment_ok";
+  const isOk = kind === "poll_ok" || kind === "enrichment_ok" || kind === "cadence_push_ok";
   const isError = kind.includes("error");
   return (
     <span

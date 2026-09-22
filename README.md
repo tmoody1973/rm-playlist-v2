@@ -10,7 +10,7 @@ Across those four streams, the station logs tens of thousands of plays per quart
 
 rm-playlist-v2 is that missing layer. It's three things in one repo:
 
-1. **An operator dashboard.** Live wall-of-status for all four stations with a `Needs Attention` panel that surfaces enrichment failures and missing SoundExchange fields. Every row has one-click actions — retry, ignore (persistently, so the next "WYMS Legal ID" tick doesn't come back), override artist/title, edit label/ISRC/duration inline, auto-fill missing durations from the cached Apple Music songId. Per-station coverage stats let a DJ see at a glance whether their stream's metadata is healthy, with 414 Music's chronically-low label coverage marked as expected rather than broken. The Reports panel generates NPR-compliant playlist logs (tab-delimited UTF-8 TXT, Milwaukee local time) on demand.
+1. **An operator dashboard.** Live wall-of-status for all four stations with a `Needs Attention` panel that surfaces enrichment failures and missing SoundExchange fields. Every row has one-click actions — retry, ignore (persistently, so the next "WYMS Legal ID" tick doesn't come back), override artist/title, edit label/ISRC/duration inline, auto-fill missing durations from the cached Apple Music songId. Per-station coverage stats let a DJ see at a glance whether their stream's metadata is healthy, with 414 Music's chronically-low label coverage marked as expected rather than broken. The Reports panel generates NPR-compliant playlist logs (tab-delimited UTF-8 TXT, Milwaukee local time) on demand, and every resolved 88Nine play is pushed live into NPR Cadence's on-air episode within about two minutes of airing.
 2. **An ingestion + enrichment backbone.** Trigger.dev crons poll SGmetadata every minute. A Fly-deployed ICY worker holds the Rhythm Lab stream open 24/7 and parses in-band Shoutcast metadata as it streams. Every resolved play runs through parallel Apple Music + MusicBrainz lookups, then a five-tier waterfall for record label (Apple → Discogs release with deluxe/remaster variant retry → MusicBrainz release-by-MBID → Discogs artist-only → "Self-released" for 414 Music local acts) and a three-tier waterfall for album art (Apple → MusicBrainz Cover Art Archive → per-station branded fallback). Station-specific knowledge is baked in throughout — 414 Music's fallback to `Self-released` is what SoundExchange accepts for a local unsigned act.
 3. **Embeddable widgets.** The same canonical play data ships to Cloudflare Pages as a small Preact bundle (~28 KB gzip critical-path per variant). Any page on radiomilwaukee.org (or a partner site later) can drop in a `<script type="module">` tag and render a live playlist (list or grid layout, Load More pagination, search, date picker, Recent/Top Songs/About tabs, "playing now in Milwaukee" event row), a now-playing strip, or a now-playing card (with 30-second Apple Music preview audio). Variants are code-split; each page only downloads the chunk it uses. Widget bundle loads cross-origin correctly via `import.meta.url`-based chunk resolution. A legacy `widget-legacy.js` classic-script bundle is also published for partner CMSes (e.g., WordPress) that strip `type="module"` or mangle `data-*` attributes.
 4. **PlaylistFM landing page.** A public marketing surface at [playlistfm.app](https://playlistfm.app) showing a live 4-stream demo, widget feature gallery, and embed snippet — branded "PlaylistFM, powered by Radio Milwaukee." Social shares get a live OG image at `/api/og` that pulls the most-recently-played track across all four stations from Convex and renders it edge-side via `next/og`.
@@ -25,7 +25,8 @@ The single-tenant decision ([`docs/decisions/001-single-tenant-first.md`](docs/d
 | ------------- | ------------------------------------------------------------------------------------------------- |
 | DB + realtime | Convex (queries, mutations, HTTP actions)                                                         |
 | Auth          | Clerk (users only; Organizations deferred). Dashboard restricted to `@radiomilwaukee.org` emails. |
-| Scheduling    | Trigger.dev — `poll-all-sources`, `enrich-pending-plays`, `refresh-apple-music-token`, `poll-ticketmaster` |
+| Scheduling    | Trigger.dev (runtime `node-24`) — `poll-all-sources`, `enrich-pending-plays`, `refresh-apple-music-token`, `poll-ticketmaster` |
+| NPR reporting | NPR Cadence station-admin API — live `add-now` push per resolved play (`packages/convex/convex/cadence.ts`); quarterly Music Rights file upload stays manual |
 | Long-lived    | Fly.io (`@rm/icy-worker`)                                                                         |
 | Dashboard     | Next.js 16.2 (Turbopack) + React 19 + Tailwind v4                                                 |
 | Public landing | Next.js (same `apps/web`) deployed to Vercel at `playlistfm.app`. Live OG image via `next/og`.   |
@@ -139,6 +140,9 @@ All secrets live in `.env.local` (gitignored) and `~/.gstack/secrets/` for the A
 | `SPOTIFY_CLIENT_ID` / `_SECRET`         | Spotify preview URL (future)  | optional                |
 | `TICKETMASTER_CONSUMER_KEY` / `_SECRET` | Events ingestion (future)     | optional                |
 | `CLOUDFLARE_ACCOUNT_ID` / `_API_TOKEN`  | Embed widget deploys to Pages | only for widget deploys |
+| `CADENCE_CLIENT_ID` / `_SECRET`         | NPR Cadence push (Convex env)  | for live push           |
+| `CADENCE_CHANNEL_ID_88NINE` (`_HYFIN`)  | Cadence channel per station    | stations without one skip |
+| `CADENCE_PUSH_MODE`                     | `dry` (default) or `live`      | optional                |
 
 ## Ingestion adapters
 
@@ -177,7 +181,7 @@ Every `pending` play runs through `src/trigger/enrich-pending-plays.ts` (60s cro
 Operator dashboard at `/dashboard` (Clerk-gated, `@radiomilwaukee.org` allowlist enforced server-side in `apps/web/app/dashboard/layout.tsx`; non-allowlisted users bounce to `/access-denied`):
 
 - **`/dashboard`** — wall-of-status: per-station now-playing cards with album art (Row 1), Reports preview (Row 2), `Needs Attention` + `Upcoming from rotation` two-up (Row 3).
-- **`/dashboard/streams`** — per-station drill-down with Health / Activity / On Air sections, switchable across all 4 stations.
+- **`/dashboard/streams`** — per-station drill-down with Health / NPR Cadence / Activity / On Air sections, switchable across all 4 stations. The Cadence row shows push mode, last-24h ok/failed counts, the last song pushed and which episode it landed in, and the last error; individual pushes also appear in the Activity feed as `cadence_push_ok` / `cadence_push_error`.
 - **`/dashboard/reports`** — playlist log export (NPR-compliant tab-delimited UTF-8 TXT, Milwaukee local time), coverage snapshot, top songs export.
 - **`/dashboard/events`** — browse + filter ingested events. Sticky filter, group-by-date, artist filter, in-rotation toggle, CSV export, click-to-detail drawer, "+ Add custom event" creator.
 - **`/dashboard/widgets`** — embed snippet builder + live preview for each variant.
@@ -195,7 +199,7 @@ Social shares get a live OG image from `apps/web/app/api/og/route.tsx` (edge run
 - **Cloudflare Pages** — `apps/embed` auto-deploys via `.github/workflows/widget-publish.yml` on main pushes touching `apps/embed/**`. Enforces `build:check` (40 KB gzip critical-path ceiling per variant) before deploying. Public origin: `rm-playlist-v2-embed.pages.dev` (will become `embed.radiomilwaukee.org`). Both the module bundle and the `widget-legacy.js` classic-script bundle ship from the same workflow.
 - **Vercel** — `apps/web` (dashboard + PlaylistFM landing) at [playlistfm.app](https://playlistfm.app), auto-deployed on push to `main`.
 - **Fly.io** — `apps/icy-worker` (`fly deploy` from that directory)
-- **Trigger.dev** — dev worker runs the scheduled crons. Deployed by running `bunx trigger.dev dev` locally (watch mode auto-publishes on file change); production deploy via `bunx trigger.dev deploy` when we're ready to cut over.
+- **Trigger.dev** — auto-deployed via `.github/workflows/trigger-deploy.yml` on every CI-passing merge to `main` (CLI pinned in the workflow; runtime `node-24` since 2026-09-22, ahead of NPR-unrelated Node 21 deprecation on the platform).
 
 ## Conventions
 
@@ -206,7 +210,7 @@ Social shares get a live OG image from `apps/web/app/api/og/route.tsx` (edge run
 
 ## Status
 
-Shakedown phase — single-tenant, Radio Milwaukee only. Live ingestion on Rhythm Lab via ICY + SGmetadata; 88Nine, HYFIN, and 414 Music via SGmetadata. Enrichment runs every 60s with ~95% album-art coverage across resolved plays (Apple + CAA + station fallback). Six dashboard surfaces in daily use (Dashboard / Streams / Reports / Events / Widgets / Settings). NPR-compliant playlist log export, per-station coverage stats, station-regions CRUD, and a custom-event creator are all live. All three widget variants (`playlist`, `now-playing-card`, `now-playing-strip`) deployed to Cloudflare Pages and working cross-origin, with `widget-legacy.js` available for partner CMSes. Public landing at [playlistfm.app](https://playlistfm.app) with a live OG image. Deliverables tracked against the CEO plan at `~/.gstack/projects/rm-playlist-v2/ceo-plans/2026-04-22-v2-selective-expansion.md`.
+Shakedown phase — single-tenant, Radio Milwaukee only. Live ingestion on Rhythm Lab via ICY + SGmetadata; 88Nine, HYFIN, and 414 Music via SGmetadata. Enrichment runs every 60s with ~95% album-art coverage across resolved plays (Apple + CAA + station fallback). Six dashboard surfaces in daily use (Dashboard / Streams / Reports / Events / Widgets / Settings). NPR-compliant playlist log export, per-station coverage stats, station-regions CRUD, and a custom-event creator are all live. All three widget variants (`playlist`, `now-playing-card`, `now-playing-strip`) deployed to Cloudflare Pages and working cross-origin, with `widget-legacy.js` available for partner CMSes. Public landing at [playlistfm.app](https://playlistfm.app) with a live OG image. NPR Cadence live push is on for 88Nine (since 2026-09-22; see `docs/decisions/005-cadence-live-push.md`); HYFIN waits on its Cadence schedule being built. Deliverables tracked against the CEO plan at `~/.gstack/projects/rm-playlist-v2/ceo-plans/2026-04-22-v2-selective-expansion.md`.
 
 ## Parked work
 
