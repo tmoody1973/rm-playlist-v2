@@ -108,6 +108,8 @@ export default defineSchema({
       v.literal("drift_detected"),
       v.literal("enrichment_ok"),
       v.literal("enrichment_error"),
+      v.literal("cadence_push_ok"),
+      v.literal("cadence_push_error"),
     ),
     /** Brief human-readable summary. */
     message: v.string(),
@@ -193,6 +195,8 @@ export default defineSchema({
     ),
     /** Soft-delete for "play rewind" per docs/design/001-IA.md#K. */
     deletedAt: v.optional(v.number()),
+    /** Unix ms when this play was sent to NPR Cadence (see cadence.ts). */
+    cadencePushedAt: v.optional(v.number()),
     /** Audit copy of the adapter's raw payload. */
     raw: v.any(),
     createdAt: v.number(),

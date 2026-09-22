@@ -214,6 +214,7 @@ export const markPlayEnriched = mutation({
     };
     if (canonicalTrackId !== undefined) patch.canonicalTrackId = canonicalTrackId;
     await ctx.db.patch(playId, patch);
+    await ctx.scheduler.runAfter(0, internal.cadence.pushPlay, { playId });
     await ctx.runMutation(internal.ingestionEvents.log, {
       orgId: play.orgId,
       stationId: play.stationId,

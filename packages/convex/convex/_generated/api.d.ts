@@ -10,6 +10,8 @@
 
 import type * as appleMusic from "../appleMusic.js";
 import type * as backfills from "../backfills.js";
+import type * as cadence from "../cadence.js";
+import type * as cadenceSong from "../cadenceSong.js";
 import type * as crons from "../crons.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
@@ -35,6 +37,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   appleMusic: typeof appleMusic;
   backfills: typeof backfills;
+  cadence: typeof cadence;
+  cadenceSong: typeof cadenceSong;
   crons: typeof crons;
   enrichment: typeof enrichment;
   events: typeof events;
