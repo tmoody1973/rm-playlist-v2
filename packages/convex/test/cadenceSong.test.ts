@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCadenceSong,
   localDateKey,
+  localIso,
   pickEpisode,
   type CadenceEpisode,
   type CadencePlayInput,
@@ -9,6 +10,7 @@ import {
 
 // 2026-09-22T19:30:00Z == 14:30 CDT
 const PLAYED_AT = Date.parse("2026-09-22T19:30:00Z");
+const TZ = "America/Chicago";
 
 function play(overrides: Partial<CadencePlayInput> = {}): CadencePlayInput {
   return {
@@ -30,13 +32,13 @@ function play(overrides: Partial<CadencePlayInput> = {}): CadencePlayInput {
 
 describe("buildCadenceSong", () => {
   test("maps an enriched play to Cadence's Song shape with duration in ms", () => {
-    const result = buildCadenceSong(play());
+    const result = buildCadenceSong(play(), TZ);
     expect(result).toEqual({
       ok: true,
       song: {
         title: "May Ninth",
         artist: ["Khruangbin"],
-        start: "2026-09-22T19:30:00.000Z",
+        start: "2026-09-22T14:30:00-05:00",
         duration: 213_000,
         album: "A LA SALA",
         label: "Dead Oceans",
@@ -48,13 +50,14 @@ describe("buildCadenceSong", () => {
   test("falls back to raw title/artist and play duration when no track was matched", () => {
     const result = buildCadenceSong(
       play({ track: undefined, artist: undefined, durationSec: 200 }),
+      TZ,
     );
     expect(result).toEqual({
       ok: true,
       song: {
         title: "may ninth",
         artist: ["khruangbin"],
-        start: "2026-09-22T19:30:00.000Z",
+        start: "2026-09-22T14:30:00-05:00",
         duration: 200_000,
       },
     });
@@ -64,6 +67,7 @@ describe("buildCadenceSong", () => {
     const templated = "https://is1-ssl.mzstatic.com/image/thumb/abc/%7Bw%7Dx%7Bh%7Dbb.jpg";
     const result = buildCadenceSong(
       play({ track: { displayTitle: "x", durationSec: 10, artworkUrl: templated } }),
+      TZ,
     );
     expect(result.ok && result.song.artworkUrl).toBe(
       "https://is1-ssl.mzstatic.com/image/thumb/abc/600x600bb.jpg",
@@ -71,6 +75,7 @@ describe("buildCadenceSong", () => {
     const literal = "https://example.test/{w}x{h}bb.jpg";
     const result2 = buildCadenceSong(
       play({ track: { displayTitle: "x", durationSec: 10, artworkUrl: literal } }),
+      TZ,
     );
     expect(result2.ok && result2.song.artworkUrl).toBe("https://example.test/600x600bb.jpg");
   });
@@ -80,6 +85,7 @@ describe("buildCadenceSong", () => {
       play({
         track: { displayTitle: "May Ninth", durationSec: 213, recordLabel: "" },
       }),
+      TZ,
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -91,16 +97,17 @@ describe("buildCadenceSong", () => {
   test("refuses a play with no usable duration — Cadence rejects add-now without one", () => {
     const result = buildCadenceSong(
       play({ durationSec: undefined, track: { displayTitle: "x", durationSec: 0 } }),
+      TZ,
     );
     expect(result).toEqual({ ok: false, reason: "no duration" });
   });
 
   test("refuses a playedAt that can't be rendered as a date", () => {
-    expect(buildCadenceSong(play({ playedAt: Number.NaN }))).toEqual({
+    expect(buildCadenceSong(play({ playedAt: Number.NaN }), TZ)).toEqual({
       ok: false,
       reason: "invalid playedAt",
     });
-    expect(buildCadenceSong(play({ playedAt: 8.64e15 + 1 }))).toEqual({
+    expect(buildCadenceSong(play({ playedAt: 8.64e15 + 1 }), TZ)).toEqual({
       ok: false,
       reason: "invalid playedAt",
     });
@@ -135,6 +142,14 @@ describe("pickEpisode", () => {
   test("returns null when nothing is scheduled at that moment", () => {
     expect(pickEpisode(episodes, Date.parse("2026-09-22T16:00:00Z"))).toBeNull();
     expect(pickEpisode([], PLAYED_AT)).toBeNull();
+  });
+});
+
+describe("localIso", () => {
+  test("renders wall-clock time with the zone's offset, CDT and CST", () => {
+    expect(localIso(Date.parse("2026-09-22T23:16:04Z"), TZ)).toBe("2026-09-22T18:16:04-05:00");
+    expect(localIso(Date.parse("2026-01-15T03:05:09Z"), TZ)).toBe("2026-01-14T21:05:09-06:00");
+    expect(localIso(Date.parse("2026-09-22T23:16:04Z"), "UTC")).toBe("2026-09-22T23:16:04+00:00");
   });
 });
 
