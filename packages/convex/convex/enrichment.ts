@@ -705,6 +705,9 @@ export const markPlayUnresolved = mutation({
   handler: async (ctx, { playId, reason, context }) => {
     const play = await loadPlay(ctx, playId);
     await ctx.db.patch(playId, { enrichmentStatus: "unresolved" });
+    // A real song still aired even though no catalog matched it (local
+    // artists mostly); Cadence's live feed should carry it with raw metadata.
+    await ctx.scheduler.runAfter(0, internal.cadence.pushPlay, { playId });
     // Pack the source artist/title into context so the dashboard can show
     // operators WHICH song failed, not just a cryptic reason code.
     const enrichedContext = {

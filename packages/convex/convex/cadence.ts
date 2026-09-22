@@ -41,6 +41,9 @@ const CHANNEL_ENV_BY_STATION: Partial<Record<Doc<"stations">["slug"], string>> =
 
 const CHANNEL_TIME_ZONE = "America/Chicago";
 
+/** Resolved plays carry catalog metadata; unresolved ones still aired and go out with raw artist/title. */
+const PUSHABLE_STATUSES = new Set<Doc<"plays">["enrichmentStatus"]>(["resolved", "unresolved"]);
+
 /** Value of `cadencePushedAt` while an action holds the play. */
 const CLAIMED = 0;
 
@@ -147,7 +150,7 @@ export const pushPlay = internalAction({
 
 function eligibilityProblem(context: PlayContext | null): string | null {
   if (context === null || context.station === null) return "no play";
-  if (context.play.enrichmentStatus !== "resolved") return context.play.enrichmentStatus;
+  if (!PUSHABLE_STATUSES.has(context.play.enrichmentStatus)) return context.play.enrichmentStatus;
   if (channelIdFor(context.station.slug) === undefined) {
     return `no channel for ${context.station.slug}`;
   }
@@ -174,16 +177,17 @@ async function pushToCadence(ctx: ActionCtx, context: PlayContext): Promise<Push
   const episode = await findEpisode(token, channelId, play.playedAt);
   if (episode === null) return skipPush(ctx, play, "no Cadence episode on air at playedAt");
 
-  return sendSong(ctx, play, episode, built.song, token);
+  return sendSong(ctx, play, episode, built, token);
 }
 
 async function sendSong(
   ctx: ActionCtx,
   play: Doc<"plays">,
   episode: CadenceEpisode,
-  song: CadenceSong,
+  built: { song: CadenceSong; durationEstimated: boolean },
   token: string,
 ): Promise<PushOutcome> {
+  const { song, durationEstimated } = built;
   const dryRun = process.env.CADENCE_PUSH_MODE !== "live";
   if (!dryRun) await addSongNow(token, episode.episodeId, song);
   await ctx.runMutation(internal.cadence.settlePush, { playId: play._id, pushedAt: Date.now() });
@@ -192,6 +196,8 @@ async function sendSong(
     dryRun,
     episodeId: episode.episodeId,
     programName: episode.programName,
+    enrichmentStatus: play.enrichmentStatus,
+    durationEstimated,
     song,
   });
   return { status: dryRun ? "dry-run" : "pushed", detail: episode.episodeId };
