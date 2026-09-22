@@ -2,7 +2,8 @@ import { defineConfig } from "@trigger.dev/sdk/v3";
 
 export default defineConfig({
   project: "proj_zfhgrpvwpifgfcubbvyg",
-  runtime: "node",
+  // Node 21 is deprecated on Trigger.dev; deploys on it fail from 2026-10-05.
+  runtime: "node-24",
   logLevel: "log",
   // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.
   // You can override this on an individual task.
