@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { observedDurationSec } from "./playDuration";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
@@ -157,6 +158,7 @@ export const recordPolledPlays = mutation({
         createdAt: Date.now(),
       });
       inserted++;
+      await stampPreviousPlayDuration(ctx, source.stationId, play.playedAt);
     }
 
     await ctx.runMutation(internal.ingestionSources.markSuccess, { sourceId });
@@ -240,10 +242,34 @@ export const recordStreamPlay = mutation({
       raw: play.raw,
       createdAt: Date.now(),
     });
+    await stampPreviousPlayDuration(ctx, source.stationId, play.playedAt);
 
     return { inserted: true as const };
   },
 });
+
+/**
+ * A new play's start is the previous play's end. When the previous play
+ * has no duration from its feed, write the observed gap so Cadence and
+ * the SoundExchange export have a real number instead of a blank.
+ */
+async function stampPreviousPlayDuration(
+  ctx: MutationCtx,
+  stationId: Id<"stations">,
+  newPlayedAt: number,
+): Promise<void> {
+  const previous = await ctx.db
+    .query("plays")
+    .withIndex("by_station_played_at", (q) =>
+      q.eq("stationId", stationId).lt("playedAt", newPlayedAt),
+    )
+    .order("desc")
+    .first();
+  if (previous === null || previous.durationSec !== undefined) return;
+  const durationSec = observedDurationSec(previous.playedAt, newPlayedAt);
+  if (durationSec === null) return;
+  await ctx.db.patch(previous._id, { durationSec, durationSource: "observed" });
+}
 
 /**
  * Log a poll failure. Called from Trigger task's catch block.
