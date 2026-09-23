@@ -176,6 +176,27 @@ Every `pending` play runs through `src/trigger/enrich-pending-plays.ts` (60s cro
 
 **Preview-audio resolution** (lazy, widget-driven): `play.previewUrl` if cached on track → `preview.resolvePreviewUrl` Convex action fetches from Apple's `/songs/{id}` endpoint on first click → patches the track row → all future clicks use the cached value.
 
+## NPR Cadence integration
+
+Cadence is NPR's system for station schedules, playlists, and music-rights reporting. Radio Milwaukee files its quarterly SoundExchange report through it, and Cadence powers a public "now playing" widget of its own. Since 2026-09-22, every song that airs on 88Nine is pushed into Cadence within about two minutes. HYFIN is wired the same way but idle until its Cadence schedule exists. Code: `packages/convex/convex/cadence.ts`, decision record: `docs/decisions/005-cadence-live-push.md`.
+
+**What happens when a song plays, in order**
+
+1. The station feed reports a new song. It lands in our database as a play, and the song before it gets its on-air length: the gap between the two start times, written as an "observed" duration. The feed itself reports no lengths, and local releases are in no catalog, so this gap is usually the only length we'll ever have. Gaps under 30 seconds or over 8 minutes are left blank; those are re-poll glitches and talk breaks, not songs.
+2. Enrichment (the Apple Music and MusicBrainz lookup) either matches the song, which fills in album, label, artwork, and exact length, or gives up. Either way the play is now finished with, and that step schedules a Cadence push. Plays an operator has marked "ignored" (station IDs, promos) never get one.
+3. The push job claims the play so a retry can't send it twice, then asks Cadence which episode was on the air at the song's start time. An episode is one dated airing of a show, e.g. "88Nine Nighttime, Tue 6–10pm"; Cadence keeps a calendar of them and a song has to land in one.
+4. If the song has no length yet (an unmatched local track whose next song hasn't started), the job waits, checking once a minute for up to 8 minutes. When the observed length appears it uses that; if nothing arrives it sends a nominal 3 minutes and flags the event as estimated.
+5. It sends the song to Cadence's add-song-now endpoint: title, artist, start time, length, plus album, label, and a 600px artwork URL when known. Two things Cadence is strict about, learned the hard way: the start time must be Chicago wall-clock time with an offset (`2026-09-22T18:31:28-05:00`; a UTC `Z` timestamp is rejected as "outside episode bounds"), and the length is in milliseconds.
+6. On success the play is stamped with the push time and a `cadence_push_ok` event is logged with the episode name. On failure the claim is released and a `cadence_push_error` event carries Cadence's reply.
+
+**Where to see it.** `/dashboard/streams` → 88Nine → the "NPR Cadence" section: push mode, ok/failed counts for the last 24 hours, the last song sent and the episode it landed in, and the last error. Each push is also a row in the Activity feed below it. Cadence's own view is its public widget for the WYMS channel.
+
+**Modes.** `CADENCE_PUSH_MODE` on the Convex deployment is `dry` (every step runs, nothing is sent, the payload is logged) or `live`. New stations start in dry; flip to live after a day of clean dry-run events. Setting it is one command from `packages/convex`: `bunx convex env set CADENCE_PUSH_MODE live`.
+
+**What it does not do.** Cadence's add-now is append-only, so a song corrected later in Needs Attention (label, duration, artist spelling) stays as first sent in Cadence. The quarterly SoundExchange file is still generated from our data on `/dashboard/reports` and uploaded to Cadence by hand; the live push is the now-playing layer on top, not the reporting path. Observed lengths for the song right before a DJ break include the break, up to the 8-minute cap.
+
+**Backfilling one play.** A song inside the episode currently on the air can be pushed by hand: `bunx convex run cadence:pushPlay '{"playId":"<id>"}'` from `packages/convex`.
+
 ## Dashboard surfaces
 
 Operator dashboard at `/dashboard` (Clerk-gated, `@radiomilwaukee.org` allowlist enforced server-side in `apps/web/app/dashboard/layout.tsx`; non-allowlisted users bounce to `/access-denied`):
