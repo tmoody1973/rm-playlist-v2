@@ -180,6 +180,8 @@ export default defineSchema({
     albumRaw: v.optional(v.string()),
     labelRaw: v.optional(v.string()),
     durationSec: v.optional(v.number()),
+    /** "observed" when durationSec was inferred from the next play's start (playDuration.ts). */
+    durationSource: v.optional(v.literal("observed")),
     /** Unix ms when the play started (source timestamp, not ingestion time). */
     playedAt: v.number(),
     /** Canonical artist ID assigned by enrichment, when resolved. */

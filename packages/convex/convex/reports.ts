@@ -71,7 +71,9 @@ async function fetchPlaysPage(
  *   - BROADCAST_DATE           → YYYY-MM-DD in UTC from playedAt
  *   - PLAY_TIME                → HH:MM:SS UTC from playedAt
  *   - CHANNEL_NAME             → station.name (e.g. "HYFIN")
- *   - DURATION_SECONDS         → track.durationSec (may be blank)
+ *   - DURATION_SECONDS         → track.durationSec, else the play's own
+ *                                 durationSec (feed-reported or observed
+ *                                 from the next play's start; may be blank)
  *
  * Paginated: pass `cursor: null` for the first page, then the returned
  * `continueCursor` until `isDone`. A busy station over a month exceeds
@@ -157,7 +159,7 @@ export const soundExchangePlaylist = query({
         albumTitle: track.albumDisplayName ?? "",
         marketingLabel: track.recordLabel ?? "",
         isrc: track.isrc ?? "",
-        durationSec: typeof track.durationSec === "number" ? track.durationSec : null,
+        durationSec: rowDurationSec(track.durationSec, play.durationSec),
       });
     }
 
@@ -233,7 +235,7 @@ export const soundExchangePlaylistSummary = query({
       resolvedPlays += 1;
       if (!track.recordLabel || track.recordLabel.trim().length === 0) missingLabel += 1;
       if (!track.isrc || track.isrc.trim().length === 0) missingIsrc += 1;
-      if (typeof track.durationSec !== "number" || track.durationSec <= 0) missingDuration += 1;
+      if (rowDurationSec(track.durationSec, play.durationSec) === null) missingDuration += 1;
     }
 
     return {
@@ -247,3 +249,10 @@ export const soundExchangePlaylistSummary = query({
     };
   },
 });
+
+/** Catalog length first; otherwise whatever the play itself knows (feed or observed). */
+function rowDurationSec(trackSec: number | undefined, playSec: number | undefined): number | null {
+  if (typeof trackSec === "number" && trackSec > 0) return trackSec;
+  if (typeof playSec === "number" && playSec > 0) return playSec;
+  return null;
+}

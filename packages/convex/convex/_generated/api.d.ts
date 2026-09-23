@@ -21,6 +21,7 @@ import type * as healthRules from "../healthRules.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as notifications from "../notifications.js";
+import type * as playDuration from "../playDuration.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as reports from "../reports.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
   notifications: typeof notifications;
+  playDuration: typeof playDuration;
   plays: typeof plays;
   preview: typeof preview;
   reports: typeof reports;

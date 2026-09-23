@@ -44,6 +44,13 @@ const CHANNEL_TIME_ZONE = "America/Chicago";
 /** Resolved plays carry catalog metadata; unresolved ones still aired and go out with raw artist/title. */
 const PUSHABLE_STATUSES = new Set<Doc<"plays">["enrichmentStatus"]>(["resolved", "unresolved"]);
 
+/**
+ * An unmatched song has no length until the next play starts (~3-4 min).
+ * Poll that long before falling back to the nominal duration.
+ */
+const DURATION_WAIT_ATTEMPTS = 8;
+const DURATION_WAIT_MS = 60_000;
+
 /** Value of `cadencePushedAt` while an action holds the play. */
 const CLAIMED = 0;
 
@@ -129,9 +136,10 @@ export const settlePush = internalMutation({
 });
 
 export const pushPlay = internalAction({
-  args: { playId: v.id("plays") },
-  handler: async (ctx, { playId }): Promise<PushOutcome> => {
-    const claimed = await ctx.runMutation(internal.cadence.claimPush, { playId });
+  args: { playId: v.id("plays"), attempt: v.optional(v.number()) },
+  handler: async (ctx, { playId, attempt }): Promise<PushOutcome> => {
+    const retrying = (attempt ?? 0) > 0;
+    const claimed = retrying || (await ctx.runMutation(internal.cadence.claimPush, { playId }));
     if (!claimed) return { status: "skipped", detail: "already pushed or claimed" };
 
     const context = await ctx.runQuery(internal.cadence.playContext, { playId });
@@ -141,7 +149,7 @@ export const pushPlay = internalAction({
       return { status: "skipped", detail: problem ?? "no play" };
     }
     try {
-      return await pushToCadence(ctx, context);
+      return await pushToCadence(ctx, context, attempt ?? 0);
     } catch (err) {
       return await failPush(ctx, context.play, err);
     }
@@ -157,7 +165,11 @@ function eligibilityProblem(context: PlayContext | null): string | null {
   return null;
 }
 
-async function pushToCadence(ctx: ActionCtx, context: PlayContext): Promise<PushOutcome> {
+async function pushToCadence(
+  ctx: ActionCtx,
+  context: PlayContext,
+  attempt: number,
+): Promise<PushOutcome> {
   const { play, station, track, artist } = context;
   const built = buildCadenceSong(
     {
@@ -171,6 +183,13 @@ async function pushToCadence(ctx: ActionCtx, context: PlayContext): Promise<Push
     CHANNEL_TIME_ZONE,
   );
   if (!built.ok) return skipPush(ctx, play, `not pushed: ${built.reason}`);
+  if (built.durationEstimated && attempt < DURATION_WAIT_ATTEMPTS) {
+    await ctx.scheduler.runAfter(DURATION_WAIT_MS, internal.cadence.pushPlay, {
+      playId: play._id,
+      attempt: attempt + 1,
+    });
+    return { status: "skipped", detail: `waiting for observed duration (${attempt + 1})` };
+  }
 
   const token = await fetchToken();
   const channelId = channelIdFor(station!.slug) ?? "";
