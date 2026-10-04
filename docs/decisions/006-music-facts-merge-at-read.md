@@ -1,5 +1,7 @@
 # 006: Premiere facts are combined when Alexa answers, not copied between databases
 
+**Superseded in part by decision 007** (premieres are plain stories; no premiere↔spin link).
+
 **Decision:** Backstory keeps the facts it pulls from Milwaukee Music Premieres in its own database. The Alexa add-on (Radio Commons) asks both Backstory and the playlist app at the same moment and combines the answers.
 
 **Why this came up:** The Backstory plan says premieres should "create or update the local track and artist" in the music database, which is this playlist app. But Backstory and the playlist app are separate Convex projects (separate databases, deployed separately). Following the plan literally means one app writing into another's database. If we got this wrong, a local song's story could be missing or out of date exactly when it airs, and local songs are the ones only we can tell.
