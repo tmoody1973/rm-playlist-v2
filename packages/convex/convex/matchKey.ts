@@ -9,7 +9,7 @@
 const COMBINING_MARKS = /[̀-ͯ]/g;
 const ARTICLES = /\b(the|a|an)\b/g;
 const NON_ALNUM = /[^a-z0-9]/g;
-const FEATURED_SUFFIX = /\s*[([]?\s*(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]?\s*$/i;
+const FEATURED_SUFFIX = /\s*[([]?\s*\b(?:feat\.?|ft\.?|featuring)\s+[^)\]]*[)\]]?\s*$/i;
 const EDIT_WORDS = "radio edit|single version|remaster(?:ed)?(?: \\d{4})?|\\d{4} remaster(?:ed)?";
 const EDIT_SUFFIX = new RegExp(
   `\\s*(?:[([]\\s*(?:${EDIT_WORDS})\\s*[)\\]]|-\\s*(?:${EDIT_WORDS}))\\s*$`,

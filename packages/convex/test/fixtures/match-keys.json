@@ -6,5 +6,8 @@
   { "artist": "The Beatles", "title": "Let It Be (Remastered 2009)", "expected": "beatles::letitbe" },
   { "artist": "Sigur Rós", "title": "Hoppípolla", "expected": "sigurros::hoppipolla" },
   { "artist": "Thundercat", "title": "Them Changes [Live]", "expected": "thundercat::themchangeslive" },
-  { "artist": "Ezra Collective", "title": "Victory Dance (Remix)", "expected": "ezracollective::victorydanceremix" }
+  { "artist": "Ezra Collective", "title": "Victory Dance (Remix)", "expected": "ezracollective::victorydanceremix" },
+  { "artist": "Daft Punk", "title": "Get Lucky", "expected": "daftpunk::getlucky" },
+  { "artist": "Soft Cell", "title": "Tainted Love", "expected": "softcell::taintedlove" },
+  { "artist": "Radiohead", "title": "Drift Away", "expected": "radiohead::driftaway" }
 ]
