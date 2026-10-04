@@ -58,3 +58,22 @@ describe("parseMusicBrainzRelations", () => {
     for (const fact of facts) expect(fact.sources[0]?.sourceUrl).toBe("https://musicbrainz.org/recording/rec-studio");
   });
 });
+
+describe("parseMusicBrainzRelations attribute modifiers", () => {
+  const rel = (type: string, attributes: string[]) => ({ type, attributes, artist: { id: "a1", name: "Someone" } });
+  const parse = (relations: unknown[]) => parseMusicBrainzRelations({ id: "r1", title: "T", relations } as never, 1000).facts;
+
+  test("modifier attribute is dropped; the instrument is the role", () => {
+    const facts = parse([rel("instrument", ["additional", "guitar"])]);
+    expect(facts.map((f) => [f.group, f.role])).toEqual([["performer", "guitar"]]);
+  });
+  test("several instruments → one performer fact each", () => {
+    expect(parse([rel("instrument", ["piano", "trumpet"])]).map((f) => f.role)).toEqual(["piano", "trumpet"]);
+  });
+  test("performer with only modifiers falls back to the relation type", () => {
+    expect(parse([rel("vocal", ["guest"])]).map((f) => f.role)).toEqual(["vocal"]);
+  });
+  test("producer modifiers prefix the relation type", () => {
+    expect(parse([rel("producer", ["executive"])])).toMatchObject([{ group: "producer", role: "executive producer" }]);
+  });
+});
