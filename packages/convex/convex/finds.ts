@@ -146,7 +146,22 @@ export const deleteAllForListener = mutation({
       .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
       .collect();
     await Promise.all(links.map((link) => ctx.db.delete(link._id)));
-    return { deletedFinds: finds.length, deletedLink: links.length > 0 };
+    // Prefix of by_listener: covers both "following" and "unfollowed" rows.
+    const follows = await ctx.db
+      .query("listenerFollows")
+      .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
+      .collect();
+    await Promise.all(follows.map((follow) => ctx.db.delete(follow._id)));
+    const state = await ctx.db
+      .query("listenerState")
+      .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
+      .first();
+    if (state) await ctx.db.delete(state._id);
+    return {
+      deletedFinds: finds.length,
+      deletedLink: links.length > 0,
+      deletedFollows: follows.length,
+    };
   },
 });
 

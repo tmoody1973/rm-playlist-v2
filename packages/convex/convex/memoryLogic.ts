@@ -169,3 +169,7 @@ export function pickStaleArtists<T extends string>(
     .slice(0, limit)
     .map(({ artistId }) => artistId);
 }
+
+/** A spoken artist name is usable only if it has something besides whitespace; otherwise treat it as unknown. */
+export const isUsableArtistName = (name: string | undefined): name is string =>
+  name !== undefined && name.trim().length > 0;

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MAX_SCREEN,
   SCREEN_TTL_MS,
+  isUsableArtistName,
   nextFollow,
   playAtNumber,
   rankDigest,
@@ -239,5 +240,14 @@ describe("pickStaleArtists", () => {
       { artistId: "c", checkedAt: null },
     ];
     expect(pickStaleArtists(rows, NOW, STALE, 2)).toEqual(["a", "b"]);
+  });
+});
+
+describe("isUsableArtistName", () => {
+  test("rejects missing, empty and whitespace-only names", () => {
+    expect(isUsableArtistName(undefined)).toBe(false);
+    expect(isUsableArtistName("")).toBe(false);
+    expect(isUsableArtistName("   ")).toBe(false);
+    expect(isUsableArtistName("Tennis")).toBe(true);
   });
 });
