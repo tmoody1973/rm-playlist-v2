@@ -406,33 +406,6 @@ export interface PublicPlay {
   readonly liveEvent: LiveEventSummary | null;
 }
 
-/**
- * Reverse lookup from a played artist to the soonest upcoming local event
- * featuring that artist. Powers the LIVE event row in the now-playing-card
- * and any playlist row whose artist is on tour locally — the system's
- * signature differentiator (DESIGN.md § B tertiary tier).
- *
- * Match logic:
- *   1. Normalize the artist name with the same key used by Ticketmaster /
- *      AXS / custom adapters in events.ts (article-stripped, alnum-only).
- *      "The Beatles" → "beatles" matches whether the play row spells it
- *      "THE BEATLES" or the event source spells it "Beatles".
- *   2. Index lookup on `eventArtists.by_artist_key` returns 0..N matches
- *      across all events and roles.
- *   3. For each match, load the event and filter:
- *        - skip if duplicateOf set (cross-source dedup loser)
- *        - skip if startsAt is in the past
- *        - skip if status is cancelled or postponed
- *   4. Sort surviving events by startsAt ascending, return the soonest.
- *
- * Returns `null` when no upcoming event matches — the LiveEventRow
- * component renders nothing in that case.
- *
- * Cost envelope: single artistKey index lookup + ≤MAX_LOOKUP_FANOUT
- * point gets per call. Bounded so a popular artist with many shows
- * doesn't balloon recentByStation's read budget.
- * Past events are never pruned, so the fan-out reads newest-first.
- */
 const MAX_LOOKUP_FANOUT = 10;
 
 type EventCandidate = { event: Doc<"events">; matchedArtistName: string; role: "headliner" | "support" };
@@ -485,6 +458,33 @@ async function toLiveEventSummary(ctx: QueryCtx, candidate: EventCandidate): Pro
   };
 }
 
+/**
+ * Reverse lookup from a played artist to the soonest upcoming local event
+ * featuring that artist. Powers the LIVE event row in the now-playing-card
+ * and any playlist row whose artist is on tour locally — the system's
+ * signature differentiator (DESIGN.md § B tertiary tier).
+ *
+ * Match logic:
+ *   1. Normalize the artist name with the same key used by Ticketmaster /
+ *      AXS / custom adapters in events.ts (article-stripped, alnum-only).
+ *      "The Beatles" → "beatles" matches whether the play row spells it
+ *      "THE BEATLES" or the event source spells it "Beatles".
+ *   2. Index lookup on `eventArtists.by_artist_key` returns 0..N matches
+ *      across all events and roles.
+ *   3. For each match, load the event and filter:
+ *        - skip if duplicateOf set (cross-source dedup loser)
+ *        - skip if startsAt is in the past
+ *        - skip if status is cancelled or postponed
+ *   4. Sort surviving events by startsAt ascending, return the soonest.
+ *
+ * Returns `null` when no upcoming event matches — the LiveEventRow
+ * component renders nothing in that case.
+ *
+ * Cost envelope: single artistKey index lookup + ≤MAX_LOOKUP_FANOUT
+ * point gets per call. Bounded so a popular artist with many shows
+ * doesn't balloon recentByStation's read budget.
+ * Past events are never pruned, so the fan-out reads newest-first.
+ */
 async function findLiveEventForArtist(ctx: QueryCtx, artistDisplayName: string): Promise<LiveEventSummary | null> {
   const [soonest] = await upcomingEventsForArtist(ctx, artistDisplayName);
   return soonest === undefined ? null : toLiveEventSummary(ctx, soonest);

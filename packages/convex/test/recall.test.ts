@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chooseRecallStatus, evidenceLevel, neighborSpin, rankSpins, type SpinForRecall } from "../convex/recall";
+import { chooseRecallStatus, evidenceLevel, neighborSpin, normalizeCues, rankSpins, type SpinForRecall } from "../convex/recall";
 
 const MIN = 60_000;
 const spin = (playId: string, minute: number, cueTags: string[] = [], extra: Partial<SpinForRecall> = {}): SpinForRecall =>
@@ -30,6 +30,27 @@ describe("rankSpins + chooseRecallStatus", () => {
     const ranked = rankSpins([spin("a", 10), spin("b", 14)], ["horns"], 15 * MIN);
     expect(ranked[0]?.playId).toBe("b");
     expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("cues_unchecked");
+  });
+  test("instrument cue, competitor tagged only 'local' (unchecked for instruments) → options", () => {
+    const ranked = rankSpins([spin("a", 10, ["local"]), spin("b", 30, ["horns", "local"])], ["horns"], 10 * MIN);
+    expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
+  });
+  test("instrument cue, competitor tagged only with a decade → options", () => {
+    const ranked = rankSpins([spin("a", 10, ["2010s"]), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
+    expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
+  });
+  test("414 Music, no credits anywhere (only 'local' tags) → cues_unchecked", () => {
+    const ranked = rankSpins([spin("a", 10, ["local"]), spin("b", 14, ["local"])], ["horns"], 15 * MIN);
+    expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("cues_unchecked");
+  });
+  test("non-instrument cue: a style-tagged competitor counts as checked → ok", () => {
+    const ranked = rankSpins([spin("a", 10, ["jazz"]), spin("b", 30, ["afrobeat"])], ["afrobeat"], 10 * MIN);
+    expect(chooseRecallStatus(ranked, ["afrobeat"], 10 * MIN)).toBe("ok");
+  });
+  test("a 'local' cue still matches", () => {
+    const ranked = rankSpins([spin("a", 10, ["jazz"]), spin("b", 30, ["jazz", "local"])], ["local"], 10 * MIN);
+    expect(ranked[0]?.playId).toBe("b");
+    expect(chooseRecallStatus(ranked, ["local"], 10 * MIN)).toBe("ok");
   });
   test("no cues, the midpoint falls inside one spin → ok", () => {
     const ranked = rankSpins([spin("a", 10), spin("b", 14)], [], 15 * MIN);
@@ -66,5 +87,11 @@ describe("evidenceLevel", () => {
     expect(evidenceLevel({ resolved: true, matchConfidence: "high", trackScopeFactCount: 3 })).toBe("rich");
     expect(evidenceLevel({ resolved: true, matchConfidence: "low", trackScopeFactCount: 9 })).toBe("basic");
     expect(evidenceLevel({ resolved: false, trackScopeFactCount: 0 })).toBe("none");
+  });
+});
+
+describe("normalizeCues", () => {
+  test("lowercases, de-dupes, then keeps at most 5", () => {
+    expect(normalizeCues(["Horns", "horns", "KEYS", "a", "b", "c", "d", "e"])).toEqual(["horns", "keys", "a", "b", "c"]);
   });
 });

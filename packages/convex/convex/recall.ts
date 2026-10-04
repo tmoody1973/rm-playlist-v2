@@ -1,6 +1,8 @@
 export type RecallStatus = "ok" | "options" | "cues_unchecked" | "no_spins";
 
 export const MAX_MATCHES = 3;
+/** Cues read per question; extra cues only make a full match less likely. */
+const MAX_CUES = 5;
 const RICH_MIN_TRACK_FACTS = 3;
 /** Used when a spin has no duration: a typical song length. */
 const FALLBACK_DURATION_SEC = 210;
@@ -20,6 +22,10 @@ function distance(spin: SpinForRecall, windowMid: number): number {
   return Math.abs(spin.playedAt - windowMid);
 }
 
+export function normalizeCues(cues: readonly string[]): string[] {
+  return [...new Set(cues.map((cue) => cue.toLowerCase()))].slice(0, MAX_CUES);
+}
+
 /** Cue matches first, then closeness to the middle of the asked-about window. */
 export function rankSpins(spins: readonly SpinForRecall[], cues: readonly string[], windowMid: number): RankedSpin[] {
   const wanted = cues.map((cue) => cue.toLowerCase());
@@ -34,25 +40,37 @@ function coversMoment(spin: SpinForRecall, moment: number): boolean {
   return spin.playedAt <= moment && moment < end;
 }
 
+/** Mirrors InstrumentFamily in packages/enrichment/src/credits/instrumentFamily.ts — keep the two in sync. */
+export const INSTRUMENT_FAMILIES: readonly string[] = ["horns", "keys", "strings", "bass", "guitar", "electronic", "drums", "percussion", "vocals"];
+
+const DECADE_TAG = /^\d{4}s$/;
+
+/**
+ * Whether a spin's credits were actually looked at for these cues. "local" (station-added)
+ * and decade tags say nothing about instruments or style, so they don't count.
+ */
+function isCheckedFor(spin: RankedSpin, wantsInstrument: boolean): boolean {
+  if (wantsInstrument) return spin.cueTags.some((tag) => INSTRUMENT_FAMILIES.includes(tag));
+  return spin.cueTags.some((tag) => tag !== "local" && !DECADE_TAG.test(tag));
+}
+
+function chooseCueStatus(ranked: readonly RankedSpin[], cues: readonly string[]): RecallStatus {
+  const [top, second] = ranked as [RankedSpin, RankedSpin | undefined];
+  const distinctRequestedCues = [...new Set(cues.map((c) => c.toLowerCase()))];
+  const wantsInstrument = distinctRequestedCues.some((cue) => INSTRUMENT_FAMILIES.includes(cue));
+  if (!ranked.some((spin) => isCheckedFor(spin, wantsInstrument))) return "cues_unchecked";
+
+  // "ok" only when the top spin matches every cue, every competitor was checked, and the runner-up matched fewer.
+  const matchesAllCues = top.matchedCues.length === distinctRequestedCues.length;
+  const competitorsChecked = ranked.every((spin, idx) => idx === 0 || isCheckedFor(spin, wantsInstrument));
+  const clearWinner = second === undefined || top.matchedCues.length > second.matchedCues.length;
+  return matchesAllCues && competitorsChecked && clearWinner ? "ok" : "options";
+}
+
 export function chooseRecallStatus(ranked: readonly RankedSpin[], cues: readonly string[], windowMid: number): RecallStatus {
-  const [top, second] = ranked;
+  const top = ranked[0];
   if (top === undefined) return "no_spins";
-  if (cues.length > 0) {
-    if (ranked.every((spin) => spin.cueTags.length === 0)) return "cues_unchecked";
-
-    // Dedupe and lowercase requested cues
-    const distinctRequestedCues = Array.from(new Set(cues.map((c) => c.toLowerCase())));
-
-    // Return "ok" only when:
-    // - top matches ALL requested cues
-    // - no OTHER spin has empty cueTags (unchecked competitor)
-    // - second is undefined OR second has fewer matched cues than top
-    const matchesAllCues = top.matchedCues.length === distinctRequestedCues.length;
-    const noUntaggedCompetitors = !ranked.some((spin, idx) => idx !== 0 && spin.cueTags.length === 0);
-    const clearWinner = second === undefined || top.matchedCues.length > second.matchedCues.length;
-
-    return matchesAllCues && noUntaggedCompetitors && clearWinner ? "ok" : "options";
-  }
+  if (cues.length > 0) return chooseCueStatus(ranked, cues);
   return coversMoment(top, windowMid) ? "ok" : "options";
 }
 

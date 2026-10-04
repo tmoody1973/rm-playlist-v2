@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro } from "./plays";
-import { chooseRecallStatus, clampConnectionLimit, dedupeByKey, evidenceLevel, MAX_MATCHES, mergePlaysAscending, neighborSpin, rankSpins, type SpinForRecall } from "./recall";
+import { chooseRecallStatus, clampConnectionLimit, dedupeByKey, evidenceLevel, MAX_MATCHES, mergePlaysAscending, neighborSpin, normalizeCues, rankSpins, type SpinForRecall } from "./recall";
 
 /** Spins read on each side of the window midpoint (~3 hours at ~20/hour), so a wide window keeps the spins nearest the middle. */
 const HALF_WINDOW_SPINS = 30;
@@ -80,7 +80,7 @@ export const findSongPlayed = query({
       const match = await neighborMatch(ctx, station._id, anchorId, args.beforePlayId ? "before" : "after", isLocal);
       return { status: match ? ("ok" as const) : ("no_spins" as const), matches: match ? [match] : [] };
     }
-    const cues = args.cues ?? [];
+    const cues = normalizeCues(args.cues ?? []);
     const windowMid = (args.from + args.to) / 2;
     const spins = await loadSpins(ctx, await playsAround(ctx, station._id, args.from, windowMid, args.to, HALF_WINDOW_SPINS), isLocal);
     const ranked = rankSpins(spins.map((s) => s.recall), cues, windowMid);
