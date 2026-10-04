@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
-import { mergeSearchHits, searchCutoff } from "./memoryLogic";
+import { mergeSearchHits, searchCutoff, searchTerms } from "./memoryLogic";
 import {
   chooseRecallStatus,
   clampConnectionLimit,
@@ -21,8 +21,8 @@ import {
 const HALF_WINDOW_SPINS = 30;
 /** Spins read on each side of an anchor when the caller asks for the one before/after. */
 const NEIGHBOR_SCAN = 10;
-/** Hits read from each search index per station, before the recency filter. */
-const SEARCH_HITS_PER_INDEX = 50;
+/** Hits read per index per station: search returns relevance order and the recency filter runs after the take, so go deep (Convex caps a result set at 1024). */
+const SEARCH_HITS_PER_INDEX = 300;
 const SEARCH_RESULT_LIMIT = 20;
 const LOCAL_STATION_SLUG = "414music";
 const stationSlug = v.union(
@@ -393,25 +393,27 @@ export const getTrackConnections = query({
 export const searchPlays = query({
   args: { station: v.optional(stationSlug), query: v.string(), days: v.optional(v.number()) },
   handler: async (ctx, { station, query: text, days }) => {
-    const searchText = text.trim();
+    const searchText = searchTerms(text);
     if (searchText === "") return [];
     const cutoff = searchCutoff(days, Date.now());
     const allStations = await ctx.db.query("stations").collect();
     const stations = station ? allStations.filter((row) => row.slug === station) : allStations;
     const hits = await Promise.all(
       stations.map(async (stationRow) => {
-        const byArtist = await ctx.db
-          .query("plays")
-          .withSearchIndex("search_artist", (q) =>
-            q.search("artistRaw", searchText).eq("stationId", stationRow._id),
-          )
-          .take(SEARCH_HITS_PER_INDEX);
-        const byTitle = await ctx.db
-          .query("plays")
-          .withSearchIndex("search_title", (q) =>
-            q.search("titleRaw", searchText).eq("stationId", stationRow._id),
-          )
-          .take(SEARCH_HITS_PER_INDEX);
+        const [byArtist, byTitle] = await Promise.all([
+          ctx.db
+            .query("plays")
+            .withSearchIndex("search_artist", (q) =>
+              q.search("artistRaw", searchText).eq("stationId", stationRow._id),
+            )
+            .take(SEARCH_HITS_PER_INDEX),
+          ctx.db
+            .query("plays")
+            .withSearchIndex("search_title", (q) =>
+              q.search("titleRaw", searchText).eq("stationId", stationRow._id),
+            )
+            .take(SEARCH_HITS_PER_INDEX),
+        ]);
         const visible = (play: Doc<"plays">) =>
           play.playedAt >= cutoff &&
           play.deletedAt === undefined &&

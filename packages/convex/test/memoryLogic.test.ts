@@ -6,6 +6,7 @@ import {
   digestSince,
   mergeSearchHits,
   searchCutoff,
+  searchTerms,
   lookupKeyOrNull,
   nextFollow,
   hasRecentOtherSave,
@@ -380,4 +381,19 @@ describe("searchCutoff", () => {
   });
   test("non-finite falls back to the default", () =>
     expect(searchCutoff(Number.NaN, NOW)).toBe(NOW - 14 * DAY));
+});
+
+describe("searchTerms", () => {
+  test("caps a long sentence at 16 words", () => {
+    const sentence = Array.from({ length: 30 }, (_, i) => `w${i}`).join(" ");
+    expect(searchTerms(sentence).split(" ")).toHaveLength(16);
+  });
+  test("drops a word longer than 32 bytes", () =>
+    expect(searchTerms(`nas ${"x".repeat(40)} illmatic`)).toBe("nas illmatic"));
+  test("whitespace collapses and blank gives empty", () => {
+    expect(searchTerms("  groove   thang ")).toBe("groove thang");
+    expect(searchTerms("   ")).toBe("");
+  });
+  test("caps total length at 100 characters", () =>
+    expect(searchTerms(Array(40).fill("abcdefgh").join(" ")).length).toBeLessThanOrEqual(100));
 });

@@ -242,7 +242,8 @@ export const SEARCH_MAX_DAYS = 30;
 
 /** Oldest playedAt a search may return: `days` back from now, clamped to 1..30 (default 14). */
 export function searchCutoff(days: number | undefined, now: number): number {
-  const requested = Number.isFinite(days) ? Math.floor(days as number) : SEARCH_DEFAULT_DAYS;
+  const requested =
+    days !== undefined && Number.isFinite(days) ? Math.floor(days) : SEARCH_DEFAULT_DAYS;
   return now - Math.min(Math.max(requested, 1), SEARCH_MAX_DAYS) * DAY_MS;
 }
 
@@ -254,4 +255,18 @@ export function mergeSearchHits<T extends { _id: string; playedAt: number }>(
 ): T[] {
   const byId = new Map([...a, ...b].map((hit) => [hit._id, hit]));
   return [...byId.values()].sort((x, y) => y.playedAt - x.playedAt).slice(0, limit);
+}
+
+const SEARCH_MAX_WORDS = 16;
+const SEARCH_MAX_CHARS = 100;
+const SEARCH_MAX_WORD_BYTES = 32;
+
+/** Query text Convex search will accept: whitespace-collapsed, words over 32 bytes dropped, at most 16 words / 100 characters. "" when nothing usable. */
+export function searchTerms(query: string): string {
+  const usable = query
+    .split(/\s+/)
+    .filter((word) => word !== "" && new TextEncoder().encode(word).length <= SEARCH_MAX_WORD_BYTES)
+    .slice(0, SEARCH_MAX_WORDS)
+    .join(" ");
+  return usable.slice(0, SEARCH_MAX_CHARS).trim();
 }
