@@ -19,10 +19,14 @@ import type * as crons from "../crons.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
 import type * as factValidators from "../factValidators.js";
+import type * as finds from "../finds.js";
+import type * as findsApple from "../findsApple.js";
+import type * as findsLogic from "../findsLogic.js";
 import type * as health from "../health.js";
 import type * as healthRules from "../healthRules.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
+import type * as listenerGuard from "../listenerGuard.js";
 import type * as matchKey from "../matchKey.js";
 import type * as notifications from "../notifications.js";
 import type * as playDuration from "../playDuration.js";
@@ -34,13 +38,10 @@ import type * as seed from "../seed.js";
 import type * as showsByMetro from "../showsByMetro.js";
 import type * as stationRegions from "../stationRegions.js";
 import type * as stations from "../stations.js";
+import type * as tokenCrypto from "../tokenCrypto.js";
 import type * as users from "../users.js";
 
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
+import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
   alexa: typeof alexa;
@@ -54,10 +55,14 @@ declare const fullApi: ApiFromModules<{
   enrichment: typeof enrichment;
   events: typeof events;
   factValidators: typeof factValidators;
+  finds: typeof finds;
+  findsApple: typeof findsApple;
+  findsLogic: typeof findsLogic;
   health: typeof health;
   healthRules: typeof healthRules;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
+  listenerGuard: typeof listenerGuard;
   matchKey: typeof matchKey;
   notifications: typeof notifications;
   playDuration: typeof playDuration;
@@ -69,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   showsByMetro: typeof showsByMetro;
   stationRegions: typeof stationRegions;
   stations: typeof stations;
+  tokenCrypto: typeof tokenCrypto;
   users: typeof users;
 }>;
 
@@ -80,10 +86,7 @@ declare const fullApi: ApiFromModules<{
  * const myFunctionReference = api.myModule.myFunction;
  * ```
  */
-export declare const api: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "public">
->;
+export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;
 
 /**
  * A utility for referencing Convex functions in your app's internal API.
@@ -93,9 +96,6 @@ export declare const api: FilterApi<
  * const myFunctionReference = internal.myModule.myFunction;
  * ```
  */
-export declare const internal: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "internal">
->;
+export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;
 
 export declare const components: {};
