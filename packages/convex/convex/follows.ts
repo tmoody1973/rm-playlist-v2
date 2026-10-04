@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { normalizeArtistKey } from "./enrichment";
 import { assertListenerId, assertServerKey } from "./listenerGuard";
-import { lookupKeyOrNull, nextFollow } from "./memoryLogic";
+import { lookupKeyOrNull, nextFollow, sameArtistName } from "./memoryLogic";
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
@@ -77,20 +77,37 @@ export const follow = mutation({
   },
 });
 
+/** The listener's own follow row for a spoken name; their follows are a small set, so match in memory. */
+async function ownFollowByName(ctx: MutationCtx, listenerId: string, artist: string) {
+  const key = normalizeArtistKey(artist);
+  const rows = await ctx.db
+    .query("listenerFollows")
+    .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
+    .collect();
+  return rows.find((row) =>
+    key !== ""
+      ? normalizeArtistKey(row.artistName) === key
+      : sameArtistName(row.artistName, artist),
+  );
+}
+
 export const unfollow = mutation({
   args: { serverKey: v.string(), listenerId: v.string(), artist: v.string() },
   handler: async (ctx, { serverKey, listenerId, artist }) => {
     guard(serverKey);
     assertListenerId(listenerId);
-    const found = await artistFor(ctx, { artist });
-    const row =
-      found &&
-      (await ctx.db
-        .query("listenerFollows")
-        .withIndex("by_listener_artist", (q) =>
-          q.eq("listenerId", listenerId).eq("artistId", found._id),
-        )
-        .first());
+    let row = await ownFollowByName(ctx, listenerId, artist);
+    if (!row) {
+      const found = await artistFor(ctx, { artist });
+      if (!found) return { status: "unknown_artist" as const };
+      row =
+        (await ctx.db
+          .query("listenerFollows")
+          .withIndex("by_listener_artist", (q) =>
+            q.eq("listenerId", listenerId).eq("artistId", found._id),
+          )
+          .first()) ?? undefined;
+    }
     if (!row || row.status === "unfollowed") return { status: "not_following" as const };
     await ctx.db.patch(row._id, {
       status: "unfollowed",

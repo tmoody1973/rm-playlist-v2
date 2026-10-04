@@ -8,6 +8,7 @@ import {
   searchCutoff,
   searchTerms,
   lookupKeyOrNull,
+  sameArtistName,
   nextFollow,
   hasRecentOtherSave,
   pickFindStory,
@@ -142,6 +143,25 @@ describe("rankDigest", () => {
       "apple:",
     ]);
     expect(items[1]).toMatchObject({ kind: "spins", artist: "Nas", total: 4 });
+  });
+  test("every show, spins and story item carries its artistId", () => {
+    const items = rankDigest({
+      since,
+      now: NOW,
+      artists: [
+        artist("Thao", {
+          spins: [{ station: "88nine", count: 2 }],
+          nextShow: { venue: "Turner Hall", city: "Milwaukee", startsAtMs: NOW + 86_400_000 },
+          stories: [{ storyId: "s", title: "t", show: "x", publishedAt: NOW - 86_400_000 }],
+        }),
+      ],
+      apple: { added: 0, expired: 0 },
+    });
+    expect(items.map((i) => ("artistId" in i ? i.artistId : null))).toEqual([
+      "Thao",
+      "Thao",
+      "Thao",
+    ]);
   });
   test("an empty digest is an empty list (the tool falls back to station picks)", () =>
     expect(
@@ -396,4 +416,13 @@ describe("searchTerms", () => {
   });
   test("caps total length at 100 characters", () =>
     expect(searchTerms(Array(40).fill("abcdefgh").join(" ")).length).toBeLessThanOrEqual(100));
+});
+
+describe("sameArtistName", () => {
+  test("a name with no Latin letters matches itself", () =>
+    expect(sameArtistName("坂本龍一", "坂本龍一")).toBe(true));
+  test("accents and case are folded", () => expect(sameArtistName("Zhané", "zhane")).toBe(true));
+  test("punctuation-only names match themselves", () =>
+    expect(sameArtistName("!!!", "!!!")).toBe(true));
+  test("different names do not match", () => expect(sameArtistName("Nas", "Thao")).toBe(false));
 });

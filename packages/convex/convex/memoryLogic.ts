@@ -46,6 +46,12 @@ export function storyMentionsArtist(
   return needle.length > 0 && words(`${story.title} ${story.hint}`).includes(` ${needle} `);
 }
 
+const folded = (name: string) =>
+  name.normalize("NFKD").replace(COMBINING_ACCENT_MARKS, "").toLowerCase().trim();
+
+/** Name equality for artists whose normalized key is empty (non-Latin or punctuation-only names): case, accent and edge-space insensitive. */
+export const sameArtistName = (a: string, b: string): boolean => folded(a) === folded(b);
+
 export interface DigestShow {
   venue: string;
   city: string;
@@ -65,14 +71,15 @@ export interface DigestArtist {
   stories: DigestStory[];
 }
 export type DigestItem =
-  | ({ kind: "show"; artist: string } & DigestShow)
+  | ({ kind: "show"; artist: string; artistId: string } & DigestShow)
   | {
       kind: "spins";
       artist: string;
+      artistId: string;
       total: number;
       byStation: { station: string; count: number }[];
     }
-  | ({ kind: "story"; artist: string } & DigestStory)
+  | ({ kind: "story"; artist: string; artistId: string } & DigestStory)
   | { kind: "apple"; added: number; expired: number };
 
 export const STORY_LOOKBACK_MS = 30 * 86_400_000;
@@ -94,12 +101,13 @@ export function rankDigest({
 }): DigestItem[] {
   const shows = artists
     .filter((a) => a.nextShow && a.nextShow.startsAtMs > now)
-    .map((a) => ({ kind: "show" as const, artist: a.name, ...a.nextShow! }))
+    .map((a) => ({ kind: "show" as const, artist: a.name, artistId: a.artistId, ...a.nextShow! }))
     .sort((x, y) => x.startsAtMs - y.startsAtMs);
   const spins = artists
     .map((a) => ({
       kind: "spins" as const,
       artist: a.name,
+      artistId: a.artistId,
       total: a.spins.reduce((n, s) => n + s.count, 0),
       byStation: a.spins,
     }))
@@ -109,7 +117,7 @@ export function rankDigest({
     .flatMap((a) =>
       a.stories
         .filter((s) => s.publishedAt > storyCutoff(since))
-        .map((s) => ({ kind: "story" as const, artist: a.name, ...s })),
+        .map((s) => ({ kind: "story" as const, artist: a.name, artistId: a.artistId, ...s })),
     )
     .sort((x, y) => y.publishedAt - x.publishedAt);
   const appleItem =
