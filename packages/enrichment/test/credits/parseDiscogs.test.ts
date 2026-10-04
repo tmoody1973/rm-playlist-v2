@@ -31,3 +31,9 @@ describe("parseDiscogsRelease", () => {
     expect(facts[0]?.sources[0]?.sourceUrl).toBe("https://www.discogs.com/release/13579");
   });
 });
+
+test("our track not in the tracklist → no release-level facts, no styles (likely the wrong release)", () => {
+  const result = parseDiscogsRelease(release as never, "A Song Not On This Release", 1000);
+  expect(result.facts).toEqual([]);
+  expect(result.styles).toEqual([]);
+});

@@ -16,7 +16,7 @@ function connections(song: GeniusSong, source: FactSource): CreditFact[] {
   return (song.song_relationships ?? []).flatMap((relationship) => {
     const role = RELATIONSHIP_ROLES[relationship.relationship_type];
     if (role === undefined) return [];
-    return relationship.songs.flatMap((linked) => {
+    return (relationship.songs ?? []).flatMap((linked) => {
       if (!linked.title) return [];
       const artist = linked.primary_artist?.name;
       return [{ group: "connection" as const, role, value: `${artist ?? "Unknown"} – ${linked.title}`, linkedRecording: { title: linked.title, artist }, scope: "track" as const, sources: [source] }];

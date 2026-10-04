@@ -42,3 +42,8 @@ describe("parseGeniusSong", () => {
     expect(facts[0]?.sources[0]).toMatchObject({ source: "genius", sourceUrl: "https://genius.com/Ezra-collective-victory-dance", sourceRef: "901" });
   });
 });
+
+test("relationship without songs → no throw, no facts from it", () => {
+  const bare = { id: 1, url: "https://genius.com/x", song_relationships: [{ relationship_type: "samples" }] };
+  expect(parseGeniusSong(bare as never, 1000)).toEqual([]);
+});

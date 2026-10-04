@@ -33,6 +33,12 @@ describe("instrumentFamily", () => {
     expect(instrumentFamily("double bass")).toBe("strings");
     expect(instrumentFamily("harp")).toBe("strings");
   });
+  test("organ and dj match only as whole words", () => {
+    expect(instrumentFamily("Organized By")).toBeNull();
+    expect(instrumentFamily("Djembe")).toBe("percussion");
+    expect(instrumentFamily("DJ")).toBe("electronic");
+    expect(instrumentFamily("organ")).toBe("keys");
+  });
 });
 
 describe("mergeFacts", () => {
@@ -50,6 +56,11 @@ describe("mergeFacts", () => {
     const input = [drummer([mb], "drums"), drummer([dg], "drums")];
     mergeFacts(input);
     expect(input[0]?.sources).toHaveLength(1);
+  });
+  test("the same source twice (tracklist + release level) is kept once", () => {
+    const merged = mergeFacts([drummer([dg], "drums"), drummer([dg], "Drums")]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.sources).toEqual([dg]);
   });
   test("unicode names stay distinct (non-Latin writers with same role)", () => {
     const ryoji: CreditFact = { group: "writer", role: "composer", value: "坂本龍一", scope: "track", sources: [mb] };

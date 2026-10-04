@@ -1,5 +1,5 @@
 import { instrumentFamily } from "./instrumentFamily";
-import type { CreditFact, RecordingVia } from "./types";
+import type { CreditFact, FactSource, RecordingVia } from "./types";
 
 /** Cue tags never include vocals: "the one with singing" doesn't narrow anything. */
 const UNTAGGED_FAMILIES = new Set(["vocals"]);
@@ -11,6 +11,17 @@ function normalizeName(value: string): string {
 function mergeKey(fact: CreditFact): string {
   const rolePart = fact.group === "performer" ? (instrumentFamily(fact.role) ?? fact.role.toLowerCase()) : fact.role.toLowerCase();
   return `${fact.group}|${rolePart}|${normalizeName(fact.value)}`;
+}
+
+/** Discogs can state one credit at tracklist and release level; one copy of a source is enough. */
+function uniqueSources(sources: readonly FactSource[]): FactSource[] {
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    const key = `${source.source}|${source.sourceRef}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function preferMbPersonKey(a?: string, b?: string): string | undefined {
@@ -33,7 +44,7 @@ export function mergeFacts(facts: readonly CreditFact[]): CreditFact[] {
       ...existing,
       personKey: preferMbPersonKey(existing.personKey, fact.personKey),
       scope: existing.scope === "track" || fact.scope === "track" ? "track" : "album",
-      sources: [...existing.sources, ...fact.sources],
+      sources: uniqueSources([...existing.sources, ...fact.sources]),
     });
   }
   return [...merged.values()];

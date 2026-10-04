@@ -15,15 +15,19 @@ const FAMILY_KEYWORDS: ReadonlyArray<readonly [InstrumentFamily, readonly string
   ["guitar", ["guitar", "banjo", "mandolin", "ukulele", "pedal steel"]],
   ["electronic", ["programming", "programmed", "drum machine", "sampler", "turntables", "dj"]],
   ["drums", ["drum"]],
-  ["percussion", ["percussion", "conga", "bongo", "shaker", "tambourine", "vibraphone", "marimba", "timbales", "cajón", "cajon"]],
+  ["percussion", ["percussion", "conga", "bongo", "shaker", "tambourine", "vibraphone", "marimba", "timbales", "cajón", "cajon", "djembe"]],
   ["vocals", ["vocal", "voice", "singer", "rap", "choir"]],
 ];
 
-/** Precompiled regex patterns for each keyword (word-start match). */
+/** Short keywords that are prefixes of unrelated words ("Organized By", "Djembe"): whole-word match only. */
+const WHOLE_WORD_KEYWORDS = new Set(["organ", "dj"]);
+
+/** Precompiled regex patterns for each keyword (word-start match; whole word for WHOLE_WORD_KEYWORDS). */
 const KEYWORD_PATTERNS: Map<string, RegExp> = new Map();
 function getPattern(keyword: string): RegExp {
   if (!KEYWORD_PATTERNS.has(keyword)) {
-    KEYWORD_PATTERNS.set(keyword, new RegExp(`\\b${escapeRegExp(keyword)}`, "i"));
+    const end = WHOLE_WORD_KEYWORDS.has(keyword) ? "\\b" : "";
+    KEYWORD_PATTERNS.set(keyword, new RegExp(`\\b${escapeRegExp(keyword)}${end}`, "i"));
   }
   return KEYWORD_PATTERNS.get(keyword)!;
 }

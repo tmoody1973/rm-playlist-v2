@@ -50,9 +50,11 @@ function releaseCreditScope(tracks: string | undefined, position: string | undef
 export function parseDiscogsRelease(json: DiscogsRelease, trackTitle: string, fetchedAt: number): { facts: CreditFact[]; styles: string[]; year?: number } {
   const source: FactSource = { source: "discogs", sourceUrl: json.uri ?? `https://www.discogs.com/release/${json.id}`, sourceRef: String(json.id), fetchedAt };
   const ourTrack = (json.tracklist ?? []).find((track) => slug(track.title ?? "") === slug(trackTitle));
-  const trackCredits = (ourTrack?.extraartists ?? []).flatMap((credit) => creditFacts(credit, "track", source));
+  // Our track missing from the tracklist means this is likely the wrong release: its credits and styles would mislead.
+  if (ourTrack === undefined) return { facts: [], styles: [], year: json.year || undefined };
+  const trackCredits = (ourTrack.extraartists ?? []).flatMap((credit) => creditFacts(credit, "track", source));
   const releaseCredits = (json.extraartists ?? []).flatMap((credit) => {
-    const scope = releaseCreditScope(credit.tracks, ourTrack?.position);
+    const scope = releaseCreditScope(credit.tracks, ourTrack.position);
     return scope === null ? [] : creditFacts(credit, scope, source);
   });
   return { facts: [...trackCredits, ...releaseCredits], styles: json.styles ?? [], year: json.year || undefined };
