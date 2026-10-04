@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { creditsStatusValidator, factBodyFields, matchConfidenceValidator } from "./factValidators";
 
 /**
  * rm-playlist-v2 Convex schema — single-tenant shakedown edition.
@@ -280,6 +281,16 @@ export default defineSchema({
     /** Apple Music 30-second preview URL (from `attributes.previews[0].url`).
      *  Cached here so the widget PreviewButton doesn't hit Apple on every click. */
     previewUrl: v.optional(v.string()),
+    /** MusicBrainz recording id, resolved by the credits phase (ISRC first). */
+    recordingMbid: v.optional(v.string()),
+    /** "high" = ISRC-exact or Apple+MB agreement; low tracks never become game questions. */
+    matchConfidence: v.optional(matchConfidenceValidator),
+    releaseYear: v.optional(v.number()),
+    /** Precomputed recall tags: instrument families, decade, Discogs styles. */
+    cueTags: v.optional(v.array(v.string())),
+    /** Credits phase outcome; undefined = not yet tried. */
+    creditsStatus: v.optional(creditsStatusValidator),
+    creditsFetchedAt: v.optional(v.number()),
     verified: v.boolean(),
     createdAt: v.number(),
   })
@@ -287,7 +298,21 @@ export default defineSchema({
     .index("by_artist", ["artistId"])
     .index("by_isrc", ["isrc"])
     .index("by_spotify", ["spotifyTrackId"])
-    .index("by_apple_music", ["appleMusicSongId"]),
+    .index("by_apple_music", ["appleMusicSongId"])
+    .index("by_credits_status", ["creditsStatus"])
+    .index("by_recording_mbid", ["recordingMbid"]),
+
+  /**
+   * One verified statement about a track, with every source that states
+   * it. No source, no fact. Rewritten wholesale per track by
+   * credits.writeTrackCredits. Spec: docs/superpowers/specs/2026-10-04-music-recall-tier1-facts-design.md
+   */
+  facts: defineTable({
+    trackId: v.id("tracks"),
+    ...factBodyFields,
+  })
+    .index("by_track", ["trackId"])
+    .index("by_person", ["personKey"]),
 
   // ------------------------------------------------------------------
   // Apple Music developer token cache (per decisions/002)
