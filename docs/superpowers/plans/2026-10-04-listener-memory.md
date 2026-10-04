@@ -587,8 +587,8 @@ Starts after Part A is deployed. Branch `feat/listener-memory` from `origin/main
   - `screenPlay(listenerId: string, number: number): Promise<string | null>`
   - `follow(listenerId: string, target: { artist?: string; playId?: string }): Promise<{status:"ok"; artistName: string; firstFollow: boolean} | {status:"unknown_artist"}>`
   - `unfollow(listenerId: string, artist: string): Promise<{status:"ok"; artistName: string} | {status:"not_following"}>`
-  - `digest(listenerId: string): Promise<Digest>` (timeout 1500 ms) where `Digest = { since: number; items: DigestItem[]; artists: { artistId: string; name: string; artworkUrl: string | null }[] }` and `DigestItem` mirrors Task A1's union
-  - `markDigestSeen(listenerId: string): Promise<void>`
+  - `digest(listenerId: string): Promise<Digest>` (timeout 1500 ms) where `Digest = { since: number; now: number; items: DigestItem[]; artists: { artistId: string; name: string; artworkUrl: string | null }[] }` and `DigestItem` mirrors Task A1's union (show/spins/story items carry `artistId`)
+  - `markDigestSeen(listenerId: string, seenAt: number): Promise<void>` → `digest:markSeen({serverKey, listenerId, seenAt})`, passing the digest's own `now` so spins during the reply aren't skipped
   - `searchPlays(station: Station | undefined, query: string): Promise<(RecentSong & { station: Station })[]>` → `alexa:searchPlays` (replaces the per-station `plays:searchByStation` fan-out)
   - `SavedFind` ok branch gains `artistName`, `firstFollow`, `nextShow`, `story`, `recentlySaved` (zod schema updated; all keyed calls via `keyed(...)`)
   - `deletedSchema` gains `deletedFollows: z.number()`

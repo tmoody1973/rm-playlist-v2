@@ -103,6 +103,6 @@ Proactive push notifications (not documented for MCP add-ons); resume-anywhere p
 ## 10. Risks
 
 - **Backstory precision** — the name filter may drop real stories or keep none; the digest still works without stories. Measured in the `artistWatch` task.
-- **Search index build** on the large `plays` table happens on deploy; queries fall back to the one-day scan until it is ready.
+- **Search index build** on the large `plays` table (~200k rows) happens on deploy and **blocks the deploy until it finishes** (nothing goes live mid-build); the CI deploy job allows 30 minutes.
 - **Artist resolution** — plays without `canonicalArtistId` can't be followed by id; `follow_artist` by name uses `artistKey`, and unknown names get "I don't have Thao in our playlist yet."
 - **Shared deployment** — schema changes ship only through the CI `Convex deploy` workflow, never `convex dev`.
