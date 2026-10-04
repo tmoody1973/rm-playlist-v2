@@ -41,6 +41,28 @@ async function writeResult(
   });
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * A track that crashes keeps creditsStatus undefined, so the untried tier
+ * would serve it first on every tick; enough of them stall the backfill.
+ * Parking it as "error" moves it to the retry tier (existing facts are kept).
+ */
+async function parkAsError(deps: CreditsBatchDeps, trackId: string): Promise<void> {
+  try {
+    await deps.client.mutation(api.credits.writeTrackCredits, {
+      trackId: trackId as Id<"tracks">,
+      creditsStatus: "error",
+      facts: [],
+      cueTags: [],
+    });
+  } catch (err) {
+    deps.log?.(`[credits ${trackId}] could not park as error: ${errorMessage(err)}`);
+  }
+}
+
 /** Time-boxed credits loop; runs after the plays batch inside the same job so MB's 1 req/s throttle is shared. */
 export async function enrichCreditsBatch(deps: CreditsBatchDeps): Promise<CreditsSummary> {
   const now = deps.now ?? Date.now;
@@ -67,9 +89,8 @@ export async function enrichCreditsBatch(deps: CreditsBatchDeps): Promise<Credit
       for (const problem of result.problems) deps.log?.(`[credits ${track.trackId}] ${problem}`);
     } catch (err) {
       summary.crashed += 1;
-      deps.log?.(
-        `[credits ${track.trackId}] crashed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      deps.log?.(`[credits ${track.trackId}] crashed: ${errorMessage(err)}`);
+      await parkAsError(deps, track.trackId);
     }
   }
   return summary;
