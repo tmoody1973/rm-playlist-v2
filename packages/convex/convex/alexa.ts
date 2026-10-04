@@ -397,40 +397,40 @@ export const searchPlays = query({
     if (searchText === "") return [];
     const cutoff = searchCutoff(days, Date.now());
     const allStations = await ctx.db.query("stations").collect();
-    const stations = station ? allStations.filter((row) => row.slug === station) : allStations;
-    const hits = await Promise.all(
-      stations.map(async (stationRow) => {
-        const [byArtist, byTitle] = await Promise.all([
-          ctx.db
-            .query("plays")
-            .withSearchIndex("search_artist", (q) =>
-              q.search("artistRaw", searchText).eq("stationId", stationRow._id),
-            )
-            .take(SEARCH_HITS_PER_INDEX),
-          ctx.db
-            .query("plays")
-            .withSearchIndex("search_title", (q) =>
-              q.search("titleRaw", searchText).eq("stationId", stationRow._id),
-            )
-            .take(SEARCH_HITS_PER_INDEX),
-        ]);
-        const visible = (play: Doc<"plays">) =>
-          play.playedAt >= cutoff &&
-          play.deletedAt === undefined &&
-          play.enrichmentStatus !== "ignored";
-        return mergeSearchHits(
-          byArtist.filter(visible),
-          byTitle.filter(visible),
-          SEARCH_RESULT_LIMIT,
-        ).map((play) => ({ play, stationRow }));
-      }),
-    );
-    const newest = hits
-      .flat()
-      .sort((a, b) => b.play.playedAt - a.play.playedAt)
-      .slice(0, SEARCH_RESULT_LIMIT);
+    const stationById = new Map(allStations.map((row) => [row._id, row]));
+    const stationFilter = station ? allStations.find((row) => row.slug === station) : undefined;
+    if (station && !stationFilter) return [];
+    const visible = (play: Doc<"plays">) =>
+      play.playedAt >= cutoff &&
+      play.deletedAt === undefined &&
+      play.enrichmentStatus !== "ignored";
+    // One search per index; with a station, the stationId filter narrows it inside the index.
+    const [byArtist, byTitle] = await Promise.all([
+      ctx.db
+        .query("plays")
+        .withSearchIndex("search_artist", (q) => {
+          const search = q.search("artistRaw", searchText);
+          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+        })
+        .take(SEARCH_HITS_PER_INDEX),
+      ctx.db
+        .query("plays")
+        .withSearchIndex("search_title", (q) => {
+          const search = q.search("titleRaw", searchText);
+          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+        })
+        .take(SEARCH_HITS_PER_INDEX),
+    ]);
+    const hits = mergeSearchHits(
+      byArtist.filter(visible),
+      byTitle.filter(visible),
+      SEARCH_RESULT_LIMIT,
+    ).flatMap((play) => {
+      const stationRow = stationById.get(play.stationId);
+      return stationRow ? [{ play, stationRow }] : [];
+    });
     return Promise.all(
-      newest.map(async ({ play, stationRow }) => {
+      hits.map(async ({ play, stationRow }) => {
         const shown = await buildPublicPlay(ctx, play, stationRow);
         return {
           _id: shown._id,
