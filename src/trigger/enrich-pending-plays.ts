@@ -15,7 +15,9 @@ import type {
 } from "../../packages/enrichment/src/types";
 import { api } from "../../packages/convex/convex/_generated/api.js";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel";
+import { collectTrackCredits } from "../../packages/enrichment/src/credits/collect";
 import { getConvexUrl } from "./env";
+import { enrichCreditsBatch } from "./enrich-credits";
 
 export type UnresolvedReason = "mb_miss" | "no_match" | "other";
 
@@ -42,6 +44,11 @@ export type UnresolvedReason = "mb_miss" | "no_match" | "other";
 const PENDING_BATCH = 20;
 const MB_RATE_PER_SEC = 1;
 const DISCOGS_RATE_PER_SEC = 1;
+/** Stop credits work this long after the run starts so a 1-minute cron tick doesn't queue behind itself. */
+const CREDITS_DEADLINE_MS = 50_000;
+const GENIUS_RATE_PER_SEC = 2;
+/** Bounds a hung upstream on one track so the every-minute job can't run to maxDuration. */
+const PER_TRACK_TIMEOUT_MS = 20_000;
 
 export interface PendingPlay {
   readonly _id: string;
@@ -183,6 +190,7 @@ export const enrichPendingPlays = schedules.task({
   queue: { concurrencyLimit: 1 },
   maxDuration: 240,
   run: async () => {
+    const runStartedAt = Date.now();
     const client = new ConvexHttpClient(getConvexUrl());
 
     const pending = (await client.query(api.enrichment.pendingPlays, {
@@ -192,13 +200,17 @@ export const enrichPendingPlays = schedules.task({
       logger.log("No pending plays — enrichment idle");
     }
 
+    const mbThrottle = createThrottle({ ratePerSec: MB_RATE_PER_SEC });
+    const discogsThrottle = createThrottle({ ratePerSec: DISCOGS_RATE_PER_SEC });
+    const geniusThrottle = createThrottle({ ratePerSec: GENIUS_RATE_PER_SEC });
+
     const tokenRow = await client.query(api.appleMusic.getDeveloperToken, {});
     const summary = await enrichBatch({
       client,
       pending,
       appleMusicToken: tokenRow?.token ?? null,
-      throttle: createThrottle({ ratePerSec: MB_RATE_PER_SEC }),
-      discogsThrottle: createThrottle({ ratePerSec: DISCOGS_RATE_PER_SEC }),
+      throttle: mbThrottle,
+      discogsThrottle,
       discogsToken: process.env.DISCOGS_TOKEN,
       discogsConsumerKey: process.env.DISCOGS_CONSUMER_KEY,
       discogsConsumerSecret: process.env.DISCOGS_CONSUMER_SECRET,
@@ -214,6 +226,32 @@ export const enrichPendingPlays = schedules.task({
     } else if (summary.total > 0) {
       logger.log(
         `Enriched ${summary.resolved} resolved, ${summary.partial} partial, ${summary.unresolved} unresolved, ${summary.deferred} deferred, ${summary.errored} errored (total ${summary.total})${summary.reason ? ` [${summary.reason}]` : ""}`,
+      );
+    }
+
+    const geniusToken = process.env.GENIUS_ACCESS_TOKEN;
+    if (!geniusToken) logger.warn("GENIUS_ACCESS_TOKEN not set — Genius credits skipped");
+    const credits = await enrichCreditsBatch({
+      client,
+      deadlineMs: runStartedAt + CREDITS_DEADLINE_MS,
+      collect: (track) =>
+        collectTrackCredits(track, {
+          mbThrottle,
+          discogsThrottle,
+          geniusThrottle,
+          discogsAuth: {
+            token: process.env.DISCOGS_TOKEN,
+            consumerKey: process.env.DISCOGS_CONSUMER_KEY,
+            consumerSecret: process.env.DISCOGS_CONSUMER_SECRET,
+          },
+          geniusToken,
+          signal: AbortSignal.timeout(PER_TRACK_TIMEOUT_MS),
+        }),
+      log: (msg) => logger.warn(msg),
+    });
+    if (credits.attempted > 0) {
+      logger.log(
+        `Credits: ${credits.found} found, ${credits.none} none, ${credits.errored} errored, ${credits.crashed} crashed (of ${credits.attempted})`,
       );
     }
     return summary;

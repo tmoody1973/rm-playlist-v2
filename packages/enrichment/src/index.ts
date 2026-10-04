@@ -61,3 +61,6 @@ export type {
   MusicBrainzResult,
   PlayIdentity,
 } from "./types";
+export { collectTrackCredits } from "./credits/collect";
+export type { CollectDeps } from "./credits/collect";
+export type { CreditFact, TrackCreditsResult, TrackForCredits } from "./credits/types";

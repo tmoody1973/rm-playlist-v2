@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 import { normalizeEventArtistKey } from "./events";
+import { pickShowsByMetro } from "./showsByMetro";
 
 /**
  * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
@@ -405,6 +406,71 @@ export interface PublicPlay {
   readonly liveEvent: LiveEventSummary | null;
 }
 
+const MAX_LOOKUP_FANOUT = 10;
+
+type EventCandidate = {
+  event: Doc<"events">;
+  matchedArtistName: string;
+  role: "headliner" | "support";
+};
+
+/**
+ * Upcoming, non-duplicate, non-cancelled events for an artist, soonest first.
+ * ponytail: newest-created eventArtists rows first — past events are never
+ * pruned (2,051 past vs 1,051 upcoming on 2026-10-04), so oldest-first could
+ * fill the fan-out with dead shows. Prune past events if an artist ever
+ * accumulates >10 rows created after their next show.
+ */
+async function upcomingEventsForArtist(
+  ctx: QueryCtx,
+  artistName: string,
+): Promise<EventCandidate[]> {
+  const artistKey = normalizeEventArtistKey(artistName);
+  if (artistKey.length === 0) return [];
+  const rows = await ctx.db
+    .query("eventArtists")
+    .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
+    .order("desc")
+    .take(MAX_LOOKUP_FANOUT);
+  const now = Date.now();
+  const events = await Promise.all(rows.map((row) => ctx.db.get(row.eventId)));
+  const candidates = rows.flatMap((row, i) => {
+    const event = events[i];
+    if (!event || event.duplicateOf !== undefined || event.startsAt <= now) return [];
+    if (event.status === "cancelled" || event.status === "postponed") return [];
+    return [{ event, matchedArtistName: row.artistNameRaw, role: row.role }];
+  });
+  return candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
+}
+
+async function toLiveEventSummary(
+  ctx: QueryCtx,
+  candidate: EventCandidate,
+): Promise<LiveEventSummary> {
+  const { event } = candidate;
+  const lineup = await ctx.db
+    .query("eventArtists")
+    .withIndex("by_event", (q) => q.eq("eventId", event._id))
+    .collect();
+  return {
+    eventId: event._id,
+    title: event.title ?? null,
+    artistName: candidate.matchedArtistName,
+    role: candidate.role,
+    venue: event.venueName,
+    city: event.city,
+    startsAtMs: event.startsAt,
+    ticketUrl: event.ticketUrl ?? null,
+    imageUrl: event.imageUrl ?? null,
+    source: event.source,
+    dateOnly: event.dateOnly === true,
+    doorsAt: event.doorsAt ?? null,
+    genre: event.genre ?? null,
+    headliners: lineup.filter((a) => a.role === "headliner").map((a) => a.artistNameRaw),
+    supports: lineup.filter((a) => a.role === "support").map((a) => a.artistNameRaw),
+  };
+}
+
 /**
  * Reverse lookup from a played artist to the soonest upcoming local event
  * featuring that artist. Powers the LIVE event row in the now-playing-card
@@ -430,73 +496,33 @@ export interface PublicPlay {
  * Cost envelope: single artistKey index lookup + ≤MAX_LOOKUP_FANOUT
  * point gets per call. Bounded so a popular artist with many shows
  * doesn't balloon recentByStation's read budget.
+ * Past events are never pruned, so the fan-out reads newest-first.
  */
-const MAX_LOOKUP_FANOUT = 10;
-
 async function findLiveEventForArtist(
   ctx: QueryCtx,
   artistDisplayName: string,
 ): Promise<LiveEventSummary | null> {
-  const artistKey = normalizeEventArtistKey(artistDisplayName);
-  if (artistKey.length === 0) return null;
+  const [soonest] = await upcomingEventsForArtist(ctx, artistDisplayName);
+  return soonest === undefined ? null : toLiveEventSummary(ctx, soonest);
+}
 
-  const matchingArtists = await ctx.db
-    .query("eventArtists")
-    .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
-    .take(MAX_LOOKUP_FANOUT);
-  if (matchingArtists.length === 0) return null;
-
-  const now = Date.now();
-  const events = await Promise.all(matchingArtists.map((row) => ctx.db.get(row.eventId)));
-
-  type Candidate = {
-    event: Doc<"events">;
-    matchedArtistName: string;
-    role: "headliner" | "support";
-  };
-  const candidates: Candidate[] = [];
-  for (let i = 0; i < events.length; i++) {
-    const event = events[i];
-    const matchedArtist = matchingArtists[i];
-    if (!event || !matchedArtist) continue;
-    if (event.duplicateOf !== undefined) continue;
-    if (event.startsAt <= now) continue;
-    if (event.status === "cancelled" || event.status === "postponed") continue;
-    candidates.push({
-      event,
-      matchedArtistName: matchedArtist.artistNameRaw,
-      role: matchedArtist.role,
-    });
-  }
-  if (candidates.length === 0) return null;
-
-  candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
-  const winner = candidates[0]!;
-
-  const allArtists = await ctx.db
-    .query("eventArtists")
-    .withIndex("by_event", (q) => q.eq("eventId", winner.event._id))
-    .collect();
-  const headliners = allArtists.filter((a) => a.role === "headliner").map((a) => a.artistNameRaw);
-  const supports = allArtists.filter((a) => a.role === "support").map((a) => a.artistNameRaw);
-
-  return {
-    eventId: winner.event._id,
-    title: winner.event.title ?? null,
-    artistName: winner.matchedArtistName,
-    role: winner.role,
-    venue: winner.event.venueName,
-    city: winner.event.city,
-    startsAtMs: winner.event.startsAt,
-    ticketUrl: winner.event.ticketUrl ?? null,
-    imageUrl: winner.event.imageUrl ?? null,
-    source: winner.event.source,
-    dateOnly: winner.event.dateOnly === true,
-    doorsAt: winner.event.doorsAt ?? null,
-    genre: winner.event.genre ?? null,
-    headliners,
-    supports,
-  };
+/** For Alexa: soonest show per metro (Milwaukee / Madison / Chicago), up to 3. */
+export async function upcomingShowsByMetro(
+  ctx: QueryCtx,
+  artistName: string,
+): Promise<Array<LiveEventSummary & { metro: string }>> {
+  const candidates = await upcomingEventsForArtist(ctx, artistName);
+  const flattened = candidates.map((c) => ({
+    ...c,
+    startsAt: c.event.startsAt,
+    latitude: c.event.latitude,
+    longitude: c.event.longitude,
+    city: c.event.city,
+  }));
+  const picked = pickShowsByMetro(flattened);
+  return Promise.all(
+    picked.map(async (pick) => ({ ...(await toLiveEventSummary(ctx, pick)), metro: pick.metro })),
+  );
 }
 
 export const currentByStation = query({

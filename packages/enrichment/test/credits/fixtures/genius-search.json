@@ -1,0 +1,22 @@
+{
+  "response": {
+    "hits": [
+      {
+        "type": "song",
+        "result": {
+          "id": 900,
+          "title": "Victory Dance (Remix)",
+          "primary_artist": { "id": 1, "name": "Ezra Collective" }
+        }
+      },
+      {
+        "type": "song",
+        "result": {
+          "id": 901,
+          "title": "Victory Dance",
+          "primary_artist": { "id": 1, "name": "Ezra Collective" }
+        }
+      }
+    ]
+  }
+}

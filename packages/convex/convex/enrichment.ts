@@ -551,7 +551,8 @@ export const stationCoverage = query({
 /**
  * Operator action — flip every resolved play pointing at a track back
  * to `pending` so the next enrich cron tick re-runs the Apple+Discogs
- * lookups. `upsertTrack`'s patch branch fills in any fields that
+ * lookups, and clear the track's credits status so the credits phase
+ * re-fetches it too. `upsertTrack`'s patch branch fills in any fields that
  * weren't present before. Use when new enrichment sources shipped
  * after the track was first resolved (session 3 MB label fallback
  * will be a common trigger).
@@ -574,6 +575,8 @@ export const reEnrichTrack = mutation({
       await ctx.db.patch(p._id, { enrichmentStatus: "pending" });
       flipped += 1;
     }
+    // Credits are per track, not per play: clearing the status puts the track back in the credits work queue.
+    await ctx.db.patch(trackId, { creditsStatus: undefined, creditsFetchedAt: undefined });
     return { flipped };
   },
 });

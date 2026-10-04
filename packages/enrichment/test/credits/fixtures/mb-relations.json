@@ -1,0 +1,82 @@
+{
+  "id": "rec-studio",
+  "title": "Victory Dance",
+  "first-release-date": "2019-05-03",
+  "relations": [
+    {
+      "type": "instrument",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": ["trumpet"],
+      "artist": { "id": "art-dylan", "name": "Ife Ogunjobi" }
+    },
+    {
+      "type": "instrument",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": ["drums (drum set)"],
+      "artist": { "id": "art-femi", "name": "Femi Koleoso" }
+    },
+    {
+      "type": "vocal",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": ["lead vocals"],
+      "artist": { "id": "art-v", "name": "Some Singer" }
+    },
+    {
+      "type": "producer",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": [],
+      "artist": { "id": "art-p", "name": "Producer Person" }
+    },
+    {
+      "type": "mix",
+      "target-type": "artist",
+      "direction": "backward",
+      "attributes": [],
+      "artist": { "id": "art-m", "name": "Mix Person" }
+    },
+    {
+      "type": "samples material",
+      "target-type": "recording",
+      "direction": "forward",
+      "recording": {
+        "id": "rec-old",
+        "title": "Old Groove",
+        "artist-credit": [{ "name": "Old Band" }]
+      }
+    },
+    {
+      "type": "samples material",
+      "target-type": "recording",
+      "direction": "backward",
+      "recording": { "id": "rec-new", "title": "New Beat", "artist-credit": [{ "name": "New DJ" }] }
+    },
+    {
+      "type": "performance",
+      "target-type": "work",
+      "direction": "forward",
+      "attributes": ["cover"],
+      "work": {
+        "id": "work-1",
+        "title": "Original Song",
+        "relations": [
+          {
+            "type": "composer",
+            "target-type": "artist",
+            "direction": "backward",
+            "artist": { "id": "art-w", "name": "Writer Person" }
+          }
+        ]
+      }
+    },
+    {
+      "type": "photography",
+      "target-type": "artist",
+      "direction": "backward",
+      "artist": { "id": "art-x", "name": "Photo Person" }
+    }
+  ]
+}

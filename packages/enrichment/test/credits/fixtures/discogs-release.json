@@ -1,0 +1,65 @@
+{
+  "id": 13579,
+  "title": "You Can't Steal My Joy",
+  "year": 2019,
+  "uri": "https://www.discogs.com/release/13579",
+  "genres": ["Jazz"],
+  "styles": ["Afrobeat", "Jazz-Funk"],
+  "extraartists": [
+    {
+      "name": "Femi Koleoso",
+      "id": 111,
+      "role": "Drums",
+      "tracks": ""
+    },
+    {
+      "name": "Ife Ogunjobi",
+      "id": 222,
+      "role": "Trumpet",
+      "tracks": "A2"
+    },
+    {
+      "name": "Studio Person",
+      "id": 333,
+      "role": "Mastered By",
+      "tracks": ""
+    },
+    {
+      "name": "Art Person",
+      "id": 444,
+      "role": "Artwork",
+      "tracks": ""
+    },
+    {
+      "name": "Other Player",
+      "id": 666,
+      "role": "Trombone",
+      "tracks": "A1"
+    },
+    {
+      "name": "Range Player",
+      "id": 777,
+      "role": "Percussion",
+      "tracks": "A1 to B2"
+    }
+  ],
+  "tracklist": [
+    {
+      "position": "A1",
+      "title": "Quest For Coin",
+      "extraartists": []
+    },
+    {
+      "position": "A2",
+      "title": "Victory Dance",
+      "extraartists": [
+        {
+          "name": "James Mollison",
+          "id": 555,
+          "role": "Saxophone [Tenor], Flute",
+          "tracks": ""
+        }
+      ]
+    }
+  ]
+}

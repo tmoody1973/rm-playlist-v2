@@ -291,3 +291,82 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
+
+const RELATIONS_INC = "artist-rels+recording-rels+work-rels+work-level-rels+releases";
+
+export interface MbRelation {
+  type: string;
+  "target-type"?: string;
+  direction?: "forward" | "backward";
+  attributes?: string[];
+  artist?: { id?: string; name?: string };
+  recording?: { id?: string; title?: string; "artist-credit"?: MbArtistCredit[] };
+  work?: { id?: string; title?: string; relations?: MbRelation[] };
+}
+
+export interface MbRecordingRelations {
+  id: string;
+  title: string;
+  "first-release-date"?: string;
+  relations?: MbRelation[];
+}
+
+async function mbGetJson<T>(
+  url: string,
+  throttle: Throttle,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = globalThis.fetch,
+): Promise<T | null> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await throttle.acquire(signal);
+    const res = await fetchImpl(url, {
+      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+      signal,
+    });
+    if (res.status === 503 && attempt === 0) {
+      const retryAfter = Number.parseInt(res.headers.get("Retry-After") ?? "1", 10);
+      await sleep(Math.max(1, retryAfter) * 1000, signal);
+      continue;
+    }
+    if (res.status === 404) return null;
+    if (!res.ok) throw classifyError(res.status, await safeText(res));
+    return (await res.json()) as T;
+  }
+  throw new MusicBrainzError("upstream_5xx", 503, "musicbrainz 503 after retry");
+}
+
+/** ISRC → recording MBID. Prefers the recording whose title matches ours (ISRCs can map to live/edit variants). */
+export async function lookupRecordingByIsrc(input: {
+  readonly isrc: string;
+  readonly title: string;
+  readonly throttle: Throttle;
+  readonly signal?: AbortSignal;
+  readonly fetch?: FetchLike;
+}): Promise<string | null> {
+  const url = `${API_BASE}/isrc/${encodeURIComponent(input.isrc)}?fmt=json`;
+  const json = await mbGetJson<{ recordings?: { id: string; title: string }[] }>(
+    url,
+    input.throttle,
+    input.signal,
+    input.fetch,
+  );
+  const recordings = json?.recordings ?? [];
+  // Raw match first: normalizeTitleForMb strips "(live)", which would make live and studio variants tie.
+  const wantedRaw = input.title.trim().toLowerCase();
+  const wantedNormalized = normalizeTitleForMb(input.title).toLowerCase();
+  const exact = recordings.find((rec) => rec.title.trim().toLowerCase() === wantedRaw);
+  const loose = recordings.find(
+    (rec) => normalizeTitleForMb(rec.title).toLowerCase() === wantedNormalized,
+  );
+  return (exact ?? loose ?? recordings[0])?.id ?? null;
+}
+
+export async function fetchRecordingRelations(input: {
+  readonly recordingMbid: string;
+  readonly throttle: Throttle;
+  readonly signal?: AbortSignal;
+  readonly fetch?: FetchLike;
+}): Promise<MbRecordingRelations | null> {
+  const url = `${API_BASE}/recording/${encodeURIComponent(input.recordingMbid)}?fmt=json&inc=${RELATIONS_INC}`;
+  return mbGetJson<MbRecordingRelations>(url, input.throttle, input.signal, input.fetch);
+}
