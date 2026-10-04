@@ -2,6 +2,14 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { creditsStatusValidator, factBodyFields, matchConfidenceValidator } from "./factValidators";
 
+export const appleMusicStatusValidator = v.union(
+  v.literal("not_linked"),
+  v.literal("pending"),
+  v.literal("added"),
+  v.literal("failed"),
+  v.literal("expired"),
+);
+
 /**
  * rm-playlist-v2 Convex schema — single-tenant shakedown edition.
  *
@@ -567,4 +575,36 @@ export default defineSchema({
   })
     .index("by_station", ["stationId", "computedAt"])
     .index("by_artist", ["artistId"]),
+
+  /**
+   * A listener's saved songs (Alexa "save it"). Personal data: every function
+   * touching this table requires Radio Commons' server key. listenerId is the
+   * listener Clerk app's user id — no email or name is stored here.
+   * Spec: docs/superpowers/specs/2026-10-04-finds-library-design.md
+   */
+  finds: defineTable({
+    listenerId: v.string(),
+    playId: v.id("plays"),
+    trackId: v.optional(v.id("tracks")),
+    dedupeKey: v.string(),
+    artist: v.string(),
+    title: v.string(),
+    stationSlug: v.string(),
+    savedAt: v.number(),
+    appleMusic: v.object({
+      status: appleMusicStatusValidator,
+      reason: v.optional(v.string()),
+      at: v.number(),
+    }),
+  })
+    .index("by_listener_saved", ["listenerId", "savedAt"])
+    .index("by_listener_dedupe", ["listenerId", "dedupeKey"]),
+
+  /** A listener's Apple Music connection; the Music User Token is AES-256-GCM encrypted. */
+  appleMusicLinks: defineTable({
+    listenerId: v.string(),
+    encryptedUserToken: v.string(),
+    linkedAt: v.number(),
+    status: v.union(v.literal("active"), v.literal("expired")),
+  }).index("by_listener", ["listenerId"]),
 });
