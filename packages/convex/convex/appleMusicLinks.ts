@@ -1,14 +1,11 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
-import { assertServerKey } from "./listenerGuard";
+import { assertListenerId, assertServerKey } from "./listenerGuard";
 import { encryptToken } from "./tokenCrypto";
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
-const assertListener = (listenerId: string) => {
-  if (listenerId.trim().length === 0) throw new Error("InvalidListener");
-};
 const MAX_TOKEN_LENGTH = 4096;
 
 // An action, not a mutation: encryptToken needs crypto.getRandomValues, which mutations deny.
@@ -16,8 +13,8 @@ export const connect = action({
   args: { serverKey: v.string(), listenerId: v.string(), musicUserToken: v.string() },
   handler: async (ctx, { serverKey, listenerId, musicUserToken }): Promise<{ linked: true }> => {
     guard(serverKey);
-    assertListener(listenerId);
-    if (musicUserToken.length === 0 || musicUserToken.length > MAX_TOKEN_LENGTH)
+    assertListenerId(listenerId);
+    if (musicUserToken.trim().length === 0 || musicUserToken.length > MAX_TOKEN_LENGTH)
       throw new Error("InvalidMusicUserToken");
     const key = process.env.FINDS_ENCRYPTION_KEY;
     if (!key) throw new Error("FINDS_ENCRYPTION_KEY is not set");
@@ -44,7 +41,7 @@ export const status = query({
   args: { serverKey: v.string(), listenerId: v.string() },
   handler: async (ctx, { serverKey, listenerId }) => {
     guard(serverKey);
-    assertListener(listenerId);
+    assertListenerId(listenerId);
     const link = await ctx.db
       .query("appleMusicLinks")
       .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))

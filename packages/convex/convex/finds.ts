@@ -9,14 +9,11 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { clampFindsLimit, dedupeKeyFor } from "./findsLogic";
-import { assertServerKey } from "./listenerGuard";
+import { assertListenerId, assertServerKey } from "./listenerGuard";
 import { appleMusicStatusValidator } from "./schema";
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
-const assertListener = (listenerId: string) => {
-  if (listenerId.trim().length === 0) throw new Error("InvalidListener");
-};
 
 async function songFor(ctx: MutationCtx, play: Doc<"plays">) {
   const track = play.canonicalTrackId ? await ctx.db.get(play.canonicalTrackId) : null;
@@ -40,13 +37,25 @@ async function hasActiveAppleLink(ctx: MutationCtx, listenerId: string): Promise
   return link?.status === "active";
 }
 
+// A returned status, not a thrown error: Convex prod strips error messages, so callers couldn't tell "not found" apart.
+type SaveResult =
+  | { status: "not_found" }
+  | {
+      status: "ok";
+      findId: Id<"finds">;
+      appleMusic: "pending" | "not_linked";
+      artist: string;
+      title: string;
+      alreadySaved: boolean;
+    };
+
 export const save = mutation({
   args: { serverKey: v.string(), listenerId: v.string(), playId: v.id("plays") },
-  handler: async (ctx, { serverKey, listenerId, playId }) => {
+  handler: async (ctx, { serverKey, listenerId, playId }): Promise<SaveResult> => {
     guard(serverKey);
-    assertListener(listenerId);
+    assertListenerId(listenerId);
     const play = await ctx.db.get(playId);
-    if (play === null || play.deletedAt !== undefined) throw new Error("PlayNotFound");
+    if (play === null || play.deletedAt !== undefined) return { status: "not_found" as const };
     const { track, artist, title, stationSlug } = await songFor(ctx, play);
     const dedupeKey = dedupeKeyFor(playId, track?._id);
     const now = Date.now();
@@ -77,7 +86,14 @@ export const save = mutation({
     }
     if (status === "pending")
       await ctx.scheduler.runAfter(0, internal.findsApple.addToAppleMusic, { findId });
-    return { findId, appleMusic: status, artist, title, alreadySaved: existing !== null };
+    return {
+      status: "ok" as const,
+      findId,
+      appleMusic: status,
+      artist,
+      title,
+      alreadySaved: existing !== null,
+    };
   },
 });
 
@@ -85,7 +101,7 @@ export const list = query({
   args: { serverKey: v.string(), listenerId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { serverKey, listenerId, limit }) => {
     guard(serverKey);
-    assertListener(listenerId);
+    assertListenerId(listenerId);
     const rows = await ctx.db
       .query("finds")
       .withIndex("by_listener_saved", (q) => q.eq("listenerId", listenerId))
@@ -116,7 +132,7 @@ export const deleteAllForListener = mutation({
   args: { serverKey: v.string(), listenerId: v.string() },
   handler: async (ctx, { serverKey, listenerId }) => {
     guard(serverKey);
-    assertListener(listenerId);
+    assertListenerId(listenerId);
     const finds = await ctx.db
       .query("finds")
       .withIndex("by_listener_saved", (q) => q.eq("listenerId", listenerId))
@@ -137,7 +153,9 @@ export const loadForApple = internalQuery({
   handler: async (ctx, { findId }) => {
     const find = await ctx.db.get(findId);
     if (find === null) return null;
-    const track = find.trackId ? await ctx.db.get(find.trackId) : null;
+    // The play may have been matched to a track after the listener saved it.
+    const trackId = find.trackId ?? (await ctx.db.get(find.playId))?.canonicalTrackId;
+    const track = trackId ? await ctx.db.get(trackId) : null;
     const link = await ctx.db
       .query("appleMusicLinks")
       .withIndex("by_listener", (q) => q.eq("listenerId", find.listenerId))

@@ -10,3 +10,8 @@ export function assertServerKey(given: string, expected: string | undefined): vo
     difference |= given.charCodeAt(i) ^ expected.charCodeAt(i);
   if (difference !== 0) throw new Error("Unauthorized");
 }
+
+/** Listener ids come from Radio Commons; a blank one would merge every anonymous caller's finds. */
+export function assertListenerId(listenerId: string): void {
+  if (listenerId.trim().length === 0) throw new Error("InvalidListener");
+}
