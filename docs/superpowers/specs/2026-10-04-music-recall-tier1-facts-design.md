@@ -23,7 +23,7 @@ Success:
 
 | Repo | Owns |
 |---|---|
-| **rm-playlist-v2 (this)** | Spins, track/artist matching, Tier 1 facts from MusicBrainz + Discogs, the read queries below |
+| **rm-playlist-v2 (this)** | Spins, track/artist matching, Tier 1 facts from MusicBrainz + Discogs + Genius, the read queries below |
 | **Backstory** | CDS music coverage: premieres, Concert Picks, sessions. Premiere facts stay in Backstory |
 | **Radio Commons** | MCP tools. Adds `src/lib/playlist.ts`, copying `src/lib/backstory.ts` (ConvexHttpClient, timeout race, zod-validated replies) |
 
@@ -55,13 +55,14 @@ One verified statement per row. **The source fields are required: no source, no 
 | `group` | `"performer" \| "writer" \| "producer" \| "engineer" \| "release" \| "connection"` | Role grouping, modeled on Spotify's expanded credits |
 | `role` | string | Human label: "trumpet", "mixing engineer", "label", "samples", "cover of" |
 | `value` | string | Display value: the person's name, label name, year, or the linked song's "Artist – Title" |
-| `personKey` | string? | `mb:<artist mbid>` or `discogs:<artist id>`, present when the fact names a person. The join key for connections |
-| `linkedRecordingMbid` | string? | For `connection` facts (samples / cover of) |
+| `personKey` | string? | `mb:<artist mbid>`, else `discogs:<artist id>`, else `genius:<artist id>`, present when the fact names a person. The join key for connections |
+| `linkedRecording` | `{ artist, title, mbid? }`? | For `connection` facts |
 | `scope` | `"track" \| "album"` | Discogs album-wide credits are `album`. Only `track` facts produce cue tags |
-| `source` | `"musicbrainz" \| "discogs"` | |
-| `sourceUrl` | string | Human-viewable page for attribution |
-| `sourceRef` | string | MBID or Discogs release id the fact was read from |
-| `fetchedAt` | number | |
+| `sources` | array, min 1, of `{ source: "musicbrainz" \| "discogs" \| "genius", sourceUrl, sourceRef, fetchedAt }` | Every source that states this fact. `sourceUrl` is the human-viewable page for attribution; `sourceRef` is the MBID / Discogs release id / Genius song id it was read from |
+
+`connection` roles are a fixed list: `samples`, `interpolates`, `cover_of`, `sampled_by`, `covered_by`. The sample types come from Crate's WhoSampled types.
+
+**One fact, many sources** (the edge + edge-sources model from Crate's influence cache). Facts merge on `(trackId, group, role, personKey ?? normalized value)`. When MusicBrainz and Discogs both credit the same drummer, that's one fact with two sources, not two rows. Agreement between sources counts toward the evidence rule (5.2).
 
 Indexes: `by_track` `["trackId"]`, `by_person` `["personKey"]`.
 
@@ -97,9 +98,10 @@ Radio Commons gets the closed list of instrument-family words in the tool descri
 1. Select tracks with no `creditsStatus` (or `error`). Tracks with a play in the last hour come first, then the highest spin count.
 2. **MusicBrainz**, one call per track with a recording MBID: `GET /recording/{mbid}?inc=artist-rels+recording-rels+work-rels+releases`. This gives performer/producer/engineer credits with artist MBIDs, "samples material" and cover/work links, and the first release date.
 3. **Discogs** (when the existing search already found a release): `GET /releases/{id}`. This gives `tracklist[].extraartists` (track-scope credits), release-level `extraartists` (album-scope), `styles`, `genres`, `year`.
-4. Pure functions turn both responses into facts, cue tags, `releaseYear`, `matchConfidence`. One mutation writes everything for the track.
+4. **Genius**, song endpoint only: search `GET /search?q=<artist title>`, accept a hit only when its normalized artist + title match our `trackKey`, then `GET /songs/{id}`. Read `producer_artists`, `writer_artists`, and `song_relationships` (samples, interpolations, covers in both directions). **Never** call the annotations/referents endpoints, and never store any lyric text. Field shapes are in `crate-cli/src/servers/genius.ts:102-131`.
+5. Pure functions turn all three responses into merged facts, cue tags, `releaseYear`, `matchConfidence`. One mutation writes everything for the track.
 
-**Why the same job:** the existing throttles are per process. A second job would get its own 1 req/sec MusicBrainz allowance and together break the limit. The Discogs throttle (60/min with token) is already separate from the MusicBrainz one.
+**Why the same job:** the existing throttles are per process. A second job would get its own 1 req/sec MusicBrainz allowance and together break the limit. Discogs (60/min with token) and Genius each get their own throttle, separate from MusicBrainz. New env var: `GENIUS_ACCESS_TOKEN` (same token Crate uses), set in Trigger.dev.
 
 **To confirm while planning:** the task cannot overlap itself (queue concurrency 1). If it can, add that limit.
 
@@ -111,10 +113,11 @@ The same loop works through every older resolved track, in the priority order fr
 
 | Case | Result |
 |---|---|
-| MusicBrainz/Discogs 429 or 5xx | `creditsStatus: "error"`, retried next tick; logged as `enrichment_error` in `ingestionEvents` |
+| Any source 429 or 5xx | `creditsStatus: "error"`, retried next tick; logged as `enrichment_error` in `ingestionEvents` |
 | 404 / no relationships | `creditsStatus: "none"`. Not retried automatically; the existing `reEnrichTrack` path resets it |
 | Discogs release found but it's a different pressing | Credits usually match across pressings; facts are labeled with `sourceRef` so a wrong one can be traced |
-| Parser hits an unknown shape | That source contributes no facts; the other source still writes; logged |
+| Parser hits an unknown shape | That source contributes no facts; the other sources still write; logged |
+| Genius search hit doesn't match our `trackKey` | Genius contributes nothing for that track. No fuzzy acceptance, since a wrong song means wrong samples |
 
 ## 5. Read queries (fast path)
 
@@ -139,11 +142,11 @@ New file `packages/convex/convex/alexa.ts`. These are public read-only queries, 
 `playId` covers unresolved plays. Returns:
 - track basics (title, artist, album, year, label, ISRC, artwork)
 - `trackKey`
-- facts grouped by `group`, each with `source` + `sourceUrl`
+- facts grouped by `group`, each with its `sources` list (name + URL for attribution)
 - `evidence`
 
 `evidence` values:
-- `rich`: ≥3 `track`-scope facts and `matchConfidence: "high"`. This is the future game gate.
+- `rich`: ≥3 `track`-scope facts and `matchConfidence: "high"`. This is the future game gate. Sub-project #3 may additionally require a fact with ≥2 agreeing sources for any fact used as a question's answer.
 - `basic`: resolved, fewer facts.
 - `none`: unresolved play. Basics come from the playlist strings; `trackKey` is computed from the raw strings, so Radio Commons can still find a Backstory premiere for it.
 
@@ -171,7 +174,9 @@ Staff fixes go through the existing Needs Attention panel and `overrideUnresolve
 
 Unit tests on pure functions in `packages/enrichment` and `packages/convex/test`:
 - instrument → family table
-- MusicBrainz relationship parser and Discogs release parser (recorded JSON fixtures via the existing `fetch-mock` helper): track vs album scope, missing fields, unknown roles
+- MusicBrainz relationship parser, Discogs release parser, and Genius song parser (recorded JSON fixtures via the existing `fetch-mock` helper): track vs album scope, missing fields, unknown roles
+- fact merging across sources (same drummer from MusicBrainz + Discogs → one fact, two sources)
+- Genius guard: a fixture containing lyric-bearing fields proves nothing lyric-shaped reaches a fact
 - `matchConfidence` and `evidence` rules
 - cue scoring and the ranking/status choice (`ok` vs `options` vs `cues_unchecked`)
 - `trackKey` shared fixture file (also copied to Backstory)
@@ -182,12 +187,35 @@ Latency: time each query from Radio Commons' region before the demo, and record 
 
 ## 8. Open items (non-blocking)
 
-- Discogs API terms: confirm the attribution wording and permission to store and display credits.
+- Discogs and Genius API terms: confirm the attribution wording and permission to store and display credits / relationships.
+- Licensing: `crate-cli` declares MIT in `package.json` but has no LICENSE file, and `crate-web` has none. Add a LICENSE before copying Crate code into this open-source submission.
 - Whether Spotify's public Web API exposes the new credits. Assumed **no**; we don't depend on it.
 - Count of resolved tracks → backfill duration estimate (first planning task).
 - Convex deploy goes through the `Convex deploy` GitHub workflow on `main` only (see CLAUDE.md). No `convex dev` from the feature branch.
 
-## 9. Research notes: Spotify (October 2026)
+## 9. What we borrow from Crate (audit 2026-10-04)
+
+Crate fetches raw JSON and lets an AI interpret it, so the deterministic parsers and the instrument vocabulary in this spec are new work.
+
+**Borrowed:**
+- The influence-cache edge + edge-sources model (`crate-cli/src/servers/influence-cache.ts:36-85`; Convex port `crate-web/convex/schema.ts:191-238`). It becomes "one fact, many sources" in 3.2.
+- WhoSampled sample types (`whosampled.ts:56-80`) for the connection role list.
+- Genius song fields (`genius.ts:102-131`).
+
+**For sub-project #4 (Tier 2), not here:**
+- Reuse the influence edge model keyed by MusicBrainz ID instead of name, with a source required on every edge.
+- Reuse `citationVerify.ts` to confirm a quoted sentence exists on its page.
+- Call Crate's MCP tools over stdio.
+- Do **not** reuse the `/track` and `/story` prompts as written: they send Perplexity narrative into facts without per-fact sources.
+
+**Not borrowed:**
+- WhoSampled scraper (stealth browser past Cloudflare: legal risk).
+- Co-mention influence heuristic (unsourced).
+- Genius annotations and `lyricsSnippet` (lyrics).
+- Crate's Discogs release parser (drops album-level credits).
+- crate-web rate limiters (inbound quotas, not outbound throttles).
+
+## 10. Research notes: Spotify (October 2026)
 
 - **Expanded credits** (Nov 2025): all contributors, including engineers and performers; supplied by labels/distributors.
 - **SongDNA** (beta Mar 2026): collaborators, samples, interpolations, covers; WhoSampled-powered (Spotify acquired it).
