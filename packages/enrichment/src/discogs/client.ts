@@ -244,3 +244,32 @@ async function safeText(res: Response): Promise<string> {
     return "<body unavailable>";
   }
 }
+
+export interface DiscogsCredit { name?: string; id?: number; role?: string; tracks?: string }
+export interface DiscogsRelease {
+  id: number; title?: string; year?: number; uri?: string;
+  genres?: string[]; styles?: string[];
+  extraartists?: DiscogsCredit[];
+  tracklist?: { position?: string; title?: string; extraartists?: DiscogsCredit[] }[];
+}
+
+export async function fetchRelease(input: DiscogsAuth & {
+  readonly releaseId: number; readonly throttle: Throttle;
+  readonly signal?: AbortSignal; readonly fetch?: FetchLike;
+}): Promise<DiscogsRelease | null> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const params = new URLSearchParams();
+  if (input.token) params.set("token", input.token);
+  else if (input.consumerKey && input.consumerSecret) {
+    params.set("key", input.consumerKey);
+    params.set("secret", input.consumerSecret);
+  }
+  await input.throttle.acquire(input.signal);
+  const res = await fetchImpl(`${API_BASE}/releases/${input.releaseId}?${params.toString()}`, {
+    headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+    signal: input.signal,
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw classifyError(res.status, await safeText(res));
+  return (await res.json()) as DiscogsRelease;
+}

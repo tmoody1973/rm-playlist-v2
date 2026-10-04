@@ -1,0 +1,13 @@
+{ "response": { "song": {
+  "id": 901, "url": "https://genius.com/Ezra-collective-victory-dance", "title": "Victory Dance",
+  "primary_artist": { "id": 1, "name": "Ezra Collective" },
+  "producer_artists": [{ "id": 7, "name": "Producer Person" }],
+  "writer_artists": [{ "id": 8, "name": "Writer Person" }],
+  "song_relationships": [
+    { "relationship_type": "samples", "songs": [{ "id": 50, "title": "Old Groove", "primary_artist": { "name": "Old Band" } }] },
+    { "relationship_type": "covered_by", "songs": [{ "id": 51, "title": "Victory Dance", "primary_artist": { "name": "Cover Band" } }] },
+    { "relationship_type": "remix_of", "songs": [{ "id": 52, "title": "Other", "primary_artist": { "name": "X" } }] }
+  ],
+  "embed_content": "<div>LYRIC LINE SHOULD NEVER APPEAR</div>",
+  "description": { "plain": "LYRIC LINE SHOULD NEVER APPEAR" }
+} } }
