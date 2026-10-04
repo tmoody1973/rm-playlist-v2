@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
-import { upcomingShowsByMetro } from "./plays";
+import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
+import { mergeSearchHits, searchCutoff, searchTerms } from "./memoryLogic";
 import {
   chooseRecallStatus,
   clampConnectionLimit,
@@ -20,6 +21,9 @@ import {
 const HALF_WINDOW_SPINS = 30;
 /** Spins read on each side of an anchor when the caller asks for the one before/after. */
 const NEIGHBOR_SCAN = 10;
+/** Hits read per index per station: search returns relevance order and the recency filter runs after the take, so go deep (Convex caps a result set at 1024). */
+const SEARCH_HITS_PER_INDEX = 300;
+const SEARCH_RESULT_LIMIT = 20;
 const LOCAL_STATION_SLUG = "414music";
 const stationSlug = v.union(
   v.literal("hyfin"),
@@ -378,5 +382,66 @@ export const getTrackConnections = query({
     const people = (await sharedPeople(ctx, trackId, facts)).sort(byRecency).slice(0, cap);
     const links = (await sampleLinks(ctx, facts)).sort(byRecency).slice(0, cap);
     return { people, links };
+  },
+});
+
+/**
+ * Alexa: "when did you last play Nas?" / resolve "the Groove Thang song".
+ * Full-text search on artist and title; relevance order is discarded and the
+ * recent hits come back newest first. Public read, like the other alexa:* queries.
+ */
+export const searchPlays = query({
+  args: { station: v.optional(stationSlug), query: v.string(), days: v.optional(v.number()) },
+  handler: async (ctx, { station, query: text, days }) => {
+    const searchText = searchTerms(text);
+    if (searchText === "") return [];
+    const cutoff = searchCutoff(days, Date.now());
+    const allStations = await ctx.db.query("stations").collect();
+    const stationById = new Map(allStations.map((row) => [row._id, row]));
+    const stationFilter = station ? allStations.find((row) => row.slug === station) : undefined;
+    if (station && !stationFilter) return [];
+    const visible = (play: Doc<"plays">) =>
+      play.playedAt >= cutoff &&
+      play.deletedAt === undefined &&
+      play.enrichmentStatus !== "ignored";
+    // One search per index; with a station, the stationId filter narrows it inside the index.
+    const [byArtist, byTitle] = await Promise.all([
+      ctx.db
+        .query("plays")
+        .withSearchIndex("search_artist", (q) => {
+          const search = q.search("artistRaw", searchText);
+          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+        })
+        .take(SEARCH_HITS_PER_INDEX),
+      ctx.db
+        .query("plays")
+        .withSearchIndex("search_title", (q) => {
+          const search = q.search("titleRaw", searchText);
+          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+        })
+        .take(SEARCH_HITS_PER_INDEX),
+    ]);
+    const hits = mergeSearchHits(
+      byArtist.filter(visible),
+      byTitle.filter(visible),
+      SEARCH_RESULT_LIMIT,
+    ).flatMap((play) => {
+      const stationRow = stationById.get(play.stationId);
+      return stationRow ? [{ play, stationRow }] : [];
+    });
+    return Promise.all(
+      hits.map(async ({ play, stationRow }) => {
+        const shown = await buildPublicPlay(ctx, play, stationRow);
+        return {
+          _id: shown._id,
+          artist: shown.artist,
+          title: shown.title,
+          playedAt: shown.playedAt,
+          artworkUrl: shown.artworkUrl,
+          previewUrl: shown.previewUrl,
+          stationSlug: stationRow.slug,
+        };
+      }),
+    );
   },
 });

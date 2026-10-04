@@ -319,7 +319,7 @@ export const recordPollFailure = mutation({
  * `null` today so the now-playing-card scaffolding can reserve space for
  * the LIVE row (DESIGN.md § B tertiary tier) without a schema change later.
  */
-async function buildPublicPlay(
+export async function buildPublicPlay(
   ctx: QueryCtx,
   play: Doc<"plays">,
   station?: Doc<"stations"> | null,

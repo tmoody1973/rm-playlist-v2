@@ -216,7 +216,9 @@ export default defineSchema({
     .index("by_org_played_at", ["orgId", "playedAt"])
     .index("by_enrichment_status", ["enrichmentStatus"])
     .index("by_canonical_artist", ["canonicalArtistId"])
-    .index("by_canonical_track", ["canonicalTrackId"]),
+    .index("by_canonical_track", ["canonicalTrackId"])
+    .searchIndex("search_artist", { searchField: "artistRaw", filterFields: ["stationId"] })
+    .searchIndex("search_title", { searchField: "titleRaw", filterFields: ["stationId"] }),
 
   // ------------------------------------------------------------------
   // Enrichment ignore rules (operator-curated skip list)
@@ -607,4 +609,39 @@ export default defineSchema({
     linkedAt: v.number(),
     status: v.union(v.literal("active"), v.literal("expired")),
   }).index("by_listener", ["listenerId"]),
+
+  /** Artists a linked listener follows: from a save ("find") or by asking ("explicit"). */
+  listenerFollows: defineTable({
+    listenerId: v.string(),
+    artistId: v.id("artists"),
+    artistName: v.string(),
+    status: v.union(v.literal("following"), v.literal("unfollowed")),
+    source: v.union(v.literal("find"), v.literal("explicit")),
+    updatedAt: v.number(),
+  })
+    .index("by_listener", ["listenerId", "status"])
+    .index("by_listener_artist", ["listenerId", "artistId"])
+    .index("by_artist", ["artistId", "status"]),
+
+  /** Per-listener memory: the last song list shown (30 min) and the last "what's new" visit. */
+  listenerState: defineTable({
+    listenerId: v.string(),
+    screen: v.optional(v.object({ shownAt: v.number(), playIds: v.array(v.id("plays")) })),
+    lastDigestAt: v.optional(v.number()),
+  }).index("by_listener", ["listenerId"]),
+
+  /** Radio Milwaukee stories about an artist, gathered from Backstory; shared, no personal data. */
+  artistWatch: defineTable({
+    artistId: v.id("artists"),
+    stories: v.array(
+      v.object({
+        storyId: v.string(),
+        title: v.string(),
+        show: v.string(),
+        showSlug: v.string(),
+        publishedAt: v.number(),
+      }),
+    ),
+    checkedAt: v.number(),
+  }).index("by_artist", ["artistId"]),
 });

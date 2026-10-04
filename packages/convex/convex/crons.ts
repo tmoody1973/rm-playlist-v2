@@ -19,4 +19,12 @@ const crons = cronJobs();
 
 crons.interval("ingestion health check", { minutes: 5 }, internal.health.checkIngestionHealth, {});
 
+// 6 a.m. Milwaukee (CDT): refresh Backstory stories for followed artists.
+crons.daily(
+  "artist stories refresh",
+  { hourUTC: 11, minuteUTC: 0 },
+  internal.artistWatch.refreshStale,
+  {},
+);
+
 export default crons;

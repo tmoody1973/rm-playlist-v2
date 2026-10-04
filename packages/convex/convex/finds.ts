@@ -8,9 +8,20 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { followArtist } from "./follows";
+import {
+  RECENT_SAVE_WINDOW_MS,
+  hasRecentOtherSave,
+  pickFindStory,
+  pickHomeShow,
+} from "./memoryLogic";
+import { upcomingShowsByMetro } from "./plays";
 import { clampFindsLimit, dedupeKeyFor } from "./findsLogic";
 import { assertListenerId, assertServerKey } from "./listenerGuard";
 import { appleMusicStatusValidator } from "./schema";
+
+// hasRecentOtherSave needs just one other row; a few cover the current find too.
+const RECENT_FINDS_READ_LIMIT = 5;
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
@@ -47,6 +58,12 @@ type SaveResult =
       artist: string;
       title: string;
       alreadySaved: boolean;
+      artistName: string;
+      artistId: string | null;
+      firstFollow: boolean;
+      nextShow: { venue: string; city: string; startsAtMs: number } | null;
+      story: { storyId: string; title: string; show: string } | null;
+      recentlySaved: boolean;
     };
 
 export const save = mutation({
@@ -89,6 +106,24 @@ export const save = mutation({
     }
     if (status === "pending")
       await ctx.scheduler.runAfter(0, internal.findsApple.addToAppleMusic, { findId });
+    const artistId = track?.artistId ?? play.canonicalArtistId ?? null;
+    const { firstFollow } = artistId
+      ? await followArtist(ctx, listenerId, artistId, artist, "find")
+      : { firstFollow: false };
+    const show = pickHomeShow(await upcomingShowsByMetro(ctx, artist));
+    // A brand-new follow only schedules the artistWatch refresh, so story is usually null until it runs.
+    const watch = artistId
+      ? await ctx.db
+          .query("artistWatch")
+          .withIndex("by_artist", (q) => q.eq("artistId", artistId))
+          .first()
+      : null;
+    const recentFinds = await ctx.db
+      .query("finds")
+      .withIndex("by_listener_saved", (q) =>
+        q.eq("listenerId", listenerId).gt("savedAt", now - RECENT_SAVE_WINDOW_MS),
+      )
+      .take(RECENT_FINDS_READ_LIMIT);
     return {
       status: "ok" as const,
       findId,
@@ -96,6 +131,16 @@ export const save = mutation({
       artist,
       title,
       alreadySaved: existing !== null,
+      artistName: artist,
+      artistId,
+      firstFollow,
+      nextShow: show ? { venue: show.venue, city: show.city, startsAtMs: show.startsAtMs } : null,
+      story: pickFindStory(watch),
+      recentlySaved: hasRecentOtherSave(
+        recentFinds.map((f) => ({ id: f._id, savedAt: f.savedAt })),
+        findId,
+        now,
+      ),
     };
   },
 });
@@ -146,7 +191,22 @@ export const deleteAllForListener = mutation({
       .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
       .collect();
     await Promise.all(links.map((link) => ctx.db.delete(link._id)));
-    return { deletedFinds: finds.length, deletedLink: links.length > 0 };
+    // Prefix of by_listener: covers both "following" and "unfollowed" rows.
+    const follows = await ctx.db
+      .query("listenerFollows")
+      .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
+      .collect();
+    await Promise.all(follows.map((follow) => ctx.db.delete(follow._id)));
+    const state = await ctx.db
+      .query("listenerState")
+      .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
+      .first();
+    if (state) await ctx.db.delete(state._id);
+    return {
+      deletedFinds: finds.length,
+      deletedLink: links.length > 0,
+      deletedFollows: follows.length,
+    };
   },
 });
 
