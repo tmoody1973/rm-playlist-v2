@@ -749,7 +749,7 @@ function slugify(text: string): string {
     .replace(LEADING_TRAILING_HYPHEN, "");
 }
 
-function normalizeArtistKey(displayName: string): string {
+export function normalizeArtistKey(displayName: string): string {
   return slugify(displayName);
 }
 
