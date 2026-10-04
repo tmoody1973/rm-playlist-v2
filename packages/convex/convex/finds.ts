@@ -14,6 +14,9 @@ import { appleMusicStatusValidator } from "./schema";
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
+const assertListener = (listenerId: string) => {
+  if (listenerId.trim().length === 0) throw new Error("InvalidListener");
+};
 
 async function songFor(ctx: MutationCtx, play: Doc<"plays">) {
   const track = play.canonicalTrackId ? await ctx.db.get(play.canonicalTrackId) : null;
@@ -41,6 +44,7 @@ export const save = mutation({
   args: { serverKey: v.string(), listenerId: v.string(), playId: v.id("plays") },
   handler: async (ctx, { serverKey, listenerId, playId }) => {
     guard(serverKey);
+    assertListener(listenerId);
     const play = await ctx.db.get(playId);
     if (play === null || play.deletedAt !== undefined) throw new Error("PlayNotFound");
     const { track, artist, title, stationSlug } = await songFor(ctx, play);
@@ -81,6 +85,7 @@ export const list = query({
   args: { serverKey: v.string(), listenerId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { serverKey, listenerId, limit }) => {
     guard(serverKey);
+    assertListener(listenerId);
     const rows = await ctx.db
       .query("finds")
       .withIndex("by_listener_saved", (q) => q.eq("listenerId", listenerId))
@@ -111,17 +116,18 @@ export const deleteAllForListener = mutation({
   args: { serverKey: v.string(), listenerId: v.string() },
   handler: async (ctx, { serverKey, listenerId }) => {
     guard(serverKey);
+    assertListener(listenerId);
     const finds = await ctx.db
       .query("finds")
       .withIndex("by_listener_saved", (q) => q.eq("listenerId", listenerId))
       .collect();
     await Promise.all(finds.map((find) => ctx.db.delete(find._id)));
-    const link = await ctx.db
+    const links = await ctx.db
       .query("appleMusicLinks")
       .withIndex("by_listener", (q) => q.eq("listenerId", listenerId))
-      .first();
-    if (link) await ctx.db.delete(link._id);
-    return { deletedFinds: finds.length, deletedLink: link !== null };
+      .collect();
+    await Promise.all(links.map((link) => ctx.db.delete(link._id)));
+    return { deletedFinds: finds.length, deletedLink: links.length > 0 };
   },
 });
 
@@ -157,7 +163,11 @@ export const recordAppleOutcome = internalMutation({
     const find = await ctx.db.get(findId);
     if (find !== null)
       await ctx.db.patch(findId, { appleMusic: { status, reason, at: Date.now() } });
-    if (expireLink) await ctx.db.patch(expireLink, { status: "expired" });
+    if (expireLink) {
+      // The link may have been deleted while the Apple add was in flight.
+      const link = await ctx.db.get(expireLink);
+      if (link) await ctx.db.patch(expireLink, { status: "expired" });
+    }
   },
 });
 

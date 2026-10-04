@@ -10,6 +10,8 @@
 
 import type * as alexa from "../alexa.js";
 import type * as appleMusic from "../appleMusic.js";
+import type * as appleMusicLinks from "../appleMusicLinks.js";
+import type * as appleOutcome from "../appleOutcome.js";
 import type * as backfills from "../backfills.js";
 import type * as cadence from "../cadence.js";
 import type * as cadenceSong from "../cadenceSong.js";
@@ -46,6 +48,8 @@ import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server
 declare const fullApi: ApiFromModules<{
   alexa: typeof alexa;
   appleMusic: typeof appleMusic;
+  appleMusicLinks: typeof appleMusicLinks;
+  appleOutcome: typeof appleOutcome;
   backfills: typeof backfills;
   cadence: typeof cadence;
   cadenceSong: typeof cadenceSong;
