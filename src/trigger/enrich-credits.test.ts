@@ -43,4 +43,18 @@ describe("enrichCreditsBatch", () => {
     });
     expect(summary).toMatchObject({ attempted: 2, crashed: 1, found: 1 });
   });
+
+  test("a failing work-queue query logs once and returns a zeroed summary", async () => {
+    const logs: string[] = [];
+    const writes: unknown[] = [];
+    const client = { query: async () => { throw new Error("not deployed"); }, mutation: async (_r: unknown, a: unknown) => { writes.push(a); return null; } };
+    const summary = await enrichCreditsBatch({
+      client: client as never, deadlineMs: Number.POSITIVE_INFINITY, now: () => 0,
+      collect: async () => { throw new Error("should not be called"); },
+      log: (msg) => logs.push(msg),
+    });
+    expect(summary).toEqual({ attempted: 0, found: 0, none: 0, errored: 0, crashed: 0 });
+    expect(writes).toHaveLength(0);
+    expect(logs).toHaveLength(1);
+  });
 });

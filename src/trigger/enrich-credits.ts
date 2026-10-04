@@ -32,7 +32,14 @@ async function writeResult(client: CreditsBatchDeps["client"], trackId: string, 
 export async function enrichCreditsBatch(deps: CreditsBatchDeps): Promise<CreditsSummary> {
   const now = deps.now ?? Date.now;
   const summary: CreditsSummary = { attempted: 0, found: 0, none: 0, errored: 0, crashed: 0 };
-  const tracks = (await deps.client.query(api.credits.tracksNeedingCredits, { limit: CREDITS_BATCH })) as TrackForCredits[];
+  let tracks: TrackForCredits[];
+  try {
+    tracks = (await deps.client.query(api.credits.tracksNeedingCredits, { limit: CREDITS_BATCH })) as TrackForCredits[];
+  } catch (err) {
+    // The credits phase must never fail the plays job that hosts it.
+    deps.log?.(`[credits] work-queue query failed: ${err instanceof Error ? err.message : String(err)}`);
+    return summary;
+  }
   for (const track of tracks) {
     if (now() >= deps.deadlineMs) break;
     summary.attempted += 1;
