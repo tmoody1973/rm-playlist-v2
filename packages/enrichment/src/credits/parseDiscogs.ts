@@ -39,12 +39,21 @@ function namesPosition(tracks: string | undefined, position: string | undefined)
   return tracks.split(/[,&]/).map((part) => part.trim()).includes(position);
 }
 
+/** null = credit names only other tracks, so it says nothing about ours. */
+// ponytail: ranges ("A1 to A3") are not expanded; they fall back to album scope (no false cue tags).
+function releaseCreditScope(tracks: string | undefined, position: string | undefined): "track" | "album" | null {
+  if (!tracks?.trim()) return "album";
+  if (namesPosition(tracks, position)) return "track";
+  return / to /i.test(tracks) ? "album" : null;
+}
+
 export function parseDiscogsRelease(json: DiscogsRelease, trackTitle: string, fetchedAt: number): { facts: CreditFact[]; styles: string[]; year?: number } {
   const source: FactSource = { source: "discogs", sourceUrl: json.uri ?? `https://www.discogs.com/release/${json.id}`, sourceRef: String(json.id), fetchedAt };
   const ourTrack = (json.tracklist ?? []).find((track) => slug(track.title ?? "") === slug(trackTitle));
   const trackCredits = (ourTrack?.extraartists ?? []).flatMap((credit) => creditFacts(credit, "track", source));
-  // ponytail: "A1 to A3" ranges don't name us, so they stay album scope (no false cue tags).
-  const releaseCredits = (json.extraartists ?? []).flatMap((credit) =>
-    creditFacts(credit, namesPosition(credit.tracks, ourTrack?.position) ? "track" : "album", source));
+  const releaseCredits = (json.extraartists ?? []).flatMap((credit) => {
+    const scope = releaseCreditScope(credit.tracks, ourTrack?.position);
+    return scope === null ? [] : creditFacts(credit, scope, source);
+  });
   return { facts: [...trackCredits, ...releaseCredits], styles: json.styles ?? [], year: json.year || undefined };
 }

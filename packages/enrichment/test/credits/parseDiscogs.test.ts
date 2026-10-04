@@ -15,6 +15,12 @@ describe("parseDiscogsRelease", () => {
   test("release-level credit with no tracks is album scope", () => {
     expect(byValue("Femi Koleoso")[0]?.scope).toBe("album");
   });
+  test("release-level credit naming only other positions is dropped", () => {
+    expect(byValue("Other Player")).toHaveLength(0);
+  });
+  test("release-level credit with a track range is album scope", () => {
+    expect(byValue("Range Player")[0]?.scope).toBe("album");
+  });
   test("engineers kept, non-musical roles dropped", () => {
     expect(byValue("Studio Person")[0]?.group).toBe("engineer");
     expect(byValue("Art Person")).toHaveLength(0);
