@@ -6,15 +6,25 @@ const spin = (playId: string, minute: number, cueTags: string[] = [], extra: Par
   ({ playId, playedAt: minute * MIN, durationSec: 240, cueTags, hidden: false, ...extra });
 
 describe("rankSpins + chooseRecallStatus", () => {
-  test("cue match wins over time closeness → ok", () => {
-    const ranked = rankSpins([spin("a", 10), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
+  test("cue match wins over time closeness → ok (competitor has different tag)", () => {
+    const ranked = rankSpins([spin("a", 10, ["strings"]), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
     expect(ranked[0]?.playId).toBe("b");
     expect(ranked[0]?.matchedCues).toEqual(["horns"]);
     expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("ok");
   });
+  test("cue match but untagged competitor → options", () => {
+    const ranked = rankSpins([spin("a", 10), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
+    expect(ranked[0]?.playId).toBe("b");
+    expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
+  });
   test("two spins tie on cues → options", () => {
     const ranked = rankSpins([spin("a", 10, ["horns"]), spin("b", 20, ["horns"])], ["horns"], 15 * MIN);
     expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("options");
+  });
+  test("partial multi-cue match → options", () => {
+    const ranked = rankSpins([spin("a", 10, ["horns"]), spin("b", 30, ["strings"])], ["horns", "keys"], 15 * MIN);
+    expect(ranked[0]?.playId).toBe("a");
+    expect(chooseRecallStatus(ranked, ["horns", "keys"], 15 * MIN)).toBe("options");
   });
   test("cues asked but nobody in the window has tags → cues_unchecked, time-ranked", () => {
     const ranked = rankSpins([spin("a", 10), spin("b", 14)], ["horns"], 15 * MIN);
@@ -28,6 +38,14 @@ describe("rankSpins + chooseRecallStatus", () => {
   test("no cues, midpoint in a gap → options", () => {
     const ranked = rankSpins([spin("a", 10, [], { durationSec: 60 }), spin("b", 20)], [], 15 * MIN);
     expect(chooseRecallStatus(ranked, [], 15 * MIN)).toBe("options");
+  });
+  test("no cues, lone spin far from moment → options", () => {
+    const ranked = rankSpins([spin("a", 10)], [], 30 * MIN);
+    expect(chooseRecallStatus(ranked, [], 30 * MIN)).toBe("options");
+  });
+  test("no cues, lone spin covers the moment → ok", () => {
+    const ranked = rankSpins([spin("a", 10)], [], 12 * MIN);
+    expect(chooseRecallStatus(ranked, [], 12 * MIN)).toBe("ok");
   });
   test("hidden spins never rank; empty → no_spins", () => {
     const ranked = rankSpins([spin("a", 10, [], { hidden: true })], [], 10 * MIN);

@@ -39,10 +39,21 @@ export function chooseRecallStatus(ranked: readonly RankedSpin[], cues: readonly
   if (top === undefined) return "no_spins";
   if (cues.length > 0) {
     if (ranked.every((spin) => spin.cueTags.length === 0)) return "cues_unchecked";
-    const clearWinner = top.matchedCues.length > 0 && (second === undefined || top.matchedCues.length > second.matchedCues.length);
-    return clearWinner ? "ok" : "options";
+
+    // Dedupe and lowercase requested cues
+    const distinctRequestedCues = Array.from(new Set(cues.map((c) => c.toLowerCase())));
+
+    // Return "ok" only when:
+    // - top matches ALL requested cues
+    // - no OTHER spin has empty cueTags (unchecked competitor)
+    // - second is undefined OR second has fewer matched cues than top
+    const matchesAllCues = top.matchedCues.length === distinctRequestedCues.length;
+    const noUntaggedCompetitors = !ranked.some((spin, idx) => idx !== 0 && spin.cueTags.length === 0);
+    const clearWinner = second === undefined || top.matchedCues.length > second.matchedCues.length;
+
+    return matchesAllCues && noUntaggedCompetitors && clearWinner ? "ok" : "options";
   }
-  return ranked.length === 1 || coversMoment(top, windowMid) ? "ok" : "options";
+  return coversMoment(top, windowMid) ? "ok" : "options";
 }
 
 export function neighborSpin(spinsByTimeAsc: readonly SpinForRecall[], anchorPlayId: string, direction: "before" | "after"): SpinForRecall | null {
