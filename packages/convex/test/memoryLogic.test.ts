@@ -5,6 +5,7 @@ import {
   nextFollow,
   playAtNumber,
   rankDigest,
+  pickStaleArtists,
   storiesFromBackstory,
   storyMentionsArtist,
 } from "../convex/memoryLogic";
@@ -207,5 +208,36 @@ describe("storiesFromBackstory", () => {
     expect(storiesFromBackstory({ status: "success", value: "nope" }, "A")).toBeNull();
     expect(storiesFromBackstory({ status: "success", value: [{ title: 1 }] }, "A")).toBeNull();
     expect(storiesFromBackstory(null, "A")).toBeNull();
+  });
+});
+
+describe("pickStaleArtists", () => {
+  const HOUR = 3_600_000;
+  const STALE = 20 * HOUR;
+  const ago = (hours: number) => NOW - hours * HOUR;
+
+  test("a row checked 23h59m ago is stale; 19h ago is not", () => {
+    const rows = [
+      { artistId: "late", checkedAt: NOW - (23 * HOUR + 59 * 60_000) },
+      { artistId: "fresh", checkedAt: ago(19) },
+    ];
+    expect(pickStaleArtists(rows, NOW, STALE, 10)).toEqual(["late"]);
+  });
+  test("never-checked first, then oldest", () => {
+    const rows = [
+      { artistId: "old", checkedAt: ago(30) },
+      { artistId: "older", checkedAt: ago(50) },
+      { artistId: "never", checkedAt: null },
+    ];
+    expect(pickStaleArtists(rows, NOW, STALE, 10)).toEqual(["never", "older", "old"]);
+  });
+  test("dedupes and honors the limit", () => {
+    const rows = [
+      { artistId: "a", checkedAt: null },
+      { artistId: "a", checkedAt: null },
+      { artistId: "b", checkedAt: null },
+      { artistId: "c", checkedAt: null },
+    ];
+    expect(pickStaleArtists(rows, NOW, STALE, 2)).toEqual(["a", "b"]);
   });
 });

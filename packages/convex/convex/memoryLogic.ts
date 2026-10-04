@@ -150,3 +150,22 @@ export function storiesFromBackstory(body: unknown, artistName: string): StoredS
       publishedAt,
     }));
 }
+
+/** Artists whose stories need refreshing: never-checked first, then oldest; skips rows checked within staleMs. */
+export function pickStaleArtists<T extends string>(
+  rows: { artistId: T; checkedAt: number | null }[],
+  now: number,
+  staleMs: number,
+  limit: number,
+): T[] {
+  const seen = new Set<T>();
+  return rows
+    .filter(({ artistId, checkedAt }) => {
+      if (seen.has(artistId)) return false;
+      seen.add(artistId);
+      return checkedAt === null || now - checkedAt >= staleMs;
+    })
+    .sort((a, b) => (a.checkedAt ?? 0) - (b.checkedAt ?? 0))
+    .slice(0, limit)
+    .map(({ artistId }) => artistId);
+}

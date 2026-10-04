@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { storiesFromBackstory } from "./memoryLogic";
+import { pickStaleArtists, storiesFromBackstory, type StoredStory } from "./memoryLogic";
 
-const STALE_MS = 24 * 3_600_000;
+// Under the 24h cron period so a row stamped just after one run is stale at the next.
+const STALE_MS = 20 * 3_600_000;
 const REFRESH_BATCH = 25;
 const BACKSTORY_TIMEOUT_MS = 8000;
 const MAX_FOLLOWS_SCANNED = 500;
@@ -37,6 +38,47 @@ export const store = internalMutation({
   },
 });
 
+/** Stamp a failed attempt so a permanently failing artist doesn't hog the daily batch; keeps existing stories. */
+export const markChecked = internalMutation({
+  args: { artistId: v.id("artists") },
+  handler: async (ctx, { artistId }) => {
+    const existing = await ctx.db
+      .query("artistWatch")
+      .withIndex("by_artist", (q) => q.eq("artistId", artistId))
+      .first();
+    if (existing) await ctx.db.patch(existing._id, { checkedAt: Date.now() });
+    else await ctx.db.insert("artistWatch", { artistId, stories: [], checkedAt: Date.now() });
+  },
+});
+
+/** Stories for the artist, or a fixed failure reason (never the URL or error text). */
+async function fetchStoriesOrReason(
+  baseUrl: string,
+  name: string,
+): Promise<StoredStory[] | string> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl.replace(/\/+$/, "")}/api/query`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "public:searchStoryCards",
+        args: { text: name },
+        format: "json",
+      }),
+      signal: AbortSignal.timeout(BACKSTORY_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return error instanceof Error ? error.name : "fetch_error";
+  }
+  if (!response.ok) return `http_${response.status}`;
+  try {
+    return storiesFromBackstory(await response.json(), name) ?? "bad_body";
+  } catch {
+    return "bad_body";
+  }
+}
+
 /** Ask Backstory for stories about one artist; keep only stories that name them. */
 export const refresh = internalAction({
   args: { artistId: v.id("artists") },
@@ -52,23 +94,15 @@ export const refresh = internalAction({
       );
       return;
     }
-    const response = await fetch(`${url}/api/query`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        path: "public:searchStoryCards",
-        args: { text: name },
-        format: "json",
-      }),
-      signal: AbortSignal.timeout(BACKSTORY_TIMEOUT_MS),
-    });
-    const stories = response.ok ? storiesFromBackstory(await response.json(), name) : null;
-    if (!stories) {
+    const failureReason = await fetchStoriesOrReason(url, name);
+    if (typeof failureReason === "string") {
       console.error(
-        JSON.stringify({ event: "artist_watch.backstory_failed", httpStatus: response.status }),
+        JSON.stringify({ event: "artist_watch.backstory_failed", reason: failureReason }),
       );
+      await ctx.runMutation(internal.artistWatch.markChecked, { artistId });
       return; // the daily cron retries
     }
+    const stories = failureReason;
     await ctx.runMutation(internal.artistWatch.store, { artistId, stories });
   },
 });
@@ -82,21 +116,16 @@ export const staleFollowedArtists = internalQuery({
       .filter((q) => q.eq(q.field("status"), "following"))
       .take(MAX_FOLLOWS_SCANNED);
     const artistIds = [...new Set(follows.map((follow) => follow.artistId))];
-    const watched = await Promise.all(
-      artistIds.map(async (artistId) => ({
-        artistId,
-        row: await ctx.db
+    const rows = await Promise.all(
+      artistIds.map(async (artistId) => {
+        const watch = await ctx.db
           .query("artistWatch")
           .withIndex("by_artist", (q) => q.eq("artistId", artistId))
-          .first(),
-      })),
+          .first();
+        return { artistId, checkedAt: watch?.checkedAt ?? null };
+      }),
     );
-    const now = Date.now();
-    return watched
-      .filter(({ row }) => !row || now - row.checkedAt > STALE_MS)
-      .sort((a, b) => (a.row?.checkedAt ?? 0) - (b.row?.checkedAt ?? 0))
-      .slice(0, REFRESH_BATCH)
-      .map(({ artistId }) => artistId);
+    return pickStaleArtists(rows, Date.now(), STALE_MS, REFRESH_BATCH);
   },
 });
 
