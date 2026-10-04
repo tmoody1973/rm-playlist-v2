@@ -1,13 +1,35 @@
 import { describe, expect, test } from "bun:test";
-import { chooseRecallStatus, evidenceLevel, neighborSpin, normalizeCues, rankSpins, type SpinForRecall } from "../convex/recall";
+import {
+  chooseRecallStatus,
+  evidenceLevel,
+  neighborSpin,
+  normalizeCues,
+  rankSpins,
+  type SpinForRecall,
+} from "../convex/recall";
 
 const MIN = 60_000;
-const spin = (playId: string, minute: number, cueTags: string[] = [], extra: Partial<SpinForRecall> = {}): SpinForRecall =>
-  ({ playId, playedAt: minute * MIN, durationSec: 240, cueTags, hidden: false, ...extra });
+const spin = (
+  playId: string,
+  minute: number,
+  cueTags: string[] = [],
+  extra: Partial<SpinForRecall> = {},
+): SpinForRecall => ({
+  playId,
+  playedAt: minute * MIN,
+  durationSec: 240,
+  cueTags,
+  hidden: false,
+  ...extra,
+});
 
 describe("rankSpins + chooseRecallStatus", () => {
   test("cue match wins over time closeness → ok (competitor has different tag)", () => {
-    const ranked = rankSpins([spin("a", 10, ["strings"]), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["strings"]), spin("b", 30, ["horns"])],
+      ["horns"],
+      10 * MIN,
+    );
     expect(ranked[0]?.playId).toBe("b");
     expect(ranked[0]?.matchedCues).toEqual(["horns"]);
     expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("ok");
@@ -18,11 +40,19 @@ describe("rankSpins + chooseRecallStatus", () => {
     expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
   });
   test("two spins tie on cues → options", () => {
-    const ranked = rankSpins([spin("a", 10, ["horns"]), spin("b", 20, ["horns"])], ["horns"], 15 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["horns"]), spin("b", 20, ["horns"])],
+      ["horns"],
+      15 * MIN,
+    );
     expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("options");
   });
   test("partial multi-cue match → options", () => {
-    const ranked = rankSpins([spin("a", 10, ["horns"]), spin("b", 30, ["strings"])], ["horns", "keys"], 15 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["horns"]), spin("b", 30, ["strings"])],
+      ["horns", "keys"],
+      15 * MIN,
+    );
     expect(ranked[0]?.playId).toBe("a");
     expect(chooseRecallStatus(ranked, ["horns", "keys"], 15 * MIN)).toBe("options");
   });
@@ -32,23 +62,43 @@ describe("rankSpins + chooseRecallStatus", () => {
     expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("cues_unchecked");
   });
   test("instrument cue, competitor tagged only 'local' (unchecked for instruments) → options", () => {
-    const ranked = rankSpins([spin("a", 10, ["local"]), spin("b", 30, ["horns", "local"])], ["horns"], 10 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["local"]), spin("b", 30, ["horns", "local"])],
+      ["horns"],
+      10 * MIN,
+    );
     expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
   });
   test("instrument cue, competitor tagged only with a decade → options", () => {
-    const ranked = rankSpins([spin("a", 10, ["2010s"]), spin("b", 30, ["horns"])], ["horns"], 10 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["2010s"]), spin("b", 30, ["horns"])],
+      ["horns"],
+      10 * MIN,
+    );
     expect(chooseRecallStatus(ranked, ["horns"], 10 * MIN)).toBe("options");
   });
   test("414 Music, no credits anywhere (only 'local' tags) → cues_unchecked", () => {
-    const ranked = rankSpins([spin("a", 10, ["local"]), spin("b", 14, ["local"])], ["horns"], 15 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["local"]), spin("b", 14, ["local"])],
+      ["horns"],
+      15 * MIN,
+    );
     expect(chooseRecallStatus(ranked, ["horns"], 15 * MIN)).toBe("cues_unchecked");
   });
   test("non-instrument cue: a style-tagged competitor counts as checked → ok", () => {
-    const ranked = rankSpins([spin("a", 10, ["jazz"]), spin("b", 30, ["afrobeat"])], ["afrobeat"], 10 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["jazz"]), spin("b", 30, ["afrobeat"])],
+      ["afrobeat"],
+      10 * MIN,
+    );
     expect(chooseRecallStatus(ranked, ["afrobeat"], 10 * MIN)).toBe("ok");
   });
   test("a 'local' cue still matches", () => {
-    const ranked = rankSpins([spin("a", 10, ["jazz"]), spin("b", 30, ["jazz", "local"])], ["local"], 10 * MIN);
+    const ranked = rankSpins(
+      [spin("a", 10, ["jazz"]), spin("b", 30, ["jazz", "local"])],
+      ["local"],
+      10 * MIN,
+    );
     expect(ranked[0]?.playId).toBe("b");
     expect(chooseRecallStatus(ranked, ["local"], 10 * MIN)).toBe("ok");
   });
@@ -77,21 +127,32 @@ describe("rankSpins + chooseRecallStatus", () => {
 
 describe("neighborSpin", () => {
   const spins = [spin("a", 1), spin("id", 5, [], { hidden: true }), spin("c", 9)];
-  test("the one before skips station IDs / deleted plays", () => expect(neighborSpin(spins, "c", "before")?.playId).toBe("a"));
+  test("the one before skips station IDs / deleted plays", () =>
+    expect(neighborSpin(spins, "c", "before")?.playId).toBe("a"));
   test("the one after", () => expect(neighborSpin(spins, "a", "after")?.playId).toBe("c"));
   test("edge → null", () => expect(neighborSpin(spins, "a", "before")).toBeNull());
 });
 
 describe("evidenceLevel", () => {
   test("rich needs 3 track facts and high confidence", () => {
-    expect(evidenceLevel({ resolved: true, matchConfidence: "high", trackScopeFactCount: 3 })).toBe("rich");
-    expect(evidenceLevel({ resolved: true, matchConfidence: "low", trackScopeFactCount: 9 })).toBe("basic");
+    expect(evidenceLevel({ resolved: true, matchConfidence: "high", trackScopeFactCount: 3 })).toBe(
+      "rich",
+    );
+    expect(evidenceLevel({ resolved: true, matchConfidence: "low", trackScopeFactCount: 9 })).toBe(
+      "basic",
+    );
     expect(evidenceLevel({ resolved: false, trackScopeFactCount: 0 })).toBe("none");
   });
 });
 
 describe("normalizeCues", () => {
   test("lowercases, de-dupes, then keeps at most 5", () => {
-    expect(normalizeCues(["Horns", "horns", "KEYS", "a", "b", "c", "d", "e"])).toEqual(["horns", "keys", "a", "b", "c"]);
+    expect(normalizeCues(["Horns", "horns", "KEYS", "a", "b", "c", "d", "e"])).toEqual([
+      "horns",
+      "keys",
+      "a",
+      "b",
+      "c",
+    ]);
   });
 });

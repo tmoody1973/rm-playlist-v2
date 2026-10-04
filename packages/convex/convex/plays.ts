@@ -408,7 +408,11 @@ export interface PublicPlay {
 
 const MAX_LOOKUP_FANOUT = 10;
 
-type EventCandidate = { event: Doc<"events">; matchedArtistName: string; role: "headliner" | "support" };
+type EventCandidate = {
+  event: Doc<"events">;
+  matchedArtistName: string;
+  role: "headliner" | "support";
+};
 
 /**
  * Upcoming, non-duplicate, non-cancelled events for an artist, soonest first.
@@ -417,7 +421,10 @@ type EventCandidate = { event: Doc<"events">; matchedArtistName: string; role: "
  * fill the fan-out with dead shows. Prune past events if an artist ever
  * accumulates >10 rows created after their next show.
  */
-async function upcomingEventsForArtist(ctx: QueryCtx, artistName: string): Promise<EventCandidate[]> {
+async function upcomingEventsForArtist(
+  ctx: QueryCtx,
+  artistName: string,
+): Promise<EventCandidate[]> {
   const artistKey = normalizeEventArtistKey(artistName);
   if (artistKey.length === 0) return [];
   const rows = await ctx.db
@@ -436,9 +443,15 @@ async function upcomingEventsForArtist(ctx: QueryCtx, artistName: string): Promi
   return candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
 }
 
-async function toLiveEventSummary(ctx: QueryCtx, candidate: EventCandidate): Promise<LiveEventSummary> {
+async function toLiveEventSummary(
+  ctx: QueryCtx,
+  candidate: EventCandidate,
+): Promise<LiveEventSummary> {
   const { event } = candidate;
-  const lineup = await ctx.db.query("eventArtists").withIndex("by_event", (q) => q.eq("eventId", event._id)).collect();
+  const lineup = await ctx.db
+    .query("eventArtists")
+    .withIndex("by_event", (q) => q.eq("eventId", event._id))
+    .collect();
   return {
     eventId: event._id,
     title: event.title ?? null,
@@ -485,17 +498,31 @@ async function toLiveEventSummary(ctx: QueryCtx, candidate: EventCandidate): Pro
  * doesn't balloon recentByStation's read budget.
  * Past events are never pruned, so the fan-out reads newest-first.
  */
-async function findLiveEventForArtist(ctx: QueryCtx, artistDisplayName: string): Promise<LiveEventSummary | null> {
+async function findLiveEventForArtist(
+  ctx: QueryCtx,
+  artistDisplayName: string,
+): Promise<LiveEventSummary | null> {
   const [soonest] = await upcomingEventsForArtist(ctx, artistDisplayName);
   return soonest === undefined ? null : toLiveEventSummary(ctx, soonest);
 }
 
 /** For Alexa: soonest show per metro (Milwaukee / Madison / Chicago), up to 3. */
-export async function upcomingShowsByMetro(ctx: QueryCtx, artistName: string): Promise<Array<LiveEventSummary & { metro: string }>> {
+export async function upcomingShowsByMetro(
+  ctx: QueryCtx,
+  artistName: string,
+): Promise<Array<LiveEventSummary & { metro: string }>> {
   const candidates = await upcomingEventsForArtist(ctx, artistName);
-  const flattened = candidates.map((c) => ({ ...c, startsAt: c.event.startsAt, latitude: c.event.latitude, longitude: c.event.longitude, city: c.event.city }));
+  const flattened = candidates.map((c) => ({
+    ...c,
+    startsAt: c.event.startsAt,
+    latitude: c.event.latitude,
+    longitude: c.event.longitude,
+    city: c.event.city,
+  }));
   const picked = pickShowsByMetro(flattened);
-  return Promise.all(picked.map(async (pick) => ({ ...(await toLiveEventSummary(ctx, pick)), metro: pick.metro })));
+  return Promise.all(
+    picked.map(async (pick) => ({ ...(await toLiveEventSummary(ctx, pick)), metro: pick.metro })),
+  );
 }
 
 export const currentByStation = query({

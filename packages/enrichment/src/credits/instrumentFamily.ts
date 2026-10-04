@@ -1,5 +1,13 @@
 export type InstrumentFamily =
-  | "horns" | "strings" | "keys" | "guitar" | "bass" | "drums" | "percussion" | "vocals" | "electronic";
+  | "horns"
+  | "strings"
+  | "keys"
+  | "guitar"
+  | "bass"
+  | "drums"
+  | "percussion"
+  | "vocals"
+  | "electronic";
 
 /** Escape regex special characters for safe use in RegExp. */
 function escapeRegExp(str: string): string {
@@ -8,14 +16,61 @@ function escapeRegExp(str: string): string {
 
 /** Keyword families in priority order (checked in order; first match wins). */
 const FAMILY_KEYWORDS: ReadonlyArray<readonly [InstrumentFamily, readonly string[]]> = [
-  ["horns", ["trumpet", "trombone", "saxophone", "sax", "flugelhorn", "horn", "tuba", "cornet", "clarinet", "flute", "brass", "woodwind", "bassoon", "oboe"]],
-  ["keys", ["piano", "keyboard", "keys", "organ", "rhodes", "wurlitzer", "clavinet", "synthesizer", "synth", "harpsichord"]],
+  [
+    "horns",
+    [
+      "trumpet",
+      "trombone",
+      "saxophone",
+      "sax",
+      "flugelhorn",
+      "horn",
+      "tuba",
+      "cornet",
+      "clarinet",
+      "flute",
+      "brass",
+      "woodwind",
+      "bassoon",
+      "oboe",
+    ],
+  ],
+  [
+    "keys",
+    [
+      "piano",
+      "keyboard",
+      "keys",
+      "organ",
+      "rhodes",
+      "wurlitzer",
+      "clavinet",
+      "synthesizer",
+      "synth",
+      "harpsichord",
+    ],
+  ],
   ["strings", ["violin", "viola", "cello", "double bass", "contrabass", "string", "harp"]],
   ["bass", ["bass"]],
   ["guitar", ["guitar", "banjo", "mandolin", "ukulele", "pedal steel"]],
   ["electronic", ["programming", "programmed", "drum machine", "sampler", "turntables", "dj"]],
   ["drums", ["drum"]],
-  ["percussion", ["percussion", "conga", "bongo", "shaker", "tambourine", "vibraphone", "marimba", "timbales", "cajón", "cajon", "djembe"]],
+  [
+    "percussion",
+    [
+      "percussion",
+      "conga",
+      "bongo",
+      "shaker",
+      "tambourine",
+      "vibraphone",
+      "marimba",
+      "timbales",
+      "cajón",
+      "cajon",
+      "djembe",
+    ],
+  ],
   ["vocals", ["vocal", "voice", "singer", "rap", "choir"]],
 ];
 

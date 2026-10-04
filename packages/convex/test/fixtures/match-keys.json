@@ -1,12 +1,28 @@
 [
-  { "artist": "Ezra Collective", "title": "Victory Dance", "expected": "ezracollective::victorydance" },
+  {
+    "artist": "Ezra Collective",
+    "title": "Victory Dance",
+    "expected": "ezracollective::victorydance"
+  },
   { "artist": "Glitzy feat. Brief", "title": "Effort", "expected": "glitzy::effort" },
   { "artist": "Glitzy", "title": "Effort (feat. Brief)", "expected": "glitzy::effort" },
   { "artist": "Glitzy", "title": "Effort - Radio Edit", "expected": "glitzy::effort" },
-  { "artist": "The Beatles", "title": "Let It Be (Remastered 2009)", "expected": "beatles::letitbe" },
+  {
+    "artist": "The Beatles",
+    "title": "Let It Be (Remastered 2009)",
+    "expected": "beatles::letitbe"
+  },
   { "artist": "Sigur Rós", "title": "Hoppípolla", "expected": "sigurros::hoppipolla" },
-  { "artist": "Thundercat", "title": "Them Changes [Live]", "expected": "thundercat::themchangeslive" },
-  { "artist": "Ezra Collective", "title": "Victory Dance (Remix)", "expected": "ezracollective::victorydanceremix" },
+  {
+    "artist": "Thundercat",
+    "title": "Them Changes [Live]",
+    "expected": "thundercat::themchangeslive"
+  },
+  {
+    "artist": "Ezra Collective",
+    "title": "Victory Dance (Remix)",
+    "expected": "ezracollective::victorydanceremix"
+  },
   { "artist": "Daft Punk", "title": "Get Lucky", "expected": "daftpunk::getlucky" },
   { "artist": "Soft Cell", "title": "Tainted Love", "expected": "softcell::taintedlove" },
   { "artist": "Radiohead", "title": "Drift Away", "expected": "radiohead::driftaway" }

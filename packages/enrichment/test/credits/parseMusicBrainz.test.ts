@@ -12,14 +12,26 @@ describe("lookupRecordingByIsrc", () => {
   test("prefers the recording whose title matches", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: isrcHit });
-    const mbid = await lookupRecordingByIsrc({ isrc: "GBBKS2000152", title: "Victory Dance", throttle: fastThrottle(), fetch: mock.fetch });
+    const mbid = await lookupRecordingByIsrc({
+      isrc: "GBBKS2000152",
+      title: "Victory Dance",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
     expect(mbid).toBe("rec-studio");
     expect(mock.calls[0]?.url).toContain("/isrc/GBBKS2000152");
   });
   test("404 → null", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 404, body: { error: "Not Found" } });
-    expect(await lookupRecordingByIsrc({ isrc: "X", title: "Y", throttle: fastThrottle(), fetch: mock.fetch })).toBeNull();
+    expect(
+      await lookupRecordingByIsrc({
+        isrc: "X",
+        title: "Y",
+        throttle: fastThrottle(),
+        fetch: mock.fetch,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -27,8 +39,14 @@ describe("fetchRecordingRelations", () => {
   test("requests relations, work-level relations and releases", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: relations });
-    await fetchRecordingRelations({ recordingMbid: "rec-studio", throttle: fastThrottle(), fetch: mock.fetch });
-    expect(mock.calls[0]?.url).toContain("inc=artist-rels+recording-rels+work-rels+work-level-rels");
+    await fetchRecordingRelations({
+      recordingMbid: "rec-studio",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
+    expect(mock.calls[0]?.url).toContain(
+      "inc=artist-rels+recording-rels+work-rels+work-level-rels",
+    );
   });
 });
 
@@ -38,7 +56,12 @@ describe("parseMusicBrainzRelations", () => {
 
   test("release year from first-release-date", () => expect(releaseYear).toBe(2019));
   test("instrument credits are track-scope performers with mb person keys", () => {
-    expect(find("trumpet")).toMatchObject({ group: "performer", value: "Ife Ogunjobi", personKey: "mb:art-dylan", scope: "track" });
+    expect(find("trumpet")).toMatchObject({
+      group: "performer",
+      value: "Ife Ogunjobi",
+      personKey: "mb:art-dylan",
+      scope: "track",
+    });
   });
   test("vocals, producer, mix map to groups", () => {
     expect(find("lead vocals")?.group).toBe("performer");
@@ -46,7 +69,11 @@ describe("parseMusicBrainzRelations", () => {
     expect(find("mix")?.group).toBe("engineer");
   });
   test("samples both directions", () => {
-    expect(find("samples")?.linkedRecording).toEqual({ title: "Old Groove", artist: "Old Band", mbid: "rec-old" });
+    expect(find("samples")?.linkedRecording).toEqual({
+      title: "Old Groove",
+      artist: "Old Band",
+      mbid: "rec-old",
+    });
     expect(find("sampled_by")?.linkedRecording?.mbid).toBe("rec-new");
   });
   test("cover performance → cover_of + composer as writer", () => {
@@ -55,25 +82,36 @@ describe("parseMusicBrainzRelations", () => {
   });
   test("unknown relation types are dropped; every fact has a source", () => {
     expect(facts.some((fact) => fact.value === "Photo Person")).toBe(false);
-    for (const fact of facts) expect(fact.sources[0]?.sourceUrl).toBe("https://musicbrainz.org/recording/rec-studio");
+    for (const fact of facts)
+      expect(fact.sources[0]?.sourceUrl).toBe("https://musicbrainz.org/recording/rec-studio");
   });
 });
 
 describe("parseMusicBrainzRelations attribute modifiers", () => {
-  const rel = (type: string, attributes: string[]) => ({ type, attributes, artist: { id: "a1", name: "Someone" } });
-  const parse = (relations: unknown[]) => parseMusicBrainzRelations({ id: "r1", title: "T", relations } as never, 1000).facts;
+  const rel = (type: string, attributes: string[]) => ({
+    type,
+    attributes,
+    artist: { id: "a1", name: "Someone" },
+  });
+  const parse = (relations: unknown[]) =>
+    parseMusicBrainzRelations({ id: "r1", title: "T", relations } as never, 1000).facts;
 
   test("modifier attribute is dropped; the instrument is the role", () => {
     const facts = parse([rel("instrument", ["additional", "guitar"])]);
     expect(facts.map((f) => [f.group, f.role])).toEqual([["performer", "guitar"]]);
   });
   test("several instruments → one performer fact each", () => {
-    expect(parse([rel("instrument", ["piano", "trumpet"])]).map((f) => f.role)).toEqual(["piano", "trumpet"]);
+    expect(parse([rel("instrument", ["piano", "trumpet"])]).map((f) => f.role)).toEqual([
+      "piano",
+      "trumpet",
+    ]);
   });
   test("performer with only modifiers falls back to the relation type", () => {
     expect(parse([rel("vocal", ["guest"])]).map((f) => f.role)).toEqual(["vocal"]);
   });
   test("producer modifiers prefix the relation type", () => {
-    expect(parse([rel("producer", ["executive"])])).toMatchObject([{ group: "producer", role: "executive producer" }]);
+    expect(parse([rel("producer", ["executive"])])).toMatchObject([
+      { group: "producer", role: "executive producer" },
+    ]);
   });
 });

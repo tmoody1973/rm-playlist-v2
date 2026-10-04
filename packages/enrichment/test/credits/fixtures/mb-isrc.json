@@ -1,4 +1,7 @@
-{ "isrc": "GBBKS2000152", "recordings": [
-  { "id": "rec-live", "title": "Victory Dance (live)" },
-  { "id": "rec-studio", "title": "Victory Dance" }
-] }
+{
+  "isrc": "GBBKS2000152",
+  "recordings": [
+    { "id": "rec-live", "title": "Victory Dance (live)" },
+    { "id": "rec-studio", "title": "Victory Dance" }
+  ]
+}

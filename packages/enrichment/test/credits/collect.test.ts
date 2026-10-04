@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { collectTrackCredits } from "../../src/credits/collect";
 import { createThrottle } from "../../src/throttle";
-import { createMockFetch, type MockFetch, type MockFetchFn, type MockResponseInit } from "../fetch-mock";
+import {
+  createMockFetch,
+  type MockFetch,
+  type MockFetchFn,
+  type MockResponseInit,
+} from "../fetch-mock";
 import release from "./fixtures/discogs-release.json";
 import geniusSearch from "./fixtures/genius-search.json";
 import geniusSong from "./fixtures/genius-song.json";
@@ -11,7 +16,11 @@ import relations from "./fixtures/mb-relations.json";
 type Host = "musicbrainz.org" | "api.discogs.com" | "api.genius.com";
 
 // The three sources run in parallel, so one shared FIFO queue would race. One queue per host instead.
-function routeByUrl(): { fetch: MockFetchFn; enqueue(host: Host, init: MockResponseInit): void; calls: MockFetch["calls"] } {
+function routeByUrl(): {
+  fetch: MockFetchFn;
+  enqueue(host: Host, init: MockResponseInit): void;
+  calls: MockFetch["calls"];
+} {
   const mocks: Record<Host, MockFetch> = {
     "musicbrainz.org": createMockFetch(),
     "api.discogs.com": createMockFetch(),
@@ -19,8 +28,11 @@ function routeByUrl(): { fetch: MockFetchFn; enqueue(host: Host, init: MockRespo
   };
   const calls: MockFetch["calls"] = [];
   const fetch: MockFetchFn = (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    const host = (Object.keys(mocks) as Host[]).find((candidate) => new URL(url).hostname.endsWith(candidate));
+    const url =
+      typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const host = (Object.keys(mocks) as Host[]).find((candidate) =>
+      new URL(url).hostname.endsWith(candidate),
+    );
     if (!host) throw new Error(`unrouted url: ${url}`);
     calls.push({ url, headers: {} });
     return mocks[host].fetch(input, init);
@@ -29,16 +41,34 @@ function routeByUrl(): { fetch: MockFetchFn; enqueue(host: Host, init: MockRespo
 }
 
 const fast = () => createThrottle({ ratePerSec: 1000 });
-const track = { trackId: "t1", artist: "Ezra Collective", title: "Victory Dance", album: "You Can't Steal My Joy", isrc: "GBBKS2000152", recordingMbid: null, hasAppleMatch: true };
-const deps = (fetch: MockFetchFn, geniusToken?: string) =>
-  ({ mbThrottle: fast(), discogsThrottle: fast(), geniusThrottle: fast(), discogsAuth: { token: "d" }, geniusToken, fetch, now: () => 1000 });
+const track = {
+  trackId: "t1",
+  artist: "Ezra Collective",
+  title: "Victory Dance",
+  album: "You Can't Steal My Joy",
+  isrc: "GBBKS2000152",
+  recordingMbid: null,
+  hasAppleMatch: true,
+};
+const deps = (fetch: MockFetchFn, geniusToken?: string) => ({
+  mbThrottle: fast(),
+  discogsThrottle: fast(),
+  geniusThrottle: fast(),
+  discogsAuth: { token: "d" },
+  geniusToken,
+  fetch,
+  now: () => 1000,
+});
 
 describe("collectTrackCredits", () => {
   test("ISRC path, all three sources, merged facts and tags", async () => {
     const route = routeByUrl();
     route.enqueue("musicbrainz.org", { status: 200, body: isrcHit });
     route.enqueue("musicbrainz.org", { status: 200, body: relations });
-    route.enqueue("api.discogs.com", { status: 200, body: { results: [{ id: 13579, type: "release", title: "x", label: [] }] } });
+    route.enqueue("api.discogs.com", {
+      status: 200,
+      body: { results: [{ id: 13579, type: "release", title: "x", label: [] }] },
+    });
     route.enqueue("api.discogs.com", { status: 200, body: release });
     route.enqueue("api.genius.com", { status: 200, body: geniusSearch });
     route.enqueue("api.genius.com", { status: 200, body: geniusSong });
@@ -99,7 +129,9 @@ describe("collectTrackCredits", () => {
     route.enqueue("musicbrainz.org", { status: 200, body: relations });
     route.enqueue("api.discogs.com", { status: 200, body: { results: [] } });
     const fetch: MockFetchFn = (input, init) =>
-      String(input instanceof Request ? input.url : input).includes("genius") ? Promise.reject(new TypeError("fetch failed")) : route.fetch(input, init);
+      String(input instanceof Request ? input.url : input).includes("genius")
+        ? Promise.reject(new TypeError("fetch failed"))
+        : route.fetch(input, init);
     const result = await collectTrackCredits(track, deps(fetch, "g"));
     expect(result.creditsStatus).toBe("error");
   });
@@ -108,7 +140,10 @@ describe("collectTrackCredits", () => {
     const route = routeByUrl();
     route.enqueue("musicbrainz.org", { status: 200, body: isrcHit });
     route.enqueue("musicbrainz.org", { status: 200, body: { ...relations, relations: {} } });
-    route.enqueue("api.discogs.com", { status: 200, body: { results: [{ id: 13579, type: "release", title: "x", label: [] }] } });
+    route.enqueue("api.discogs.com", {
+      status: 200,
+      body: { results: [{ id: 13579, type: "release", title: "x", label: [] }] },
+    });
     route.enqueue("api.discogs.com", { status: 200, body: release });
     const result = await collectTrackCredits(track, deps(route.fetch));
     expect(result.creditsStatus).toBe("found");
@@ -118,9 +153,11 @@ describe("collectTrackCredits", () => {
 
   test("an aborted signal (per-track timeout) is transient → error", async () => {
     const route = routeByUrl();
-    const result = await collectTrackCredits(track, { ...deps(route.fetch, "g"), signal: AbortSignal.abort() });
+    const result = await collectTrackCredits(track, {
+      ...deps(route.fetch, "g"),
+      signal: AbortSignal.abort(),
+    });
     expect(result.creditsStatus).toBe("error");
     expect(route.calls).toHaveLength(0);
   });
 });
-

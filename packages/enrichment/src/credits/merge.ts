@@ -5,11 +5,18 @@ import type { CreditFact, FactSource, RecordingVia } from "./types";
 const UNTAGGED_FAMILIES = new Set(["vocals"]);
 
 function normalizeName(value: string): string {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]/gu, "");
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function mergeKey(fact: CreditFact): string {
-  const rolePart = fact.group === "performer" ? (instrumentFamily(fact.role) ?? fact.role.toLowerCase()) : fact.role.toLowerCase();
+  const rolePart =
+    fact.group === "performer"
+      ? (instrumentFamily(fact.role) ?? fact.role.toLowerCase())
+      : fact.role.toLowerCase();
   return `${fact.group}|${rolePart}|${normalizeName(fact.value)}`;
 }
 
@@ -40,12 +47,17 @@ export function mergeFacts(facts: readonly CreditFact[]): CreditFact[] {
   for (const fact of facts) {
     const key = mergeKey(fact);
     const existing = merged.get(key);
-    merged.set(key, existing === undefined ? fact : {
-      ...existing,
-      personKey: preferMbPersonKey(existing.personKey, fact.personKey),
-      scope: existing.scope === "track" || fact.scope === "track" ? "track" : "album",
-      sources: uniqueSources([...existing.sources, ...fact.sources]),
-    });
+    merged.set(
+      key,
+      existing === undefined
+        ? fact
+        : {
+            ...existing,
+            personKey: preferMbPersonKey(existing.personKey, fact.personKey),
+            scope: existing.scope === "track" || fact.scope === "track" ? "track" : "album",
+            sources: uniqueSources([...existing.sources, ...fact.sources]),
+          },
+    );
   }
   return [...merged.values()];
 }
@@ -62,12 +74,18 @@ export function deriveCueTags(input: {
   const families = input.facts
     .filter((fact) => fact.group === "performer" && fact.scope === "track")
     .map((fact) => instrumentFamily(fact.role))
-    .filter((family): family is NonNullable<typeof family> => family !== null && !UNTAGGED_FAMILIES.has(family));
+    .filter(
+      (family): family is NonNullable<typeof family> =>
+        family !== null && !UNTAGGED_FAMILIES.has(family),
+    );
   const styles = input.styles.map((style) => style.toLowerCase());
   return [...new Set([...families, ...decadeTag(input.releaseYear), ...styles])];
 }
 
-export function deriveMatchConfidence(via: RecordingVia | null, hasAppleMatch: boolean): "high" | "low" {
+export function deriveMatchConfidence(
+  via: RecordingVia | null,
+  hasAppleMatch: boolean,
+): "high" | "low" {
   if (via === "isrc") return "high";
   if ((via === "search" || via === "stored") && hasAppleMatch) return "high";
   return "low";

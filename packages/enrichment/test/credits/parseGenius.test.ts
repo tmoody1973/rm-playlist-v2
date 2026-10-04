@@ -12,14 +12,26 @@ describe("searchGeniusSong", () => {
   test("accepts only an exact artist+title match, sends bearer token", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: search });
-    const id = await searchGeniusSong({ artist: "Ezra Collective", title: "Victory Dance", token: "t", throttle: fastThrottle(), fetch: mock.fetch });
+    const id = await searchGeniusSong({
+      artist: "Ezra Collective",
+      title: "Victory Dance",
+      token: "t",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
     expect(id).toBe(901);
     expect(mock.calls[0]?.headers.authorization).toBe("Bearer t");
   });
   test("a similar but different song is rejected", async () => {
     const mock = createMockFetch();
     mock.enqueue({ status: 200, body: search });
-    const id = await searchGeniusSong({ artist: "Ezra Collective", title: "Victory Lap", token: "t", throttle: fastThrottle(), fetch: mock.fetch });
+    const id = await searchGeniusSong({
+      artist: "Ezra Collective",
+      title: "Victory Lap",
+      token: "t",
+      throttle: fastThrottle(),
+      fetch: mock.fetch,
+    });
     expect(id).toBeNull();
   });
 });
@@ -39,11 +51,19 @@ describe("parseGeniusSong", () => {
     expect(JSON.stringify(facts)).not.toContain("LYRIC LINE");
   });
   test("source is the genius song page", () => {
-    expect(facts[0]?.sources[0]).toMatchObject({ source: "genius", sourceUrl: "https://genius.com/Ezra-collective-victory-dance", sourceRef: "901" });
+    expect(facts[0]?.sources[0]).toMatchObject({
+      source: "genius",
+      sourceUrl: "https://genius.com/Ezra-collective-victory-dance",
+      sourceRef: "901",
+    });
   });
 });
 
 test("relationship without songs → no throw, no facts from it", () => {
-  const bare = { id: 1, url: "https://genius.com/x", song_relationships: [{ relationship_type: "samples" }] };
+  const bare = {
+    id: 1,
+    url: "https://genius.com/x",
+    song_relationships: [{ relationship_type: "samples" }],
+  };
   expect(parseGeniusSong(bare as never, 1000)).toEqual([]);
 });

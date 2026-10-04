@@ -3,11 +3,26 @@ import { instrumentFamily } from "../../src/credits/instrumentFamily";
 import { deriveCueTags, deriveMatchConfidence, mergeFacts } from "../../src/credits/merge";
 import type { CreditFact } from "../../src/credits/types";
 
-const mb = { source: "musicbrainz" as const, sourceUrl: "https://musicbrainz.org/recording/r1", sourceRef: "r1", fetchedAt: 1 };
-const dg = { source: "discogs" as const, sourceUrl: "https://www.discogs.com/release/9", sourceRef: "9", fetchedAt: 1 };
+const mb = {
+  source: "musicbrainz" as const,
+  sourceUrl: "https://musicbrainz.org/recording/r1",
+  sourceRef: "r1",
+  fetchedAt: 1,
+};
+const dg = {
+  source: "discogs" as const,
+  sourceUrl: "https://www.discogs.com/release/9",
+  sourceRef: "9",
+  fetchedAt: 1,
+};
 
 const drummer = (sources: CreditFact["sources"], role: string, personKey?: string): CreditFact => ({
-  group: "performer", role, value: "Femi Koleoso", personKey, scope: "track", sources,
+  group: "performer",
+  role,
+  value: "Femi Koleoso",
+  personKey,
+  scope: "track",
+  sources,
 });
 
 describe("instrumentFamily", () => {
@@ -43,7 +58,10 @@ describe("instrumentFamily", () => {
 
 describe("mergeFacts", () => {
   test("same person + same instrument family from two sources → one fact, two sources", () => {
-    const merged = mergeFacts([drummer([mb], "drums", "mb:a1"), drummer([dg], "Drums", "discogs:7")]);
+    const merged = mergeFacts([
+      drummer([mb], "drums", "mb:a1"),
+      drummer([dg], "Drums", "discogs:7"),
+    ]);
     expect(merged).toHaveLength(1);
     expect(merged[0]?.sources.map((s) => s.source)).toEqual(["musicbrainz", "discogs"]);
     expect(merged[0]?.personKey).toBe("mb:a1");
@@ -63,8 +81,20 @@ describe("mergeFacts", () => {
     expect(merged[0]?.sources).toEqual([dg]);
   });
   test("unicode names stay distinct (non-Latin writers with same role)", () => {
-    const ryoji: CreditFact = { group: "writer", role: "composer", value: "坂本龍一", scope: "track", sources: [mb] };
-    const hisaishi: CreditFact = { group: "writer", role: "composer", value: "久石譲", scope: "track", sources: [dg] };
+    const ryoji: CreditFact = {
+      group: "writer",
+      role: "composer",
+      value: "坂本龍一",
+      scope: "track",
+      sources: [mb],
+    };
+    const hisaishi: CreditFact = {
+      group: "writer",
+      role: "composer",
+      value: "久石譲",
+      scope: "track",
+      sources: [dg],
+    };
     const merged = mergeFacts([ryoji, hisaishi]);
     expect(merged).toHaveLength(2);
     expect(merged.map((f) => f.value)).toContain("坂本龍一");
@@ -80,7 +110,10 @@ describe("deriveCueTags", () => {
       { group: "performer", role: "lead vocals", value: "C", scope: "track", sources: [mb] },
     ];
     expect(deriveCueTags({ facts, releaseYear: 2019, styles: ["Afrobeat", "Jazz-Funk"] })).toEqual([
-      "horns", "2010s", "afrobeat", "jazz-funk",
+      "horns",
+      "2010s",
+      "afrobeat",
+      "jazz-funk",
     ]);
   });
 });

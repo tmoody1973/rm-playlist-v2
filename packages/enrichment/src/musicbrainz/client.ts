@@ -311,10 +311,18 @@ export interface MbRecordingRelations {
   relations?: MbRelation[];
 }
 
-async function mbGetJson<T>(url: string, throttle: Throttle, signal?: AbortSignal, fetchImpl: FetchLike = globalThis.fetch): Promise<T | null> {
+async function mbGetJson<T>(
+  url: string,
+  throttle: Throttle,
+  signal?: AbortSignal,
+  fetchImpl: FetchLike = globalThis.fetch,
+): Promise<T | null> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await throttle.acquire(signal);
-    const res = await fetchImpl(url, { headers: { Accept: "application/json", "User-Agent": USER_AGENT }, signal });
+    const res = await fetchImpl(url, {
+      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+      signal,
+    });
     if (res.status === 503 && attempt === 0) {
       const retryAfter = Number.parseInt(res.headers.get("Retry-After") ?? "1", 10);
       await sleep(Math.max(1, retryAfter) * 1000, signal);
@@ -336,13 +344,20 @@ export async function lookupRecordingByIsrc(input: {
   readonly fetch?: FetchLike;
 }): Promise<string | null> {
   const url = `${API_BASE}/isrc/${encodeURIComponent(input.isrc)}?fmt=json`;
-  const json = await mbGetJson<{ recordings?: { id: string; title: string }[] }>(url, input.throttle, input.signal, input.fetch);
+  const json = await mbGetJson<{ recordings?: { id: string; title: string }[] }>(
+    url,
+    input.throttle,
+    input.signal,
+    input.fetch,
+  );
   const recordings = json?.recordings ?? [];
   // Raw match first: normalizeTitleForMb strips "(live)", which would make live and studio variants tie.
   const wantedRaw = input.title.trim().toLowerCase();
   const wantedNormalized = normalizeTitleForMb(input.title).toLowerCase();
   const exact = recordings.find((rec) => rec.title.trim().toLowerCase() === wantedRaw);
-  const loose = recordings.find((rec) => normalizeTitleForMb(rec.title).toLowerCase() === wantedNormalized);
+  const loose = recordings.find(
+    (rec) => normalizeTitleForMb(rec.title).toLowerCase() === wantedNormalized,
+  );
   return (exact ?? loose ?? recordings[0])?.id ?? null;
 }
 

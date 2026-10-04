@@ -1,11 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import {
-  creditsStatusValidator,
-  factBodyFields,
-  matchConfidenceValidator,
-} from "./factValidators";
+import { creditsStatusValidator, factBodyFields, matchConfidenceValidator } from "./factValidators";
 
 /** How many of the newest plays count as "on air right now" for priority. */
 const RECENT_PLAYS_WINDOW = 80;

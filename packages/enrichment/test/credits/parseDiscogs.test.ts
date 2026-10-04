@@ -7,10 +7,17 @@ describe("parseDiscogsRelease", () => {
   const byValue = (name: string) => facts.filter((fact) => fact.value === name);
 
   test("tracklist extraartists are track scope, multi-role split, brackets stripped", () => {
-    expect(byValue("James Mollison").map((f) => [f.role, f.scope])).toEqual([["Saxophone", "track"], ["Flute", "track"]]);
+    expect(byValue("James Mollison").map((f) => [f.role, f.scope])).toEqual([
+      ["Saxophone", "track"],
+      ["Flute", "track"],
+    ]);
   });
   test("release-level credit naming our position is track scope", () => {
-    expect(byValue("Ife Ogunjobi")[0]).toMatchObject({ role: "Trumpet", scope: "track", personKey: "discogs:222" });
+    expect(byValue("Ife Ogunjobi")[0]).toMatchObject({
+      role: "Trumpet",
+      scope: "track",
+      personKey: "discogs:222",
+    });
   });
   test("release-level credit with no tracks is album scope", () => {
     expect(byValue("Femi Koleoso")[0]?.scope).toBe("album");

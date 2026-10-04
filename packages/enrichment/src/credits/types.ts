@@ -14,7 +14,11 @@ export interface CreditFact {
   readonly role: string;
   readonly value: string;
   readonly personKey?: string;
-  readonly linkedRecording?: { readonly title: string; readonly artist?: string; readonly mbid?: string };
+  readonly linkedRecording?: {
+    readonly title: string;
+    readonly artist?: string;
+    readonly mbid?: string;
+  };
   readonly scope: "track" | "album";
   readonly sources: readonly FactSource[];
 }

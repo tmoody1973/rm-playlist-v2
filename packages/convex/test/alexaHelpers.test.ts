@@ -3,16 +3,29 @@ import { clampConnectionLimit, dedupeByKey, mergePlaysAscending } from "../conve
 
 describe("mergePlaysAscending", () => {
   test("merges, de-duplicates by _id and sorts ascending", () => {
-    const a = [{ _id: "b", playedAt: 20 }, { _id: "a", playedAt: 10 }];
-    const b = [{ _id: "b", playedAt: 20 }, { _id: "c", playedAt: 30 }];
+    const a = [
+      { _id: "b", playedAt: 20 },
+      { _id: "a", playedAt: 10 },
+    ];
+    const b = [
+      { _id: "b", playedAt: 20 },
+      { _id: "c", playedAt: 30 },
+    ];
     expect(mergePlaysAscending(a, b).map((p) => p._id)).toEqual(["a", "b", "c"]);
   });
 });
 
 describe("dedupeByKey", () => {
   test("keeps the first item per key", () => {
-    const items = [{ k: "x", n: 1 }, { k: "y", n: 2 }, { k: "x", n: 3 }];
-    expect(dedupeByKey(items, (i) => i.k)).toEqual([{ k: "x", n: 1 }, { k: "y", n: 2 }]);
+    const items = [
+      { k: "x", n: 1 },
+      { k: "y", n: 2 },
+      { k: "x", n: 3 },
+    ];
+    expect(dedupeByKey(items, (i) => i.k)).toEqual([
+      { k: "x", n: 1 },
+      { k: "y", n: 2 },
+    ]);
   });
 });
 

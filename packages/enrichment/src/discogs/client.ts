@@ -245,18 +245,31 @@ async function safeText(res: Response): Promise<string> {
   }
 }
 
-export interface DiscogsCredit { name?: string; id?: number; role?: string; tracks?: string }
+export interface DiscogsCredit {
+  name?: string;
+  id?: number;
+  role?: string;
+  tracks?: string;
+}
 export interface DiscogsRelease {
-  id: number; title?: string; year?: number; uri?: string;
-  genres?: string[]; styles?: string[];
+  id: number;
+  title?: string;
+  year?: number;
+  uri?: string;
+  genres?: string[];
+  styles?: string[];
   extraartists?: DiscogsCredit[];
   tracklist?: { position?: string; title?: string; extraartists?: DiscogsCredit[] }[];
 }
 
-export async function fetchRelease(input: DiscogsAuth & {
-  readonly releaseId: number; readonly throttle: Throttle;
-  readonly signal?: AbortSignal; readonly fetch?: FetchLike;
-}): Promise<DiscogsRelease | null> {
+export async function fetchRelease(
+  input: DiscogsAuth & {
+    readonly releaseId: number;
+    readonly throttle: Throttle;
+    readonly signal?: AbortSignal;
+    readonly fetch?: FetchLike;
+  },
+): Promise<DiscogsRelease | null> {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const params = new URLSearchParams();
   if (input.token) params.set("token", input.token);
