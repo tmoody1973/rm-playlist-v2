@@ -5,7 +5,7 @@ import type { CreditFact, RecordingVia } from "./types";
 const UNTAGGED_FAMILIES = new Set(["vocals"]);
 
 function normalizeName(value: string): string {
-  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+  return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\p{L}\p{N}]/gu, "");
 }
 
 function mergeKey(fact: CreditFact): string {

@@ -24,6 +24,15 @@ describe("instrumentFamily", () => {
   test("unknown role → null", () => {
     expect(instrumentFamily("Photography By")).toBeNull();
   });
+  test("resolves prefix collisions correctly", () => {
+    expect(instrumentFamily("harpsichord")).toBe("keys");
+    expect(instrumentFamily("bassoon")).toBe("horns");
+    expect(instrumentFamily("oboe")).toBe("horns");
+    expect(instrumentFamily("drum machine")).toBe("electronic");
+    expect(instrumentFamily("bass guitar")).toBe("bass");
+    expect(instrumentFamily("double bass")).toBe("strings");
+    expect(instrumentFamily("harp")).toBe("strings");
+  });
 });
 
 describe("mergeFacts", () => {
@@ -41,6 +50,14 @@ describe("mergeFacts", () => {
     const input = [drummer([mb], "drums"), drummer([dg], "drums")];
     mergeFacts(input);
     expect(input[0]?.sources).toHaveLength(1);
+  });
+  test("unicode names stay distinct (non-Latin writers with same role)", () => {
+    const ryoji: CreditFact = { group: "writer", role: "composer", value: "坂本龍一", scope: "track", sources: [mb] };
+    const hisaishi: CreditFact = { group: "writer", role: "composer", value: "久石譲", scope: "track", sources: [dg] };
+    const merged = mergeFacts([ryoji, hisaishi]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((f) => f.value)).toContain("坂本龍一");
+    expect(merged.map((f) => f.value)).toContain("久石譲");
   });
 });
 
