@@ -11,6 +11,8 @@ import {
   pickHomeShow,
   playAtNumber,
   rankDigest,
+  storyCutoff,
+  STORY_LOOKBACK_MS,
   pickStaleArtists,
   storiesFromBackstory,
   storyMentionsArtist,
@@ -146,6 +148,23 @@ describe("rankDigest", () => {
     expect(rankDigest({ since, now: NOW, artists: [], apple: { added: 0, expired: 1 } })).toEqual([
       { kind: "apple", added: 0, expired: 1 },
     ]));
+  describe("story lookback", () => {
+    const withStory = (publishedAt: number) =>
+      rankDigest({
+        since,
+        now: NOW,
+        artists: [
+          artist("Zhané", { stories: [{ storyId: "s", title: "t", show: "x", publishedAt }] }),
+        ],
+        apple: { added: 0, expired: 0 },
+      });
+    test("a story 10 days old with since 7 days ago is included", () =>
+      expect(withStory(NOW - 10 * 86_400_000)).toHaveLength(1));
+    test("a story 40 days before since is not", () =>
+      expect(withStory(since - 40 * 86_400_000)).toEqual([]));
+    test("storyCutoff is since minus 30 days", () =>
+      expect(storyCutoff(since)).toBe(since - STORY_LOOKBACK_MS));
+  });
   describe("boundaries", () => {
     const show = (offsetMs: number) => ({ venue: "V", city: "C", startsAtMs: NOW + offsetMs });
     test("a show starting exactly now is excluded", () =>
@@ -169,13 +188,15 @@ describe("rankDigest", () => {
       });
       expect(items.map((i) => i.kind)).toEqual(["show", "spins"]);
     });
-    test("a story published exactly at since is excluded", () =>
+    test("a story published exactly at the story cutoff is excluded", () =>
       expect(
         rankDigest({
           since,
           now: NOW,
           artists: [
-            artist("A", { stories: [{ storyId: "s", title: "t", show: "x", publishedAt: since }] }),
+            artist("A", {
+              stories: [{ storyId: "s", title: "t", show: "x", publishedAt: storyCutoff(since) }],
+            }),
           ],
           apple: { added: 0, expired: 0 },
         }),

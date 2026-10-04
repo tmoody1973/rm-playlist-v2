@@ -80,12 +80,14 @@ export const forListener = query({
     const finds = await ctx.db
       .query("finds")
       .withIndex("by_listener_saved", (q) => q.eq("listenerId", listenerId).gt("savedAt", since))
+      .order("desc")
       .take(MAX_FINDS_PER_DIGEST);
     const countWithStatus = (status: "added" | "expired") =>
       finds.filter((f) => f.appleMusic.status === status).length;
     const apple = { added: countWithStatus("added"), expired: countWithStatus("expired") };
     return {
       since,
+      now,
       items: rankDigest({ artists, apple, since, now }),
       artists: artists.map(({ artistId, name, artworkUrl }) => ({ artistId, name, artworkUrl })),
     };
@@ -93,11 +95,13 @@ export const forListener = query({
 });
 
 export const markSeen = mutation({
-  args: { serverKey: v.string(), listenerId: v.string() },
-  handler: async (ctx, { serverKey, listenerId }) => {
+  args: { serverKey: v.string(), listenerId: v.string(), seenAt: v.optional(v.number()) },
+  handler: async (ctx, { serverKey, listenerId, seenAt }) => {
     guard(serverKey);
     assertListenerId(listenerId);
-    const lastDigestAt = Date.now();
+    const currentTime = Date.now();
+    // Callers pass the digest's own `now` so spins landing while the reply is spoken aren't skipped next time.
+    const lastDigestAt = Math.min(seenAt ?? currentTime, currentTime);
     const existing = await stateFor(ctx, listenerId);
     if (existing) await ctx.db.patch(existing._id, { lastDigestAt });
     else await ctx.db.insert("listenerState", { listenerId, lastDigestAt });

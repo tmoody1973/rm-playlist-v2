@@ -75,6 +75,11 @@ export type DigestItem =
   | ({ kind: "story"; artist: string } & DigestStory)
   | { kind: "apple"; added: number; expired: number };
 
+export const STORY_LOOKBACK_MS = 30 * 86_400_000;
+
+/** Stories count as new for a month before the last visit, so a recent feature isn't lost to the spin window. */
+export const storyCutoff = (since: number): number => since - STORY_LOOKBACK_MS;
+
 /** What's new, most useful first: a show this week, the most-played artists, new stories, later shows, Apple Music. */
 export function rankDigest({
   artists,
@@ -103,7 +108,7 @@ export function rankDigest({
   const stories = artists
     .flatMap((a) =>
       a.stories
-        .filter((s) => s.publishedAt > since)
+        .filter((s) => s.publishedAt > storyCutoff(since))
         .map((s) => ({ kind: "story" as const, artist: a.name, ...s })),
     )
     .sort((x, y) => y.publishedAt - x.publishedAt);
