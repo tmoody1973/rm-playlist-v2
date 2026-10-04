@@ -211,3 +211,22 @@ export function pickHomeShow<T extends { metro: string; startsAtMs: number }>(
     null,
   );
 }
+
+export const DIGEST_DEFAULT_WINDOW_MS = 7 * 86_400_000;
+
+/** "What's new" starts at the listener's last visit, or a week ago if they have never asked. */
+export const digestSince = (lastDigestAt: number | undefined, now: number): number =>
+  lastDigestAt ?? now - DIGEST_DEFAULT_WINDOW_MS;
+
+/** Spins per station after `since`, skipping rewound plays; stations keep first-seen order. */
+export function countSpinsSince(
+  plays: { stationSlug: string; playedAt: number; deleted: boolean }[],
+  since: number,
+): { station: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const play of plays) {
+    if (play.deleted || play.playedAt <= since) continue;
+    counts.set(play.stationSlug, (counts.get(play.stationSlug) ?? 0) + 1);
+  }
+  return [...counts].map(([station, count]) => ({ station, count }));
+}

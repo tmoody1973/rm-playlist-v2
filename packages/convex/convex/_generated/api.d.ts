@@ -19,6 +19,7 @@ import type * as cadenceSong from "../cadenceSong.js";
 import type * as cadenceSummary from "../cadenceSummary.js";
 import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
+import type * as digest from "../digest.js";
 import type * as enrichment from "../enrichment.js";
 import type * as events from "../events.js";
 import type * as factValidators from "../factValidators.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   cadenceSummary: typeof cadenceSummary;
   credits: typeof credits;
   crons: typeof crons;
+  digest: typeof digest;
   enrichment: typeof enrichment;
   events: typeof events;
   factValidators: typeof factValidators;

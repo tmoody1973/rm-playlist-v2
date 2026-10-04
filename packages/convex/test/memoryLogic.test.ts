@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   MAX_SCREEN,
   SCREEN_TTL_MS,
+  countSpinsSince,
+  digestSince,
   lookupKeyOrNull,
   nextFollow,
   hasRecentOtherSave,
@@ -298,4 +300,29 @@ describe("pickHomeShow", () => {
   test("else the soonest", () =>
     expect(pickHomeShow([{ metro: "Detroit", startsAtMs: 500 }, chicago])).toBe(chicago));
   test("null when empty", () => expect(pickHomeShow([])).toBeNull());
+});
+
+describe("digestSince", () => {
+  test("uses the last visit when there is one", () => expect(digestSince(123, NOW)).toBe(123));
+  test("defaults to the last 7 days", () =>
+    expect(digestSince(undefined, NOW)).toBe(NOW - 7 * 86_400_000));
+  test("keeps a last visit of 0", () => expect(digestSince(0, NOW)).toBe(0));
+});
+
+describe("countSpinsSince", () => {
+  const play = (stationSlug: string, playedAt: number, deleted = false) => ({
+    stationSlug,
+    playedAt,
+    deleted,
+  });
+  test("counts per station in first-seen order", () =>
+    expect(countSpinsSince([play("hyfin", 5), play("88nine", 6), play("hyfin", 7)], 1)).toEqual([
+      { station: "hyfin", count: 2 },
+      { station: "88nine", count: 1 },
+    ]));
+  test("excludes deleted plays and plays at or before since", () =>
+    expect(
+      countSpinsSince([play("hyfin", 10), play("hyfin", 9, true), play("hyfin", 20)], 10),
+    ).toEqual([{ station: "hyfin", count: 1 }]));
+  test("empty when nothing is new", () => expect(countSpinsSince([], 1)).toEqual([]));
 });
