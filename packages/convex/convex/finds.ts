@@ -9,11 +9,19 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import { followArtist } from "./follows";
-import { RECENT_SAVE_WINDOW_MS, hasRecentOtherSave, pickFindStory } from "./memoryLogic";
+import {
+  RECENT_SAVE_WINDOW_MS,
+  hasRecentOtherSave,
+  pickFindStory,
+  pickHomeShow,
+} from "./memoryLogic";
 import { upcomingShowsByMetro } from "./plays";
 import { clampFindsLimit, dedupeKeyFor } from "./findsLogic";
 import { assertListenerId, assertServerKey } from "./listenerGuard";
 import { appleMusicStatusValidator } from "./schema";
+
+// hasRecentOtherSave needs just one other row; a few cover the current find too.
+const RECENT_FINDS_READ_LIMIT = 5;
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
@@ -101,7 +109,8 @@ export const save = mutation({
     const { firstFollow } = artistId
       ? await followArtist(ctx, listenerId, artistId, artist, "find")
       : { firstFollow: false };
-    const [show] = await upcomingShowsByMetro(ctx, artist);
+    const show = pickHomeShow(await upcomingShowsByMetro(ctx, artist));
+    // A brand-new follow only schedules the artistWatch refresh, so story is usually null until it runs.
     const watch = artistId
       ? await ctx.db
           .query("artistWatch")
@@ -113,7 +122,7 @@ export const save = mutation({
       .withIndex("by_listener_saved", (q) =>
         q.eq("listenerId", listenerId).gt("savedAt", now - RECENT_SAVE_WINDOW_MS),
       )
-      .collect();
+      .take(RECENT_FINDS_READ_LIMIT);
     return {
       status: "ok" as const,
       findId,

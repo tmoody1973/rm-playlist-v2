@@ -6,6 +6,7 @@ import {
   nextFollow,
   hasRecentOtherSave,
   pickFindStory,
+  pickHomeShow,
   playAtNumber,
   rankDigest,
   pickStaleArtists,
@@ -287,4 +288,14 @@ describe("hasRecentOtherSave", () => {
   test("ignores finds older than the window", () =>
     expect(hasRecentOtherSave([finds[1]!], "x", NOW)).toBe(false));
   test("false with no finds", () => expect(hasRecentOtherSave([], "x", NOW)).toBe(false));
+});
+
+describe("pickHomeShow", () => {
+  const chicago = { metro: "Chicago", startsAtMs: 100 };
+  const milwaukee = { metro: "Milwaukee", startsAtMs: 900 };
+  test("prefers Milwaukee even when later", () =>
+    expect(pickHomeShow([chicago, milwaukee])).toBe(milwaukee));
+  test("else the soonest", () =>
+    expect(pickHomeShow([{ metro: "Detroit", startsAtMs: 500 }, chicago])).toBe(chicago));
+  test("null when empty", () => expect(pickHomeShow([])).toBeNull());
 });

@@ -1,3 +1,4 @@
+import { METROS } from "./showsByMetro";
 // Pure listener-memory logic: no Convex imports, so it unit-tests without a deployment.
 export const SCREEN_TTL_MS = 30 * 60_000;
 export const MAX_SCREEN = 10;
@@ -195,4 +196,18 @@ export function hasRecentOtherSave(
   now: number,
 ): boolean {
   return finds.some((f) => f.id !== currentFindId && f.savedAt > now - RECENT_SAVE_WINDOW_MS);
+}
+
+const HOME_METRO = METROS[0].name;
+
+/** The show to mention for a listener: Milwaukee if any, else the soonest. */
+export function pickHomeShow<T extends { metro: string; startsAtMs: number }>(
+  shows: readonly T[],
+): T | null {
+  const home = shows.find((s) => s.metro === HOME_METRO);
+  if (home) return home;
+  return shows.reduce<T | null>(
+    (a, s) => (a === null || s.startsAtMs < a.startsAtMs ? s : a),
+    null,
+  );
 }
