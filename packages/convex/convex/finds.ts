@@ -50,10 +50,13 @@ type SaveResult =
     };
 
 export const save = mutation({
-  args: { serverKey: v.string(), listenerId: v.string(), playId: v.id("plays") },
-  handler: async (ctx, { serverKey, listenerId, playId }): Promise<SaveResult> => {
+  // playId is a string, not v.id: Alexa sometimes sends a made-up id, and that must answer "which song?", not fail as an outage.
+  args: { serverKey: v.string(), listenerId: v.string(), playId: v.string() },
+  handler: async (ctx, { serverKey, listenerId, playId: rawPlayId }): Promise<SaveResult> => {
     guard(serverKey);
     assertListenerId(listenerId);
+    const playId = ctx.db.normalizeId("plays", rawPlayId);
+    if (playId === null) return { status: "not_found" as const };
     const play = await ctx.db.get(playId);
     if (play === null || play.deletedAt !== undefined) return { status: "not_found" as const };
     const { track, artist, title, stationSlug } = await songFor(ctx, play);

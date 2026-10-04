@@ -151,15 +151,18 @@ export const findSongPlayed = query({
     from: v.number(),
     to: v.number(),
     cues: v.optional(v.array(v.string())),
-    beforePlayId: v.optional(v.id("plays")),
-    afterPlayId: v.optional(v.id("plays")),
+    // Strings, not v.id: an id Alexa made up answers "no_spins" instead of failing as an outage.
+    beforePlayId: v.optional(v.string()),
+    afterPlayId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const station = await stationBySlug(ctx, args.station);
     if (station === null) return { status: "unknown_station" as const, matches: [] };
     const isLocal = args.station === LOCAL_STATION_SLUG;
-    const anchorId = args.beforePlayId ?? args.afterPlayId;
-    if (anchorId !== undefined) {
+    const rawAnchorId = args.beforePlayId ?? args.afterPlayId;
+    if (rawAnchorId !== undefined) {
+      const anchorId = ctx.db.normalizeId("plays", rawAnchorId);
+      if (anchorId === null) return { status: "no_spins" as const, matches: [] };
       const match = await neighborMatch(
         ctx,
         station._id,
@@ -231,10 +234,13 @@ async function trackBasics(ctx: QueryCtx, track: Doc<"tracks">) {
 
 /** Alexa: "where does that sound come from / tell me about it". Unresolved plays answer with playlist basics. */
 export const getTrackFacts = query({
-  args: { trackId: v.optional(v.id("tracks")), playId: v.optional(v.id("plays")) },
+  // Strings, not v.id: an id Alexa made up answers "not_found" instead of failing as an outage.
+  args: { trackId: v.optional(v.string()), playId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const play = args.playId ? await ctx.db.get(args.playId) : null;
-    const trackId = args.trackId ?? play?.canonicalTrackId;
+    const playId = args.playId ? ctx.db.normalizeId("plays", args.playId) : null;
+    const play = playId ? await ctx.db.get(playId) : null;
+    const trackId =
+      (args.trackId ? ctx.db.normalizeId("tracks", args.trackId) : null) ?? play?.canonicalTrackId;
     const track = trackId ? await ctx.db.get(trackId) : null;
     if (track === null) {
       if (play === null) return { status: "not_found" as const };
