@@ -460,4 +460,14 @@ describe("preferFullMatches", () => {
     const hits = [play("A", "Groove")];
     expect(preferFullMatches(hits, "  ")).toEqual(hits);
   });
+
+  test("artist plus title query keeps only the song by that artist", () => {
+    const hits = [play("Nas", "Made You Look"), play("Nas", "One Mic")];
+    expect(titles(preferFullMatches(hits, "Nas Made You Look"))).toEqual(["Made You Look"]);
+  });
+
+  test("stopword or misspelled query with no full match returns all hits", () => {
+    const hits = [play("A", "Groove Thang"), play("B", "Groove Holmes")];
+    expect(preferFullMatches(hits, "the groove thing")).toEqual(hits);
+  });
 });

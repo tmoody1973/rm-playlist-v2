@@ -422,7 +422,8 @@ export const searchPlays = query({
         .take(SEARCH_HITS_PER_INDEX),
     ]);
     // Full-match preference spans both indexes, so filter the union, then merge/dedupe newest-first.
-    const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), text);
+    const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), searchText);
+    // mergeSearchHits is reused here for dedupe + newest-first.
     const hits = mergeSearchHits(candidates, [], SEARCH_RESULT_LIMIT).flatMap((play) => {
       const stationRow = stationById.get(play.stationId);
       return stationRow ? [{ play, stationRow }] : [];
