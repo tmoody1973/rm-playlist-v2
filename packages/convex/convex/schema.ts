@@ -299,7 +299,7 @@ export default defineSchema({
     .index("by_isrc", ["isrc"])
     .index("by_spotify", ["spotifyTrackId"])
     .index("by_apple_music", ["appleMusicSongId"])
-    .index("by_credits_status", ["creditsStatus"])
+    .index("by_credits_status", ["creditsStatus", "creditsFetchedAt"])
     .index("by_recording_mbid", ["recordingMbid"]),
 
   /**

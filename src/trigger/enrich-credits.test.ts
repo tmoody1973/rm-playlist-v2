@@ -83,6 +83,42 @@ describe("enrichCreditsBatch", () => {
     expect(summary).toMatchObject({ attempted: 2, crashed: 1, found: 1 });
   });
 
+  test("a crashed track is parked as error so it leaves the untried queue", async () => {
+    const client = fakeClient([row("t1")]);
+    await enrichCreditsBatch({
+      client: client as never,
+      deadlineMs: Number.POSITIVE_INFINITY,
+      now: () => 0,
+      collect: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(client.writes).toEqual([
+      { trackId: "t1", creditsStatus: "error", facts: [], cueTags: [] },
+    ]);
+  });
+
+  test("a failing park write is logged, not thrown", async () => {
+    const logs: string[] = [];
+    const client = {
+      query: async () => [row("t1")],
+      mutation: async () => {
+        throw new Error("convex down");
+      },
+    };
+    const summary = await enrichCreditsBatch({
+      client: client as never,
+      deadlineMs: Number.POSITIVE_INFINITY,
+      now: () => 0,
+      log: (msg) => logs.push(msg),
+      collect: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(summary.crashed).toBe(1);
+    expect(logs.some((msg) => msg.includes("could not park"))).toBe(true);
+  });
+
   test("a failing work-queue query logs once and returns a zeroed summary", async () => {
     const logs: string[] = [];
     const writes: unknown[] = [];

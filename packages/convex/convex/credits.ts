@@ -47,9 +47,13 @@ async function tracksWithStatus(
   status: Doc<"tracks">["creditsStatus"],
   limit: number,
 ): Promise<Doc<"tracks">[]> {
+  // Index is (creditsStatus, creditsFetchedAt): ascending = least recently
+  // attempted first, so a track that keeps failing goes to the back and
+  // can't hold the retry tier.
   return ctx.db
     .query("tracks")
     .withIndex("by_credits_status", (q) => q.eq("creditsStatus", status))
+    .order("asc")
     .take(limit);
 }
 
