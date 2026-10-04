@@ -59,6 +59,7 @@ type SaveResult =
       title: string;
       alreadySaved: boolean;
       artistName: string;
+      artistId: string | null;
       firstFollow: boolean;
       nextShow: { venue: string; city: string; startsAtMs: number } | null;
       story: { storyId: string; title: string; show: string } | null;
@@ -131,6 +132,7 @@ export const save = mutation({
       title,
       alreadySaved: existing !== null,
       artistName: artist,
+      artistId,
       firstFollow,
       nextShow: show ? { venue: show.venue, city: show.city, startsAtMs: show.startsAtMs } : null,
       story: pickFindStory(watch),

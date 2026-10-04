@@ -101,7 +101,7 @@ export const markSeen = mutation({
     assertListenerId(listenerId);
     const currentTime = Date.now();
     // Callers pass the digest's own `now` so spins landing while the reply is spoken aren't skipped next time.
-    const lastDigestAt = Math.min(seenAt ?? currentTime, currentTime);
+    const lastDigestAt = Math.min(Number.isFinite(seenAt) ? seenAt! : currentTime, currentTime);
     const existing = await stateFor(ctx, listenerId);
     if (existing) await ctx.db.patch(existing._id, { lastDigestAt });
     else await ctx.db.insert("listenerState", { listenerId, lastDigestAt });

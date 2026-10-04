@@ -92,17 +92,17 @@ export const refresh = internalAction({
           reason: url ? "no_artist" : "no_backstory_url",
         }),
       );
+      // A dangling artist would otherwise sort first (never checked) in every batch; a missing URL is config, so stay unstamped.
+      if (url) await ctx.runMutation(internal.artistWatch.markChecked, { artistId });
       return;
     }
-    const failureReason = await fetchStoriesOrReason(url, name);
-    if (typeof failureReason === "string") {
-      console.error(
-        JSON.stringify({ event: "artist_watch.backstory_failed", reason: failureReason }),
-      );
+    const outcome = await fetchStoriesOrReason(url, name);
+    if (typeof outcome === "string") {
+      console.error(JSON.stringify({ event: "artist_watch.backstory_failed", reason: outcome }));
       await ctx.runMutation(internal.artistWatch.markChecked, { artistId });
       return; // the daily cron retries
     }
-    const stories = failureReason;
+    const stories = outcome;
     await ctx.runMutation(internal.artistWatch.store, { artistId, stories });
   },
 });
