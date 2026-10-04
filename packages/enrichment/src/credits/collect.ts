@@ -11,7 +11,6 @@ import { parseMusicBrainzRelations } from "./parseMusicBrainz";
 import type { CreditFact, RecordingVia, TrackCreditsResult, TrackForCredits } from "./types";
 
 const MIN_SEARCH_SCORE = 90;
-const TRANSIENT_CODES = new Set(["rate_limited", "upstream_5xx"]);
 
 export interface CollectDeps {
   readonly mbThrottle: Throttle;
@@ -21,18 +20,26 @@ export interface CollectDeps {
   readonly geniusToken?: string;
   readonly fetch?: FetchLike;
   readonly now?: () => number;
+  /** Bounds the whole track (every source); an abort is a transient failure. */
+  readonly signal?: AbortSignal;
 }
 
 interface SourceOutcome { facts: CreditFact[]; styles?: string[]; year?: number; recordingMbid?: string; via?: RecordingVia }
 
-function isTransient(err: unknown): boolean {
-  const code = (err as { code?: string } | null)?.code;
-  return code !== undefined && TRANSIENT_CODES.has(code);
+/** Our parser choked on the payload: retrying won't help, so it's a recorded problem, not a retry. */
+class ParseError extends Error {}
+
+function parsing<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (err) {
+    throw new ParseError(err instanceof Error ? err.message : String(err));
+  }
 }
 
 async function resolveRecording(track: TrackForCredits, deps: CollectDeps): Promise<{ mbid: string; via: RecordingVia } | null> {
   if (track.recordingMbid) return { mbid: track.recordingMbid, via: "stored" };
-  const common = { throttle: deps.mbThrottle, fetch: deps.fetch };
+  const common = { throttle: deps.mbThrottle, fetch: deps.fetch, signal: deps.signal };
   if (track.isrc) {
     const mbid = await lookupRecordingByIsrc({ ...common, isrc: track.isrc, title: track.title });
     if (mbid) return { mbid, via: "isrc" };
@@ -44,35 +51,39 @@ async function resolveRecording(track: TrackForCredits, deps: CollectDeps): Prom
 async function fromMusicBrainz(track: TrackForCredits, deps: CollectDeps, fetchedAt: number): Promise<SourceOutcome> {
   const recording = await resolveRecording(track, deps);
   if (recording === null) return { facts: [] };
-  const json = await fetchRecordingRelations({ recordingMbid: recording.mbid, throttle: deps.mbThrottle, fetch: deps.fetch });
-  const parsed = json ? parseMusicBrainzRelations(json, fetchedAt) : { facts: [] };
+  const json = await fetchRecordingRelations({ recordingMbid: recording.mbid, throttle: deps.mbThrottle, fetch: deps.fetch, signal: deps.signal });
+  const parsed = json ? parsing(() => parseMusicBrainzRelations(json, fetchedAt)) : { facts: [] };
   return { ...parsed, year: parsed.releaseYear, recordingMbid: recording.mbid, via: recording.via };
 }
 
 async function fromDiscogs(track: TrackForCredits, deps: CollectDeps, fetchedAt: number): Promise<SourceOutcome> {
   if (!track.album) return { facts: [] };
-  const common = { ...deps.discogsAuth, throttle: deps.discogsThrottle, fetch: deps.fetch };
+  const common = { ...deps.discogsAuth, throttle: deps.discogsThrottle, fetch: deps.fetch, signal: deps.signal };
   const hit = (await searchRelease({ ...common, artist: track.artist, album: track.album }))[0];
   const json = hit ? await fetchRelease({ ...common, releaseId: hit.discogsReleaseId }) : null;
-  return json ? parseDiscogsRelease(json, track.title, fetchedAt) : { facts: [] };
+  return json ? parsing(() => parseDiscogsRelease(json, track.title, fetchedAt)) : { facts: [] };
 }
 
 async function fromGenius(track: TrackForCredits, deps: CollectDeps, fetchedAt: number): Promise<SourceOutcome> {
   if (!deps.geniusToken) return { facts: [] };
-  const common = { token: deps.geniusToken, throttle: deps.geniusThrottle, fetch: deps.fetch };
+  const common = { token: deps.geniusToken, throttle: deps.geniusThrottle, fetch: deps.fetch, signal: deps.signal };
   const songId = await searchGeniusSong({ ...common, artist: track.artist, title: track.title });
   const song = songId === null ? null : await fetchGeniusSong({ ...common, songId });
-  return { facts: song ? parseGeniusSong(song, fetchedAt) : [] };
+  return { facts: song ? parsing(() => parseGeniusSong(song, fetchedAt)) : [] };
 }
 
 type Settled = { outcome: SourceOutcome } | { transient: true } | { problem: string };
 
+/**
+ * Every source failure except our own parser is transient: auth (401/403), rate limits,
+ * 5xx, network errors and timeouts all keep old facts and retry later.
+ */
 async function settle(name: string, run: () => Promise<SourceOutcome>): Promise<Settled> {
   try {
     return { outcome: await run() };
   } catch (err) {
-    if (isTransient(err)) return { transient: true };
-    return { problem: `${name}: ${err instanceof Error ? err.message : String(err)}` };
+    if (err instanceof ParseError) return { problem: `${name}: ${err.message}` };
+    return { transient: true };
   }
 }
 

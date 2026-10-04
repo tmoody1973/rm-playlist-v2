@@ -47,6 +47,8 @@ const DISCOGS_RATE_PER_SEC = 1;
 /** Stop credits work this long after the run starts so a 1-minute cron tick doesn't queue behind itself. */
 const CREDITS_DEADLINE_MS = 50_000;
 const GENIUS_RATE_PER_SEC = 2;
+/** Bounds a hung upstream on one track so the every-minute job can't run to maxDuration. */
+const PER_TRACK_TIMEOUT_MS = 20_000;
 
 export interface PendingPlay {
   readonly _id: string;
@@ -227,6 +229,8 @@ export const enrichPendingPlays = schedules.task({
       );
     }
 
+    const geniusToken = process.env.GENIUS_ACCESS_TOKEN;
+    if (!geniusToken) logger.warn("GENIUS_ACCESS_TOKEN not set — Genius credits skipped");
     const credits = await enrichCreditsBatch({
       client,
       deadlineMs: runStartedAt + CREDITS_DEADLINE_MS,
@@ -240,7 +244,8 @@ export const enrichPendingPlays = schedules.task({
             consumerKey: process.env.DISCOGS_CONSUMER_KEY,
             consumerSecret: process.env.DISCOGS_CONSUMER_SECRET,
           },
-          geniusToken: process.env.GENIUS_ACCESS_TOKEN,
+          geniusToken,
+          signal: AbortSignal.timeout(PER_TRACK_TIMEOUT_MS),
         }),
       log: (msg) => logger.warn(msg),
     });

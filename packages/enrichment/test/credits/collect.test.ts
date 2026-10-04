@@ -81,4 +81,46 @@ describe("collectTrackCredits", () => {
     expect(result.creditsStatus).toBe("none");
     expect(result.matchConfidence).toBe("low");
   });
+
+  test("Discogs 401 and Genius 403 are transient → error", async () => {
+    const route = routeByUrl();
+    route.enqueue("musicbrainz.org", { status: 200, body: isrcHit });
+    route.enqueue("musicbrainz.org", { status: 200, body: relations });
+    route.enqueue("api.discogs.com", { status: 401, body: { message: "unauthorized" } });
+    route.enqueue("api.genius.com", { status: 403, body: { error: "forbidden" } });
+    const result = await collectTrackCredits(track, deps(route.fetch, "g"));
+    expect(result.creditsStatus).toBe("error");
+    expect(result.problems).toEqual([]);
+  });
+
+  test("a network failure (fetch throws) is transient → error", async () => {
+    const route = routeByUrl();
+    route.enqueue("musicbrainz.org", { status: 200, body: isrcHit });
+    route.enqueue("musicbrainz.org", { status: 200, body: relations });
+    route.enqueue("api.discogs.com", { status: 200, body: { results: [] } });
+    const fetch: MockFetchFn = (input, init) =>
+      String(input instanceof Request ? input.url : input).includes("genius") ? Promise.reject(new TypeError("fetch failed")) : route.fetch(input, init);
+    const result = await collectTrackCredits(track, deps(fetch, "g"));
+    expect(result.creditsStatus).toBe("error");
+  });
+
+  test("a parser exception is a recorded problem, not transient; status comes from the other sources", async () => {
+    const route = routeByUrl();
+    route.enqueue("musicbrainz.org", { status: 200, body: isrcHit });
+    route.enqueue("musicbrainz.org", { status: 200, body: { ...relations, relations: {} } });
+    route.enqueue("api.discogs.com", { status: 200, body: { results: [{ id: 13579, type: "release", title: "x", label: [] }] } });
+    route.enqueue("api.discogs.com", { status: 200, body: release });
+    const result = await collectTrackCredits(track, deps(route.fetch));
+    expect(result.creditsStatus).toBe("found");
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toStartWith("musicbrainz:");
+  });
+
+  test("an aborted signal (per-track timeout) is transient → error", async () => {
+    const route = routeByUrl();
+    const result = await collectTrackCredits(track, { ...deps(route.fetch, "g"), signal: AbortSignal.abort() });
+    expect(result.creditsStatus).toBe("error");
+    expect(route.calls).toHaveLength(0);
+  });
 });
+
