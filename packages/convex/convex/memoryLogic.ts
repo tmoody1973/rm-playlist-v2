@@ -22,7 +22,11 @@ export function nextFollow(
   existing: { status: FollowStatus; source: FollowSource } | null,
   source: FollowSource,
 ): { status: "following"; source: FollowSource } | null {
-  if (source === "explicit") return { status: "following", source };
+  if (source === "explicit") {
+    const alreadyExplicitlyFollowing =
+      existing?.status === "following" && existing.source === "explicit";
+    return alreadyExplicitlyFollowing ? null : { status: "following", source };
+  }
   return existing === null ? { status: "following", source } : null;
 }
 
@@ -170,6 +174,6 @@ export function pickStaleArtists<T extends string>(
     .map(({ artistId }) => artistId);
 }
 
-/** A spoken artist name is usable only if it has something besides whitespace; otherwise treat it as unknown. */
-export const isUsableArtistName = (name: string | undefined): name is string =>
-  name !== undefined && name.trim().length > 0;
+/** normalizeArtistKey yields "" for non-Latin or punctuation-only names, and every such artist shares that key, so a lookup by it would hit an arbitrary one: treat it as unknown. */
+export const lookupKeyOrNull = (artistKey: string): string | null =>
+  artistKey === "" ? null : artistKey;

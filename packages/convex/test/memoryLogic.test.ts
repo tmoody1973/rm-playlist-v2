@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   MAX_SCREEN,
   SCREEN_TTL_MS,
-  isUsableArtistName,
+  lookupKeyOrNull,
   nextFollow,
   playAtNumber,
   rankDigest,
@@ -36,7 +36,16 @@ describe("nextFollow", () => {
     expect(nextFollow({ status: "unfollowed", source: "explicit" }, "find")).toBeNull());
   test("a save leaves an existing follow alone", () =>
     expect(nextFollow({ status: "following", source: "explicit" }, "find")).toBeNull());
-  test("an explicit follow always follows", () =>
+  test("an explicit follow of an existing explicit follow is a no-op", () =>
+    expect(nextFollow({ status: "following", source: "explicit" }, "explicit")).toBeNull());
+  test("an explicit follow upgrades a find-sourced follow", () =>
+    expect(nextFollow({ status: "following", source: "find" }, "explicit")).toEqual({
+      status: "following",
+      source: "explicit",
+    }));
+  test("a save never revives a find-sourced unfollow", () =>
+    expect(nextFollow({ status: "unfollowed", source: "find" }, "find")).toBeNull());
+  test("an explicit follow re-follows an unfollowed row", () =>
     expect(nextFollow({ status: "unfollowed", source: "explicit" }, "explicit")).toEqual({
       status: "following",
       source: "explicit",
@@ -243,11 +252,10 @@ describe("pickStaleArtists", () => {
   });
 });
 
-describe("isUsableArtistName", () => {
-  test("rejects missing, empty and whitespace-only names", () => {
-    expect(isUsableArtistName(undefined)).toBe(false);
-    expect(isUsableArtistName("")).toBe(false);
-    expect(isUsableArtistName("   ")).toBe(false);
-    expect(isUsableArtistName("Tennis")).toBe(true);
+describe("lookupKeyOrNull", () => {
+  // Keys here are what normalizeArtistKey produces: "" for non-Latin or punctuation-only names.
+  test("null for an empty key (non-Latin, punctuation-only, blank names)", () => {
+    expect(lookupKeyOrNull("")).toBeNull(); // "坂本龍一", "Мумий Тролль", "!!!", "   "
   });
+  test("passes a normal key through", () => expect(lookupKeyOrNull("tennis")).toBe("tennis"));
 });

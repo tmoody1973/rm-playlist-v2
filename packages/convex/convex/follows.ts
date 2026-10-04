@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { mutation, type MutationCtx } from "./_generated/server";
 import { normalizeArtistKey } from "./enrichment";
 import { assertListenerId, assertServerKey } from "./listenerGuard";
-import { isUsableArtistName, nextFollow } from "./memoryLogic";
+import { lookupKeyOrNull, nextFollow } from "./memoryLogic";
 
 const guard = (serverKey: string) =>
   assertServerKey(serverKey, process.env.RADIO_COMMONS_SERVER_KEY);
@@ -17,10 +17,11 @@ async function artistFor(
   const play = id ? await ctx.db.get(id) : null;
   const fromPlay = play?.canonicalArtistId ? await ctx.db.get(play.canonicalArtistId) : null;
   if (fromPlay) return fromPlay;
-  if (!isUsableArtistName(artist)) return null;
+  const artistKey = artist === undefined ? null : lookupKeyOrNull(normalizeArtistKey(artist));
+  if (artistKey === null) return null;
   return ctx.db
     .query("artists")
-    .withIndex("by_artist_key", (q) => q.eq("artistKey", normalizeArtistKey(artist)))
+    .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
     .first();
 }
 

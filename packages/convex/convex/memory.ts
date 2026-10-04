@@ -18,10 +18,10 @@ export const rememberScreen = mutation({
   handler: async (ctx, { serverKey, listenerId, playIds }) => {
     guard(serverKey);
     assertListenerId(listenerId);
-    const valid = playIds
-      .map((id) => ctx.db.normalizeId("plays", id))
-      .filter((id): id is Id<"plays"> => id !== null)
-      .slice(0, MAX_SCREEN);
+    const normalized = playIds.map((id) => ctx.db.normalizeId("plays", id));
+    // Dropping a bad id would shift later numbers onto the wrong song, so keep the previous screen instead.
+    if (normalized.some((id) => id === null)) return null;
+    const valid = (normalized as Id<"plays">[]).slice(0, MAX_SCREEN);
     const screen = { shownAt: Date.now(), playIds: valid };
     const existing = await stateFor(ctx, listenerId);
     if (existing) await ctx.db.patch(existing._id, { screen });
