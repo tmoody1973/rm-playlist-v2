@@ -27,6 +27,8 @@ Success:
 | **Backstory** | CDS music coverage: premieres, Concert Picks, sessions. Premiere facts stay in Backstory |
 | **Radio Commons** | MCP tools. Adds `src/lib/playlist.ts`, copying `src/lib/backstory.ts` (ConvexHttpClient, timeout race, zod-validated replies) |
 
+This repo also ingests concerts from Ticketmaster and AXS across Milwaukee, Madison and Chicago (`events`, `eventArtists`), and already links them to played artists for the widget's LIVE row. Small local shows live in Field Guide, which Radio Commons already reads (`src/lib/fieldGuide.ts`). Radio Commons merges our shows with Field Guide's the same way it merges premiere facts.
+
 Premiere facts are combined **when Radio Commons answers**, not by copying data between databases (decision 006). Radio Commons calls `getTrackFacts` here and Backstory's premiere lookup in parallel, joining on `trackKey`.
 
 **Out of scope here:** the Finds library (#2), play-along game rounds (#3), the Tier 2 Crate worker (#4), and the MCP tools themselves (Radio Commons).
@@ -128,7 +130,7 @@ New file `packages/convex/convex/alexa.ts`. These are public read-only queries, 
 1. Resolve the station slug, then read plays by `by_station_played_at` within `[from, to]`. Drop `ignored` and soft-deleted plays.
 2. With `beforePlayId` / `afterPlayId`: return the neighboring non-ignored spin on the same station ("the one before that").
 3. Score each spin: matched cue tags (weighted first), then nearness to the window's midpoint.
-4. Return up to 3 matches, each `{ label: "1"|"2"|"3", playId, artist, title, playedAt, trackId|null, trackKey, matchedCues, matchReason, matchConfidence, artworkUrl }`. `matchReason` is short and factual: "credited with trumpet".
+4. Return up to 3 matches, each `{ label: "1"|"2"|"3", playId, artist, title, playedAt, trackId|null, trackKey, matchedCues, matchReason, matchConfidence, artworkUrl, upcomingShows }` (`upcomingShows` per 5.4). `matchReason` is short and factual: "credited with trumpet".
 
 `status` values:
 - `ok`: one match clearly ahead.
@@ -143,6 +145,7 @@ New file `packages/convex/convex/alexa.ts`. These are public read-only queries, 
 - track basics (title, artist, album, year, label, ISRC, artwork)
 - `trackKey`
 - facts grouped by `group`, each with its `sources` list (name + URL for attribution)
+- `upcomingShows` (5.4)
 - `evidence`
 
 `evidence` values:
@@ -158,6 +161,23 @@ A station-only SongDNA:
 
 Results are capped (default 5) and ordered with most-recently-played first. A popular session player could match hundreds of tracks, so the per-person scan is capped too.
 
+### 5.4 Upcoming shows (reuse, not new)
+
+This powers hero-flow step 5: "They're playing Turner Hall Friday."
+
+`findLiveEventForArtist` in `plays.ts` already does the work for the widget. It normalizes the artist with `normalizeEventArtistKey`, reads `eventArtists.by_artist_key` (capped fan-out), and drops duplicates, past shows, and cancelled/postponed shows.
+
+Change:
+- Extract its candidate-gathering into `upcomingEventsForArtist(ctx, artistName)`, returning sorted candidates.
+- `findLiveEventForArtist` becomes "first candidate". The widget is unchanged.
+- New `upcomingShowsByCity` takes the soonest candidate **per city**, up to 3, sorted by date. Each entry uses the existing `LiveEventSummary` shape, which already carries venue, city, date, ticket URL, role and lineup.
+
+Rules:
+- Show lookups always use the **event** normalizer (`normalizeEventArtistKey`), never `trackKey`, so the widget and Alexa agree on who's playing.
+- The lookup goes by artist **name**, so unresolved plays get shows too.
+
+**To check in planning:** the `take(MAX_LOOKUP_FANOUT)` read happens before the past-date filter. An artist with ≥10 past `eventArtists` rows could hide a future show. Check whether past events are pruned. If not, fix it inside the extracted helper; the widget benefits too.
+
 ## 6. Graceful degradation
 
 Every spin is answerable. Only the depth changes.
@@ -167,6 +187,8 @@ Every spin is answerable. Only the depth changes.
 | Unresolved play | ✅ | ❌ | Playlist basics, `evidence: none`, plus any Backstory premiere | ❌ | ❌ |
 | Resolved, no credits | ✅ | Decade/style only | Basics + album/year/label | ❌ | ❌ |
 | Credits found | ✅ | ✅ | Full sourced facts | ✅ | only if `rich` |
+
+Upcoming shows work at every level, since they match on artist name.
 
 Staff fixes go through the existing Needs Attention panel and `overrideUnresolvedIdentity`. A fixed track enters the credits queue on the next tick.
 
@@ -180,6 +202,8 @@ Unit tests on pure functions in `packages/enrichment` and `packages/convex/test`
 - `matchConfidence` and `evidence` rules
 - cue scoring and the ranking/status choice (`ok` vs `options` vs `cues_unchecked`)
 - `trackKey` shared fixture file (also copied to Backstory)
+
+Shows: `upcomingShowsByCity` with an artist playing Chicago before Milwaukee returns both, date-sorted, one per city. The existing widget path still returns the single soonest show (regression test).
 
 Query tests: `findSongPlayed` once per degradation level, plus "the one before that" across an ignored station ID. `getTrackConnections` with a capped popular person.
 
