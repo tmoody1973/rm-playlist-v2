@@ -248,3 +248,15 @@ Crate fetches raw JSON and lets an AI interpret it, so the deterministic parsers
 What we take from them: role-grouped credits, people as followable keys, samples/covers. Where we differ: per-fact citations, and no popularity threshold. That's how local debuts get stories.
 
 Sources: [Spotify for Artists blog](https://artists.spotify.com/en/blog/spotlighting-the-people-connections-and-stories-behind-your-music), [About the Song support page](https://support.spotify.com/us/artists/article/about-the-song/), [TechCrunch on SongDNA](https://techcrunch.com/2026/03/24/spotifys-songdna-feature-lets-you-explore-the-connections-behind-your-favorite-songs/), [Digital Music News](https://www.digitalmusicnews.com/2025/11/19/spotify-songdna-launch/).
+
+## 11. Corrections from planning (2026-10-04)
+
+Found while reading live data and code. The plan (`docs/superpowers/plans/2026-10-04-music-recall-tier1-facts.md`) implements these:
+
+1. `trackKey` embeds a Convex artist id (`<artistId>::<slug>`), so it can't be shared. The shared cross-app key is a new `matchKey(artist, title)`. Read "`matchKey`" wherever this spec says to hand `trackKey` to Backstory.
+2. Tracks don't store a MusicBrainz recording id. The credits phase resolves it by ISRC (98.5% coverage), falls back to fuzzy search, and saves `recordingMbid`. `upsertTrack` is left untouched.
+3. Shows group by **metro** (nearest of Milwaukee / Madison / Chicago by lat/lng), not city: upcoming events span 40+ suburbs.
+4. Backfill priority drops "spin count". On-air tracks go first, then any untried track; the whole ~8.7k-track backlog drains in ~6 hours.
+5. The `local` cue tag is computed at query time (spin on `414music`), not stored.
+6. Past events are never pruned; the event fan-out reads newest-first.
+7. Both recall matches and track facts return `previewUrl` (Apple 30-second preview, 98.1% of tracks) for Echo Show playback in Radio Commons.
