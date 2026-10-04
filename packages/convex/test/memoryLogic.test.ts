@@ -5,6 +5,7 @@ import {
   countSpinsSince,
   digestSince,
   mergeSearchHits,
+  preferFullMatches,
   searchCutoff,
   searchTerms,
   lookupKeyOrNull,
@@ -425,4 +426,38 @@ describe("sameArtistName", () => {
   test("punctuation-only names match themselves", () =>
     expect(sameArtistName("!!!", "!!!")).toBe(true));
   test("different names do not match", () => expect(sameArtistName("Nas", "Thao")).toBe(false));
+});
+
+describe("preferFullMatches", () => {
+  const play = (artistRaw: string, titleRaw: string) => ({ artistRaw, titleRaw });
+  const titles = (hits: { titleRaw: string }[]) => hits.map((hit) => hit.titleRaw);
+
+  test("keeps only plays containing every query word", () => {
+    const hits = [
+      play("Komputa", "Groove"),
+      play("Dave Pike", "Groove Thang"),
+      play("Snoop", "Nuthin' But A G Thang"),
+    ];
+    expect(titles(preferFullMatches(hits, "Groove Thang"))).toEqual(["Groove Thang"]);
+  });
+
+  test("matches whole words only: Nasty does not fully match Nas", () => {
+    const hits = [play("Nas", "Made You Look"), play("Prince", "Nasty Girl")];
+    expect(titles(preferFullMatches(hits, "Nas"))).toEqual(["Made You Look"]);
+  });
+
+  test("folds accents, case and ampersands", () => {
+    const hits = [play("THÁO & The Get Down Stay Down", "Know Better"), play("Other", "Thaw")];
+    expect(titles(preferFullMatches(hits, "thao and"))).toEqual(["Know Better"]);
+  });
+
+  test("returns every hit when none matches fully", () => {
+    const hits = [play("A", "Groove"), play("B", "Thang")];
+    expect(preferFullMatches(hits, "Groove Thang")).toEqual(hits);
+  });
+
+  test("empty query leaves hits unchanged", () => {
+    const hits = [play("A", "Groove")];
+    expect(preferFullMatches(hits, "  ")).toEqual(hits);
+  });
 });
