@@ -38,7 +38,8 @@ jobs:
   deploy:
     name: Deploy Convex functions
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # First deploy after adding search indexes blocks until they backfill over all plays.
+    timeout-minutes: 30
     # Only run when CI succeeded (or when manually dispatched).
     if: >
       github.event_name == 'workflow_dispatch' ||
