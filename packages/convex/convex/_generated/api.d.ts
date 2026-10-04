@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as alexa from "../alexa.js";
 import type * as appleMusic from "../appleMusic.js";
 import type * as backfills from "../backfills.js";
 import type * as cadence from "../cadence.js";
@@ -27,8 +28,10 @@ import type * as notifications from "../notifications.js";
 import type * as playDuration from "../playDuration.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
+import type * as recall from "../recall.js";
 import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
+import type * as showsByMetro from "../showsByMetro.js";
 import type * as stationRegions from "../stationRegions.js";
 import type * as stations from "../stations.js";
 import type * as users from "../users.js";
@@ -40,6 +43,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alexa: typeof alexa;
   appleMusic: typeof appleMusic;
   backfills: typeof backfills;
   cadence: typeof cadence;
@@ -59,8 +63,10 @@ declare const fullApi: ApiFromModules<{
   playDuration: typeof playDuration;
   plays: typeof plays;
   preview: typeof preview;
+  recall: typeof recall;
   reports: typeof reports;
   seed: typeof seed;
+  showsByMetro: typeof showsByMetro;
   stationRegions: typeof stationRegions;
   stations: typeof stations;
   users: typeof users;
