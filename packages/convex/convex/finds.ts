@@ -8,6 +8,9 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { followArtist } from "./follows";
+import { RECENT_SAVE_WINDOW_MS, hasRecentOtherSave, pickFindStory } from "./memoryLogic";
+import { upcomingShowsByMetro } from "./plays";
 import { clampFindsLimit, dedupeKeyFor } from "./findsLogic";
 import { assertListenerId, assertServerKey } from "./listenerGuard";
 import { appleMusicStatusValidator } from "./schema";
@@ -47,6 +50,11 @@ type SaveResult =
       artist: string;
       title: string;
       alreadySaved: boolean;
+      artistName: string;
+      firstFollow: boolean;
+      nextShow: { venue: string; city: string; startsAtMs: number } | null;
+      story: { storyId: string; title: string; show: string } | null;
+      recentlySaved: boolean;
     };
 
 export const save = mutation({
@@ -89,6 +97,23 @@ export const save = mutation({
     }
     if (status === "pending")
       await ctx.scheduler.runAfter(0, internal.findsApple.addToAppleMusic, { findId });
+    const artistId = track?.artistId ?? play.canonicalArtistId ?? null;
+    const { firstFollow } = artistId
+      ? await followArtist(ctx, listenerId, artistId, artist, "find")
+      : { firstFollow: false };
+    const [show] = await upcomingShowsByMetro(ctx, artist);
+    const watch = artistId
+      ? await ctx.db
+          .query("artistWatch")
+          .withIndex("by_artist", (q) => q.eq("artistId", artistId))
+          .first()
+      : null;
+    const recentFinds = await ctx.db
+      .query("finds")
+      .withIndex("by_listener_saved", (q) =>
+        q.eq("listenerId", listenerId).gt("savedAt", now - RECENT_SAVE_WINDOW_MS),
+      )
+      .collect();
     return {
       status: "ok" as const,
       findId,
@@ -96,6 +121,15 @@ export const save = mutation({
       artist,
       title,
       alreadySaved: existing !== null,
+      artistName: artist,
+      firstFollow,
+      nextShow: show ? { venue: show.venue, city: show.city, startsAtMs: show.startsAtMs } : null,
+      story: pickFindStory(watch),
+      recentlySaved: hasRecentOtherSave(
+        recentFinds.map((f) => ({ id: f._id, savedAt: f.savedAt })),
+        findId,
+        now,
+      ),
     };
   },
 });

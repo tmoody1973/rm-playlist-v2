@@ -177,3 +177,22 @@ export function pickStaleArtists<T extends string>(
 /** normalizeArtistKey yields "" for non-Latin or punctuation-only names, and every such artist shares that key, so a lookup by it would hit an arbitrary one: treat it as unknown. */
 export const lookupKeyOrNull = (artistKey: string): string | null =>
   artistKey === "" ? null : artistKey;
+
+export const RECENT_SAVE_WINDOW_MS = 30 * 60_000;
+
+/** The story shown beside a saved song: the newest Backstory piece on the artist, if any. */
+export function pickFindStory(
+  watch: { stories: ReadonlyArray<{ storyId: string; title: string; show: string }> } | null,
+): { storyId: string; title: string; show: string } | null {
+  const first = watch?.stories[0];
+  return first ? { storyId: first.storyId, title: first.title, show: first.show } : null;
+}
+
+/** True when a different Find was saved inside the window; drives the one-time Apple Music hint. */
+export function hasRecentOtherSave(
+  finds: ReadonlyArray<{ id: string; savedAt: number }>,
+  currentFindId: string,
+  now: number,
+): boolean {
+  return finds.some((f) => f.id !== currentFindId && f.savedAt > now - RECENT_SAVE_WINDOW_MS);
+}

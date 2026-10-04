@@ -4,6 +4,8 @@ import {
   SCREEN_TTL_MS,
   lookupKeyOrNull,
   nextFollow,
+  hasRecentOtherSave,
+  pickFindStory,
   playAtNumber,
   rankDigest,
   pickStaleArtists,
@@ -258,4 +260,31 @@ describe("lookupKeyOrNull", () => {
     expect(lookupKeyOrNull("")).toBeNull(); // "坂本龍一", "Мумий Тролль", "!!!", "   "
   });
   test("passes a normal key through", () => expect(lookupKeyOrNull("tennis")).toBe("tennis"));
+});
+
+describe("pickFindStory", () => {
+  const story = { storyId: "s1", title: "T", show: "Show", showSlug: "show", publishedAt: 1 };
+  test("null without a watch row or stories", () => {
+    expect(pickFindStory(null)).toBeNull();
+    expect(pickFindStory({ stories: [] })).toBeNull();
+  });
+  test("returns the first story trimmed to id, title, show", () =>
+    expect(pickFindStory({ stories: [story, { ...story, storyId: "s2" }] })).toEqual({
+      storyId: "s1",
+      title: "T",
+      show: "Show",
+    }));
+});
+
+describe("hasRecentOtherSave", () => {
+  const finds = [
+    { id: "a", savedAt: NOW - 10 * 60_000 },
+    { id: "b", savedAt: NOW - 31 * 60_000 },
+  ];
+  test("true when another find is inside the window", () =>
+    expect(hasRecentOtherSave(finds, "b", NOW)).toBe(true));
+  test("excludes the current find", () => expect(hasRecentOtherSave(finds, "a", NOW)).toBe(false));
+  test("ignores finds older than the window", () =>
+    expect(hasRecentOtherSave([finds[1]!], "x", NOW)).toBe(false));
+  test("false with no finds", () => expect(hasRecentOtherSave([], "x", NOW)).toBe(false));
 });
