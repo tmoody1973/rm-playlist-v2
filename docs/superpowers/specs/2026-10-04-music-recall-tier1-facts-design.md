@@ -260,3 +260,5 @@ Found while reading live data and code. The plan (`docs/superpowers/plans/2026-1
 5. The `local` cue tag is computed at query time (spin on `414music`), not stored.
 6. Past events are never pruned; the event fan-out reads newest-first.
 7. Both recall matches and track facts return `previewUrl` (Apple 30-second preview, 98.1% of tracks) for Echo Show playback in Radio Commons.
+8. Credits-phase source errors are logged to Trigger.dev logs (`Credits:` summary + per-track warnings), not to `ingestionEvents` — that table requires a station and source, which tracks don't have. Credits failures therefore don't appear on the Needs Attention panel.
+9. The widget's LIVE row may now show a different (correct) upcoming show for artists with more than 10 event rows, because the fan-out reads newest-first. This is intended; spec 5.4's 'widget is unchanged' means unchanged signature and soonest-show rule.
