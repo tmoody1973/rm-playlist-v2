@@ -112,3 +112,41 @@ export function rankDigest({
     ...appleItem,
   ];
 }
+
+const MAX_STORIES = 3;
+export interface StoredStory {
+  storyId: string;
+  title: string;
+  show: string;
+  showSlug: string;
+  publishedAt: number;
+}
+
+const isStoryCard = (value: unknown): value is StoredStory & { hint: string } => {
+  const card = value as Record<string, unknown> | null;
+  return (
+    typeof card === "object" &&
+    card !== null &&
+    ["storyId", "title", "show", "showSlug", "hint"].every(
+      (key) => typeof card[key] === "string",
+    ) &&
+    typeof card.publishedAt === "number"
+  );
+};
+
+/** Backstory's HTTP query response → the newest few stories that name the artist; null if the body isn't a well-formed success. */
+export function storiesFromBackstory(body: unknown, artistName: string): StoredStory[] | null {
+  const { status, value } = (body ?? {}) as { status?: unknown; value?: unknown };
+  if (status !== "success" || !Array.isArray(value) || !value.every(isStoryCard)) return null;
+  return value
+    .filter((story) => storyMentionsArtist(story, artistName))
+    .sort((a, b) => b.publishedAt - a.publishedAt)
+    .slice(0, MAX_STORIES)
+    .map(({ storyId, title, show, showSlug, publishedAt }) => ({
+      storyId,
+      title,
+      show,
+      showSlug,
+      publishedAt,
+    }));
+}

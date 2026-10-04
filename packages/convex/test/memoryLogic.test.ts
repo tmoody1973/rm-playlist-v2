@@ -5,6 +5,7 @@ import {
   nextFollow,
   playAtNumber,
   rankDigest,
+  storiesFromBackstory,
   storyMentionsArtist,
 } from "../convex/memoryLogic";
 
@@ -173,5 +174,38 @@ describe("rankDigest", () => {
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({ kind: "spins", artist: "Loud" });
     });
+  });
+});
+
+describe("storiesFromBackstory", () => {
+  const card = (storyId: string, title: string, publishedAt: number, hint = "") => ({
+    storyId,
+    title,
+    show: "Show",
+    showSlug: "show",
+    publishedAt,
+    hint,
+  });
+
+  test("keeps only stories naming the artist, drops hint", () => {
+    const body = {
+      status: "success",
+      value: [card("a", "Tobe Nwigwe tour", 1), card("b", "Unrelated", 2)],
+    };
+    expect(storiesFromBackstory(body, "Tobe Nwigwe")).toEqual([
+      { storyId: "a", title: "Tobe Nwigwe tour", show: "Show", showSlug: "show", publishedAt: 1 },
+    ]);
+  });
+  test("newest three when more than three match", () => {
+    const value = [1, 2, 3, 4].map((n) => card(`s${n}`, "Mdou Moctar live", n));
+    const result = storiesFromBackstory({ status: "success", value }, "Mdou Moctar");
+    expect(result?.map((s) => s.storyId)).toEqual(["s4", "s3", "s2"]);
+  });
+  test("null for an error body", () =>
+    expect(storiesFromBackstory({ status: "error", errorMessage: "x" }, "A")).toBeNull());
+  test("null for malformed values", () => {
+    expect(storiesFromBackstory({ status: "success", value: "nope" }, "A")).toBeNull();
+    expect(storiesFromBackstory({ status: "success", value: [{ title: 1 }] }, "A")).toBeNull();
+    expect(storiesFromBackstory(null, "A")).toBeNull();
   });
 });
