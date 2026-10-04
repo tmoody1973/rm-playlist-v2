@@ -235,3 +235,23 @@ export function countSpinsSince(
   }
   return [...counts].map(([station, count]) => ({ station, count }));
 }
+
+const DAY_MS = 86_400_000;
+export const SEARCH_DEFAULT_DAYS = 14;
+export const SEARCH_MAX_DAYS = 30;
+
+/** Oldest playedAt a search may return: `days` back from now, clamped to 1..30 (default 14). */
+export function searchCutoff(days: number | undefined, now: number): number {
+  const requested = Number.isFinite(days) ? Math.floor(days as number) : SEARCH_DEFAULT_DAYS;
+  return now - Math.min(Math.max(requested, 1), SEARCH_MAX_DAYS) * DAY_MS;
+}
+
+/** Union of two search result lists: deduped by _id, newest first, capped at `limit`. */
+export function mergeSearchHits<T extends { _id: string; playedAt: number }>(
+  a: T[],
+  b: T[],
+  limit: number,
+): T[] {
+  const byId = new Map([...a, ...b].map((hit) => [hit._id, hit]));
+  return [...byId.values()].sort((x, y) => y.playedAt - x.playedAt).slice(0, limit);
+}

@@ -4,6 +4,8 @@ import {
   SCREEN_TTL_MS,
   countSpinsSince,
   digestSince,
+  mergeSearchHits,
+  searchCutoff,
   lookupKeyOrNull,
   nextFollow,
   hasRecentOtherSave,
@@ -346,4 +348,36 @@ describe("countSpinsSince", () => {
       countSpinsSince([play("hyfin", 10), play("hyfin", 9, true), play("hyfin", 20)], 10),
     ).toEqual([{ station: "hyfin", count: 1 }]));
   test("empty when nothing is new", () => expect(countSpinsSince([], 1)).toEqual([]));
+});
+
+describe("mergeSearchHits", () => {
+  const hit = (_id: string, playedAt: number) => ({ _id, playedAt });
+  test("dedupes by _id, newest first", () =>
+    expect(mergeSearchHits([hit("a", 1), hit("b", 3)], [hit("b", 3), hit("c", 2)], 10)).toEqual([
+      hit("b", 3),
+      hit("c", 2),
+      hit("a", 1),
+    ]));
+  test("caps at the limit, keeping the newest", () =>
+    expect(mergeSearchHits([hit("a", 1), hit("b", 2)], [hit("c", 3)], 2)).toEqual([
+      hit("c", 3),
+      hit("b", 2),
+    ]));
+  test("empty inputs give empty", () => expect(mergeSearchHits([], [], 5)).toEqual([]));
+});
+
+describe("searchCutoff", () => {
+  const DAY = 86_400_000;
+  test("defaults to 14 days", () => expect(searchCutoff(undefined, NOW)).toBe(NOW - 14 * DAY));
+  test("clamps to 1..30 days", () => {
+    expect(searchCutoff(0, NOW)).toBe(NOW - DAY);
+    expect(searchCutoff(-5, NOW)).toBe(NOW - DAY);
+    expect(searchCutoff(90, NOW)).toBe(NOW - 30 * DAY);
+  });
+  test("keeps a valid window and rounds fractions down", () => {
+    expect(searchCutoff(7, NOW)).toBe(NOW - 7 * DAY);
+    expect(searchCutoff(2.9, NOW)).toBe(NOW - 2 * DAY);
+  });
+  test("non-finite falls back to the default", () =>
+    expect(searchCutoff(Number.NaN, NOW)).toBe(NOW - 14 * DAY));
 });
