@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { normalizeArtistForMatch } from "./matchKey";
 
 /**
  * Cross-source event ingestion + dedup.
@@ -151,12 +152,7 @@ type NormalizedEvent = {
  * artist rows) — this key is the cross-source matching key.
  */
 export function normalizeEventArtistKey(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/\b(the|a|an)\b/g, "")
-    .replace(/[^a-z0-9]/g, "");
+  return normalizeArtistForMatch(name);
 }
 
 /**
