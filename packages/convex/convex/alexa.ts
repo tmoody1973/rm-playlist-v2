@@ -239,7 +239,8 @@ export const getTrackFacts = query({
   handler: async (ctx, args) => {
     const playId = args.playId ? ctx.db.normalizeId("plays", args.playId) : null;
     const play = playId ? await ctx.db.get(playId) : null;
-    const trackId = (args.trackId ? ctx.db.normalizeId("tracks", args.trackId) : null) ?? play?.canonicalTrackId;
+    const trackId =
+      (args.trackId ? ctx.db.normalizeId("tracks", args.trackId) : null) ?? play?.canonicalTrackId;
     const track = trackId ? await ctx.db.get(trackId) : null;
     if (track === null) {
       if (play === null) return { status: "not_found" as const };
