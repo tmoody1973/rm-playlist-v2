@@ -26,12 +26,12 @@ export function nextFollow(
   return existing === null ? { status: "following", source } : null;
 }
 
-const words = (text: string) =>
-  ` ${text
-    .toLowerCase()
-    .replace(/[^a-z0-9&]+/g, " ")
-    .trim()} `;
+const COMBINING_ACCENT_MARKS = /[\u0300-\u036f]/g;
+const NON_WORD_CHARACTERS = /[^a-z0-9]+/g;
 
+/** Lowercased, accent-folded, "&" spelled "and", padded with spaces so whole-word matching is a substring test. */
+const words = (text: string) =>
+  ` ${text.normalize("NFKD").replace(COMBINING_ACCENT_MARKS, "").toLowerCase().replace(/&/g, " and ").replace(NON_WORD_CHARACTERS, " ").trim()} `;
 /** Backstory search matches by meaning; keep a story only if it names the artist as a whole word. */
 export function storyMentionsArtist(
   story: { title: string; hint: string },

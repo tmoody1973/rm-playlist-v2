@@ -53,6 +53,25 @@ describe("storyMentionsArtist", () => {
     expect(storyMentionsArtist({ title: "Nashville sounds", hint: "" }, "Nas")).toBe(false));
 });
 
+describe("storyMentionsArtist normalization", () => {
+  const story = (title: string) => ({ title, hint: "" });
+  test("folds accents on the story side", () =>
+    expect(storyMentionsArtist(story("Zhane at 30"), "Zhané")).toBe(true));
+  test("folds accents on the artist side", () =>
+    expect(storyMentionsArtist(story("Zhané at 30"), "Zhane")).toBe(true));
+  test("an accented letter is not a word break", () =>
+    expect(storyMentionsArtist(story("Zhan wins"), "Zhané")).toBe(false));
+  test("treats & and 'and' alike", () =>
+    expect(
+      storyMentionsArtist(
+        story("Thao and The Get Down Stay Down"),
+        "Thao & The Get Down Stay Down",
+      ),
+    ).toBe(true));
+  test("a name with no Latin letters never matches and never throws", () =>
+    expect(storyMentionsArtist(story("坂本龍一 live"), "坂本龍一")).toBe(false));
+});
+
 describe("rankDigest", () => {
   const since = NOW - 7 * 86_400_000;
   const artist = (name: string, over: object = {}) => ({
@@ -110,4 +129,49 @@ describe("rankDigest", () => {
     expect(rankDigest({ since, now: NOW, artists: [], apple: { added: 0, expired: 1 } })).toEqual([
       { kind: "apple", added: 0, expired: 1 },
     ]));
+  describe("boundaries", () => {
+    const show = (offsetMs: number) => ({ venue: "V", city: "C", startsAtMs: NOW + offsetMs });
+    test("a show starting exactly now is excluded", () =>
+      expect(
+        rankDigest({
+          since,
+          now: NOW,
+          artists: [artist("A", { nextShow: show(0) })],
+          apple: { added: 0, expired: 0 },
+        }),
+      ).toEqual([]));
+    test("a show exactly 7 days out counts as soon, ahead of spins", () => {
+      const items = rankDigest({
+        since,
+        now: NOW,
+        artists: [
+          artist("A", { nextShow: show(7 * 86_400_000) }),
+          artist("B", { spins: [{ station: "88nine", count: 1 }] }),
+        ],
+        apple: { added: 0, expired: 0 },
+      });
+      expect(items.map((i) => i.kind)).toEqual(["show", "spins"]);
+    });
+    test("a story published exactly at since is excluded", () =>
+      expect(
+        rankDigest({
+          since,
+          now: NOW,
+          artists: [
+            artist("A", { stories: [{ storyId: "s", title: "t", show: "x", publishedAt: since }] }),
+          ],
+          apple: { added: 0, expired: 0 },
+        }),
+      ).toEqual([]));
+    test("an artist with zero spins yields no spins item", () => {
+      const items = rankDigest({
+        since,
+        now: NOW,
+        artists: [artist("Quiet"), artist("Loud", { spins: [{ station: "hyfin", count: 2 }] })],
+        apple: { added: 0, expired: 0 },
+      });
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ kind: "spins", artist: "Loud" });
+    });
+  });
 });
