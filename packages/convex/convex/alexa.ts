@@ -3,12 +3,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro } from "./plays";
-import { chooseRecallStatus, evidenceLevel, MAX_MATCHES, neighborSpin, rankSpins, type SpinForRecall } from "./recall";
+import { chooseRecallStatus, clampConnectionLimit, dedupeByKey, evidenceLevel, MAX_MATCHES, mergePlaysAscending, neighborSpin, rankSpins, type SpinForRecall } from "./recall";
 
-/** ~3 hours of spins at ~20/hour; bounds reads for a wide "this morning" window. */
-const MAX_WINDOW_SPINS = 60;
+/** Spins read on each side of the window midpoint (~3 hours at ~20/hour), so a wide window keeps the spins nearest the middle. */
+const HALF_WINDOW_SPINS = 30;
+/** Spins read on each side of an anchor when the caller asks for the one before/after. */
+const NEIGHBOR_SCAN = 10;
 const LOCAL_STATION_SLUG = "414music";
-const NEIGHBOR_WINDOW_MS = 3_600_000;
 const stationSlug = v.union(v.literal("hyfin"), v.literal("88nine"), v.literal("414music"), v.literal("rhythmlab"));
 
 type LoadedSpin = { play: Doc<"plays">; track: Doc<"tracks"> | null; recall: SpinForRecall };
@@ -39,17 +40,26 @@ async function stationBySlug(ctx: QueryCtx, slug: string) {
   return ctx.db.query("stations").withIndex("by_slug", (q) => q.eq("slug", slug as Doc<"stations">["slug"])).first();
 }
 
-async function playsBetween(ctx: QueryCtx, stationId: Id<"stations">, from: number, to: number) {
-  return ctx.db.query("plays")
-    .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId).gte("playedAt", from).lte("playedAt", to))
-    .take(MAX_WINDOW_SPINS);
+async function playsAround(ctx: QueryCtx, stationId: Id<"stations">, from: number, mid: number, to: number, take: number) {
+  const before = await ctx.db.query("plays")
+    .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId).gte("playedAt", from).lte("playedAt", mid))
+    .order("desc").take(take);
+  const after = await ctx.db.query("plays")
+    .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId).gt("playedAt", mid).lte("playedAt", to))
+    .take(take);
+  return mergePlaysAscending(before, after);
 }
 
 async function neighborMatch(ctx: QueryCtx, stationId: Id<"stations">, anchorId: Id<"plays">, direction: "before" | "after", isLocal: boolean) {
   const anchor = await ctx.db.get(anchorId);
   if (anchor === null || anchor.stationId !== stationId) return null;
-  const around = await playsBetween(ctx, stationId, anchor.playedAt - NEIGHBOR_WINDOW_MS, anchor.playedAt + NEIGHBOR_WINDOW_MS);
-  const spins = await loadSpins(ctx, around, isLocal);
+  const earlier = await ctx.db.query("plays")
+    .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId).lte("playedAt", anchor.playedAt))
+    .order("desc").take(NEIGHBOR_SCAN);
+  const later = await ctx.db.query("plays")
+    .withIndex("by_station_played_at", (q) => q.eq("stationId", stationId).gte("playedAt", anchor.playedAt))
+    .take(NEIGHBOR_SCAN);
+  const spins = await loadSpins(ctx, mergePlaysAscending([anchor, ...earlier], later), isLocal);
   const next = neighborSpin(spins.map((s) => s.recall), anchorId, direction);
   const loaded = next ? spins.find((s) => s.recall.playId === next.playId) : undefined;
   return loaded ? toMatch(ctx, loaded, "1", []) : null;
@@ -72,7 +82,7 @@ export const findSongPlayed = query({
     }
     const cues = args.cues ?? [];
     const windowMid = (args.from + args.to) / 2;
-    const spins = await loadSpins(ctx, await playsBetween(ctx, station._id, args.from, args.to), isLocal);
+    const spins = await loadSpins(ctx, await playsAround(ctx, station._id, args.from, windowMid, args.to, HALF_WINDOW_SPINS), isLocal);
     const ranked = rankSpins(spins.map((s) => s.recall), cues, windowMid);
     const status = chooseRecallStatus(ranked, cues, windowMid);
     const top = ranked.slice(0, status === "ok" ? 1 : MAX_MATCHES);
@@ -118,7 +128,6 @@ export const getTrackFacts = query({
   },
 });
 
-const DEFAULT_CONNECTIONS = 5;
 const MAX_PEOPLE_SCANNED = 10;
 /** Caps a busy session player so one person can't blow the read budget. */
 const MAX_TRACKS_PER_PERSON = 25;
@@ -129,7 +138,8 @@ async function lastPlayedAt(ctx: QueryCtx, trackId: Id<"tracks">): Promise<numbe
 }
 
 async function sharedPeople(ctx: QueryCtx, trackId: Id<"tracks">, facts: Doc<"facts">[]) {
-  const people = facts.filter((f) => f.personKey !== undefined).slice(0, MAX_PEOPLE_SCANNED);
+  const personFacts = facts.filter((f) => f.personKey !== undefined);
+  const people = dedupeByKey(personFacts, (f) => f.personKey as string).slice(0, MAX_PEOPLE_SCANNED);
   const found = await Promise.all(people.map(async (person) => {
     const others = await ctx.db.query("facts").withIndex("by_person", (q) => q.eq("personKey", person.personKey)).take(MAX_TRACKS_PER_PERSON);
     return Promise.all(others.filter((o) => o.trackId !== trackId).map(async (other) => {
@@ -137,11 +147,12 @@ async function sharedPeople(ctx: QueryCtx, trackId: Id<"tracks">, facts: Doc<"fa
       const otherTrack = played === null ? null : await ctx.db.get(other.trackId);
       if (otherTrack === null || played === null) return null;
       const artist = (await ctx.db.get(otherTrack.artistId))?.displayName ?? "";
-      return { kind: "shared_person" as const, person: person.value, role: person.role, otherRole: other.role,
+      return { kind: "shared_person" as const, personKey: person.personKey as string, person: person.value, role: person.role, otherRole: other.role,
         otherTrack: { trackId: otherTrack._id, artist, title: otherTrack.displayTitle }, lastPlayedAt: played };
     }));
   }));
-  return found.flat().filter((c): c is NonNullable<typeof c> => c !== null);
+  const connections = found.flat().filter((c): c is NonNullable<typeof c> => c !== null);
+  return dedupeByKey(connections, (c) => `${c.personKey}|${c.otherTrack.trackId}`);
 }
 
 async function sampleLinks(ctx: QueryCtx, facts: Doc<"facts">[]) {
@@ -157,7 +168,7 @@ async function sampleLinks(ctx: QueryCtx, facts: Doc<"facts">[]) {
 export const getTrackConnections = query({
   args: { trackId: v.id("tracks"), limit: v.optional(v.number()) },
   handler: async (ctx, { trackId, limit }) => {
-    const cap = limit ?? DEFAULT_CONNECTIONS;
+    const cap = clampConnectionLimit(limit);
     const facts = await ctx.db.query("facts").withIndex("by_track", (q) => q.eq("trackId", trackId)).collect();
     const byRecency = (a: { lastPlayedAt: number | null }, b: { lastPlayedAt: number | null }) => (b.lastPlayedAt ?? 0) - (a.lastPlayedAt ?? 0);
     const people = (await sharedPeople(ctx, trackId, facts)).sort(byRecency).slice(0, cap);

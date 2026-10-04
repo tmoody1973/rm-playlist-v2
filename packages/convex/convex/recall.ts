@@ -67,3 +67,26 @@ export function evidenceLevel(input: { resolved: boolean; matchConfidence?: "hig
   if (!input.resolved) return "none";
   return input.matchConfidence === "high" && input.trackScopeFactCount >= RICH_MIN_TRACK_FACTS ? "rich" : "basic";
 }
+
+const DEFAULT_CONNECTION_LIMIT = 5;
+const MAX_CONNECTION_LIMIT = 10;
+
+/** Union of two play reads, one row per _id, oldest first. */
+export function mergePlaysAscending<T extends { _id: string; playedAt: number }>(first: readonly T[], second: readonly T[]): T[] {
+  return dedupeByKey([...first, ...second], (play) => play._id).sort((a, b) => a.playedAt - b.playedAt);
+}
+
+export function dedupeByKey<T>(items: readonly T[], keyOf: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = keyOf(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function clampConnectionLimit(limit: number | undefined): number {
+  const requested = limit === undefined || Number.isNaN(limit) ? DEFAULT_CONNECTION_LIMIT : Math.floor(limit);
+  return Math.min(MAX_CONNECTION_LIMIT, Math.max(1, requested));
+}
