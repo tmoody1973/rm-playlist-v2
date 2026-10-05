@@ -61,7 +61,13 @@ type SaveResult =
       artistName: string;
       artistId: string | null;
       firstFollow: boolean;
-      nextShow: { venue: string; city: string; startsAtMs: number } | null;
+      nextShow: {
+        venue: string;
+        city: string;
+        startsAtMs: number;
+        imageUrl: string | null;
+        ticketUrl: string | null;
+      } | null;
       story: { storyId: string; title: string; show: string } | null;
       recentlySaved: boolean;
     };
@@ -134,7 +140,15 @@ export const save = mutation({
       artistName: artist,
       artistId,
       firstFollow,
-      nextShow: show ? { venue: show.venue, city: show.city, startsAtMs: show.startsAtMs } : null,
+      nextShow: show
+        ? {
+            venue: show.venue,
+            city: show.city,
+            startsAtMs: show.startsAtMs,
+            imageUrl: show.imageUrl,
+            ticketUrl: show.ticketUrl,
+          }
+        : null,
       story: pickFindStory(watch),
       recentlySaved: hasRecentOtherSave(
         recentFinds.map((f) => ({ id: f._id, savedAt: f.savedAt })),

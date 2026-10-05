@@ -63,7 +63,13 @@ export const forListener = query({
           name: follow.artistName,
           spins,
           nextShow: show
-            ? { venue: show.venue, city: show.city, startsAtMs: show.startsAtMs }
+            ? {
+                venue: show.venue,
+                city: show.city,
+                startsAtMs: show.startsAtMs,
+                imageUrl: show.imageUrl,
+                ticketUrl: show.ticketUrl,
+              }
             : null,
           stories: (watch?.stories ?? []).map(
             ({ storyId, title, show: showName, publishedAt }) => ({
