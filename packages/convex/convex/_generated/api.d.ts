@@ -41,6 +41,7 @@ import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as recall from "../recall.js";
 import type * as reports from "../reports.js";
+import type * as scheduleLogic from "../scheduleLogic.js";
 import type * as seed from "../seed.js";
 import type * as showsByMetro from "../showsByMetro.js";
 import type * as stationRegions from "../stationRegions.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   preview: typeof preview;
   recall: typeof recall;
   reports: typeof reports;
+  scheduleLogic: typeof scheduleLogic;
   seed: typeof seed;
   showsByMetro: typeof showsByMetro;
   stationRegions: typeof stationRegions;

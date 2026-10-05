@@ -116,7 +116,7 @@ interface LocalParts {
   second: string;
 }
 
-function localParts(ms: number, timeZone: string): LocalParts {
+export function localParts(ms: number, timeZone: string): LocalParts {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     hourCycle: "h23",
