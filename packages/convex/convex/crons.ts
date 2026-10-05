@@ -45,4 +45,7 @@ crons.interval(
   {},
 );
 
+// Alexa names the host's photo, profile and latest pieces from this cache (CDS + radiomilwaukee.org).
+crons.interval("host profiles refresh", { minutes: 30 }, internal.hostProfiles.refresh, {});
+
 export default crons;

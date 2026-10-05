@@ -273,16 +273,21 @@ function toMatch(c: Candidate): ProgramMatch {
   return {
     name: c.program.name,
     hosts: c.program.hosts,
-    airtimes: c.program.airtimes.map((a) => ({
-      ...a,
-      day: DAY_NAMES[a.dayOfWeek] ?? "",
-      start: clockLabel(a.startMin),
-      end: clockLabel(a.endMin),
-    })),
+    airtimes: labelAirtimes(c.program.airtimes),
     lastAired: c.lastAired,
     nextAiring: c.nextAiring,
     airingNow: c.airingNow,
   };
+}
+
+/** Adds speakable labels: { dayOfWeek: 5, startMin: 1320, … } → day "Friday", start "10 PM". */
+export function labelAirtimes(airtimes: readonly Airtime[]): ProgramMatch["airtimes"] {
+  return airtimes.map((a) => ({
+    ...a,
+    day: DAY_NAMES[a.dayOfWeek] ?? "",
+    start: clockLabel(a.startMin),
+    end: clockLabel(a.endMin),
+  }));
 }
 
 function queryWords(text: string): string[] {
