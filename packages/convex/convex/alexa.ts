@@ -1,6 +1,7 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { query, type QueryCtx } from "./_generated/server";
+import { internalAction, internalQuery, query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
@@ -396,59 +397,73 @@ export const getTrackConnections = query({
  * Full-text search on artist and title; relevance order is discarded and the
  * recent hits come back newest first. Public read, like the other alexa:* queries.
  */
+async function runPlaySearch(
+  ctx: QueryCtx,
+  {
+    station,
+    query: text,
+    days,
+  }: { station?: Doc<"stations">["slug"]; query: string; days?: number },
+) {
+  const searchText = searchTerms(text);
+  if (searchText === "") return [];
+  const cutoff = searchCutoff(days, Date.now());
+  const allStations = await ctx.db.query("stations").collect();
+  const stationById = new Map(allStations.map((row) => [row._id, row]));
+  const stationFilter = station ? allStations.find((row) => row.slug === station) : undefined;
+  if (station && !stationFilter) return [];
+  const visible = (play: Doc<"plays">) =>
+    play.playedAt >= cutoff && play.deletedAt === undefined && play.enrichmentStatus !== "ignored";
+  // One search per index; with a station, the stationId filter narrows it inside the index.
+  const [byArtist, byTitle] = await Promise.all([
+    ctx.db
+      .query("plays")
+      .withSearchIndex("search_artist", (q) => {
+        const search = q.search("artistRaw", searchText);
+        return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+      })
+      .take(SEARCH_HITS_PER_INDEX),
+    ctx.db
+      .query("plays")
+      .withSearchIndex("search_title", (q) => {
+        const search = q.search("titleRaw", searchText);
+        return stationFilter ? search.eq("stationId", stationFilter._id) : search;
+      })
+      .take(SEARCH_HITS_PER_INDEX),
+  ]);
+  // Full-match preference spans both indexes, so filter the union, then merge/dedupe newest-first.
+  const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), searchText);
+  // mergeSearchHits is reused here for dedupe + newest-first.
+  const hits = mergeSearchHits(candidates, [], SEARCH_RESULT_LIMIT).flatMap((play) => {
+    const stationRow = stationById.get(play.stationId);
+    return stationRow ? [{ play, stationRow }] : [];
+  });
+  return Promise.all(
+    hits.map(async ({ play, stationRow }) => {
+      const shown = await buildPublicPlay(ctx, play, stationRow);
+      return {
+        _id: shown._id,
+        artist: shown.artist,
+        title: shown.title,
+        playedAt: shown.playedAt,
+        artworkUrl: shown.artworkUrl,
+        previewUrl: shown.previewUrl,
+        stationSlug: stationRow.slug,
+      };
+    }),
+  );
+}
+
 export const searchPlays = query({
   args: { station: v.optional(stationSlug), query: v.string(), days: v.optional(v.number()) },
-  handler: async (ctx, { station, query: text, days }) => {
-    const searchText = searchTerms(text);
-    if (searchText === "") return [];
-    const cutoff = searchCutoff(days, Date.now());
-    const allStations = await ctx.db.query("stations").collect();
-    const stationById = new Map(allStations.map((row) => [row._id, row]));
-    const stationFilter = station ? allStations.find((row) => row.slug === station) : undefined;
-    if (station && !stationFilter) return [];
-    const visible = (play: Doc<"plays">) =>
-      play.playedAt >= cutoff &&
-      play.deletedAt === undefined &&
-      play.enrichmentStatus !== "ignored";
-    // One search per index; with a station, the stationId filter narrows it inside the index.
-    const [byArtist, byTitle] = await Promise.all([
-      ctx.db
-        .query("plays")
-        .withSearchIndex("search_artist", (q) => {
-          const search = q.search("artistRaw", searchText);
-          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
-        })
-        .take(SEARCH_HITS_PER_INDEX),
-      ctx.db
-        .query("plays")
-        .withSearchIndex("search_title", (q) => {
-          const search = q.search("titleRaw", searchText);
-          return stationFilter ? search.eq("stationId", stationFilter._id) : search;
-        })
-        .take(SEARCH_HITS_PER_INDEX),
-    ]);
-    // Full-match preference spans both indexes, so filter the union, then merge/dedupe newest-first.
-    const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), searchText);
-    // mergeSearchHits is reused here for dedupe + newest-first.
-    const hits = mergeSearchHits(candidates, [], SEARCH_RESULT_LIMIT).flatMap((play) => {
-      const stationRow = stationById.get(play.stationId);
-      return stationRow ? [{ play, stationRow }] : [];
-    });
-    return Promise.all(
-      hits.map(async ({ play, stationRow }) => {
-        const shown = await buildPublicPlay(ctx, play, stationRow);
-        return {
-          _id: shown._id,
-          artist: shown.artist,
-          title: shown.title,
-          playedAt: shown.playedAt,
-          artworkUrl: shown.artworkUrl,
-          previewUrl: shown.previewUrl,
-          stationSlug: stationRow.slug,
-        };
-      }),
-    );
-  },
+  handler: (ctx, args) => runPlaySearch(ctx, args),
+});
+
+// Cron target: runs the exact searchPlays code path (both indexes, no station) so the index stays hot; only a count leaves.
+const WARM_SEARCH_QUERY = "love";
+export const warmSearch = internalQuery({
+  args: {},
+  handler: async (ctx) => (await runPlaySearch(ctx, { query: WARM_SEARCH_QUERY })).length,
 });
 
 /**
@@ -465,5 +480,13 @@ export const stationArtistShows = query({
       .first();
     if (row === null) return { refreshedAt: null, shows: [] };
     return { refreshedAt: row.refreshedAt, shows: row.shows.slice(0, clampShowLimit(limit)) };
+  },
+});
+
+// Crons can only schedule mutations/actions, so this thin action invokes the warm query.
+export const warmSearchCron = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    await ctx.runQuery(internal.alexa.warmSearch, {});
   },
 });
