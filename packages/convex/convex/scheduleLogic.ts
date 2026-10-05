@@ -45,6 +45,8 @@ const DAYS_IN_WEEK = 7;
 const SCAN_DAYS = 8;
 /** A query matches a program when at least this share of its words appear in the name or a host. */
 const MIN_COVERAGE = 0.5;
+/** A host like Kenny Perez has a few shows; more than this is a vague query. */
+const MAX_MATCHES = 5;
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const QUERY_STOPWORDS = new Set(["88nine", "the", "show", "with", "a", "on"]);
 
@@ -218,19 +220,28 @@ interface Candidate {
   airingNow: boolean;
 }
 
-/** "rhythm lab", "erin wolf", "did I miss audio taste test" → the best-matching program, or null. */
+/** "rhythm lab", "erin wolf", "did I miss audio taste test" → matching programs, best first. */
+export function findPrograms(
+  programs: readonly ScheduleProgram[],
+  query: string,
+  at: number,
+): ProgramMatch[] {
+  const words = queryWords(query);
+  if (words.length === 0) return [];
+  return programs
+    .map((program) => candidate(program, words, at))
+    .filter((c) => c.coverage >= MIN_COVERAGE)
+    .sort(compareCandidates(at))
+    .slice(0, MAX_MATCHES)
+    .map(toMatch);
+}
+
 export function findProgram(
   programs: readonly ScheduleProgram[],
   query: string,
   at: number,
 ): ProgramMatch | null {
-  const words = queryWords(query);
-  if (words.length === 0) return null;
-  const best = programs
-    .map((program) => candidate(program, words, at))
-    .filter((c) => c.coverage >= MIN_COVERAGE)
-    .sort(compareCandidates(at))[0];
-  return best ? toMatch(best) : null;
+  return findPrograms(programs, query, at)[0] ?? null;
 }
 
 function candidate(program: ScheduleProgram, words: string[], at: number): Candidate {

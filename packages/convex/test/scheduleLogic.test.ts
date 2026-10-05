@@ -3,6 +3,7 @@ import {
   airtimeFromEpisode,
   buildSchedulePrograms,
   findProgram,
+  findPrograms,
   hostsFromName,
   programHosts,
   scheduleAt,
@@ -274,5 +275,37 @@ describe("findProgram", () => {
   test("nothing close enough is null", () => {
     expect(findProgram(PROGRAMS, "car talk", NOW)).toBeNull();
     expect(findProgram(PROGRAMS, "  ", NOW)).toBeNull();
+  });
+});
+
+describe("findPrograms", () => {
+  // Monday 2026-10-05 13:00 CDT
+  const NOW = Date.parse("2026-10-05T18:00:00Z");
+
+  test("a host with several shows gets all of them, the one on soonest first", () => {
+    const names = findPrograms(PROGRAMS, "erin wolf", NOW).map((m) => m.name);
+    expect(names).toEqual(["88Nine Midday Show", "What's All This: Adventures in New Music"]);
+  });
+
+  test("name matches rank above host matches and shows that air above ones that don't", () => {
+    const names = findPrograms(PROGRAMS, "rhythm lab", NOW).map((m) => m.name);
+    expect(names).toEqual(["Rhythm Lab Radio", "Rhythm Lab with Tarik Moody"]);
+  });
+
+  test("caps at five", () => {
+    const many = Array.from({ length: 8 }, (_, i) =>
+      program(`Show ${i} with Pat Doe`, [], [at(1, i * 60, i * 60 + 60)]),
+    );
+    expect(findPrograms(many, "pat doe", NOW)).toHaveLength(5);
+  });
+
+  test("findProgram is the first of findPrograms", () => {
+    expect(findProgram(PROGRAMS, "erin wolf", NOW)).toEqual(
+      findPrograms(PROGRAMS, "erin wolf", NOW)[0]!,
+    );
+  });
+
+  test("no match is an empty list", () => {
+    expect(findPrograms(PROGRAMS, "car talk", NOW)).toEqual([]);
   });
 });

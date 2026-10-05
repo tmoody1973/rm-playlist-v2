@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
-import { findProgram, scheduleAt } from "./scheduleLogic";
+import { findPrograms, scheduleAt } from "./scheduleLogic";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
@@ -531,10 +531,19 @@ export const stationSchedule = query({
       .withIndex("by_station", (q) => q.eq("station", args.station))
       .first();
     if (row === null)
-      return { refreshedAt: null, station: args.station, onNow: null, next: null, match: null };
+      return {
+        refreshedAt: null,
+        station: args.station,
+        onNow: null,
+        next: null,
+        match: null,
+        matches: [],
+      };
     const at = args.at ?? Date.now();
     const { onNow, next } = scheduleAt(row.programs, at);
-    const match = args.query ? findProgram(row.programs, args.query, at) : null;
-    return { refreshedAt: row.refreshedAt, station: args.station, onNow, next, match };
+    const matches = args.query ? findPrograms(row.programs, args.query, at) : [];
+    // `match` predates `matches`; kept for callers that read one program.
+    const match = matches[0] ?? null;
+    return { refreshedAt: row.refreshedAt, station: args.station, onNow, next, match, matches };
   },
 });
