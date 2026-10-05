@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { playSearchFields } from "./memoryLogic";
 import { observedDurationSec } from "./playDuration";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -154,6 +155,7 @@ export const recordPolledPlays = mutation({
         labelRaw: play.labelRaw,
         durationSec: play.durationSec,
         playedAt: play.playedAt,
+        ...playSearchFields(play),
         enrichmentStatus: ignoredByRule ? "ignored" : "pending",
         raw: play.raw,
         createdAt: Date.now(),
@@ -239,6 +241,7 @@ export const recordStreamPlay = mutation({
       labelRaw: play.labelRaw,
       durationSec: play.durationSec,
       playedAt: play.playedAt,
+      ...playSearchFields(play),
       enrichmentStatus: ignoredByRule ? "ignored" : "pending",
       raw: play.raw,
       createdAt: Date.now(),

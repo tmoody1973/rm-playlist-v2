@@ -1,13 +1,13 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalAction, internalQuery, query, type QueryCtx } from "./_generated/server";
+import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
   mergeSearchHits,
   preferFullMatches,
+  fortnightsInWindow,
   searchCutoff,
   searchTerms,
 } from "./memoryLogic";
@@ -28,8 +28,10 @@ import {
 const HALF_WINDOW_SPINS = 30;
 /** Spins read on each side of an anchor when the caller asks for the one before/after. */
 const NEIGHBOR_SCAN = 10;
-/** Hits read per index per station: search returns relevance order and the recency filter runs after the take, so go deep (Convex caps a result set at 1024). */
-const SEARCH_HITS_PER_INDEX = 300;
+/** Hits read per 14-day bucket: the window filter runs inside the index, so relevance order only competes within the window (plus at most one bucket of older plays). */
+const SEARCH_HITS_PER_BUCKET = 50;
+/** Legacy two-index fallback only (see runPlaySearch): relevance order across all time, recency filtered after the take, so it reads deep. */
+const LEGACY_SEARCH_HITS_PER_INDEX = 300;
 const SEARCH_RESULT_LIMIT = 20;
 const LOCAL_STATION_SLUG = "414music";
 const stationSlug = v.union(
@@ -407,32 +409,23 @@ async function runPlaySearch(
 ) {
   const searchText = searchTerms(text);
   if (searchText === "") return [];
-  const cutoff = searchCutoff(days, Date.now());
+  const now = Date.now();
+  const cutoff = searchCutoff(days, now);
   const allStations = await ctx.db.query("stations").collect();
   const stationById = new Map(allStations.map((row) => [row._id, row]));
   const stationFilter = station ? allStations.find((row) => row.slug === station) : undefined;
   if (station && !stationFilter) return [];
+  const stationId = stationFilter?._id;
   const visible = (play: Doc<"plays">) =>
     play.playedAt >= cutoff && play.deletedAt === undefined && play.enrichmentStatus !== "ignored";
-  // One search per index; with a station, the stationId filter narrows it inside the index.
-  const [byArtist, byTitle] = await Promise.all([
-    ctx.db
-      .query("plays")
-      .withSearchIndex("search_artist", (q) => {
-        const search = q.search("artistRaw", searchText);
-        return stationFilter ? search.eq("stationId", stationFilter._id) : search;
-      })
-      .take(SEARCH_HITS_PER_INDEX),
-    ctx.db
-      .query("plays")
-      .withSearchIndex("search_title", (q) => {
-        const search = q.search("titleRaw", searchText);
-        return stationFilter ? search.eq("stationId", stationFilter._id) : search;
-      })
-      .take(SEARCH_HITS_PER_INDEX),
-  ]);
-  // Full-match preference spans both indexes, so filter the union, then merge/dedupe newest-first.
-  const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), searchText);
+  const windowed = (await searchWindow(ctx, searchText, stationId, cutoff, now)).filter(visible);
+  // ponytail: migration fallback for plays not yet backfilled with searchText; delete with the legacy indexes once the backfill has run.
+  const found =
+    windowed.length > 0
+      ? windowed
+      : (await legacySearch(ctx, searchText, stationId)).filter(visible);
+  // Full-match preference spans artist and title, then merge/dedupe newest-first.
+  const candidates = preferFullMatches(found, searchText);
   // mergeSearchHits is reused here for dedupe + newest-first.
   const hits = mergeSearchHits(candidates, [], SEARCH_RESULT_LIMIT).flatMap((play) => {
     const stationRow = stationById.get(play.stationId);
@@ -454,16 +447,56 @@ async function runPlaySearch(
   );
 }
 
+/** One search per 14-day bucket the window touches (Convex search filters are equality-only), in parallel. */
+async function searchWindow(
+  ctx: QueryCtx,
+  searchText: string,
+  stationId: Id<"stations"> | undefined,
+  cutoff: number,
+  now: number,
+) {
+  const perBucket = await Promise.all(
+    fortnightsInWindow(cutoff, now).map((bucket) =>
+      ctx.db
+        .query("plays")
+        .withSearchIndex("search_text", (q) => {
+          const search = q.search("searchText", searchText).eq("playedFortnight", bucket);
+          return stationId ? search.eq("stationId", stationId) : search;
+        })
+        .take(SEARCH_HITS_PER_BUCKET),
+    ),
+  );
+  return perBucket.flat();
+}
+
+/** Pre-searchText path: one search per field index, all time, deduped later by mergeSearchHits. */
+async function legacySearch(
+  ctx: QueryCtx,
+  searchText: string,
+  stationId: Id<"stations"> | undefined,
+) {
+  const [byArtist, byTitle] = await Promise.all([
+    ctx.db
+      .query("plays")
+      .withSearchIndex("search_artist", (q) => {
+        const search = q.search("artistRaw", searchText);
+        return stationId ? search.eq("stationId", stationId) : search;
+      })
+      .take(LEGACY_SEARCH_HITS_PER_INDEX),
+    ctx.db
+      .query("plays")
+      .withSearchIndex("search_title", (q) => {
+        const search = q.search("titleRaw", searchText);
+        return stationId ? search.eq("stationId", stationId) : search;
+      })
+      .take(LEGACY_SEARCH_HITS_PER_INDEX),
+  ]);
+  return [...byArtist, ...byTitle];
+}
+
 export const searchPlays = query({
   args: { station: v.optional(stationSlug), query: v.string(), days: v.optional(v.number()) },
   handler: (ctx, args) => runPlaySearch(ctx, args),
-});
-
-// Cron target: runs the exact searchPlays code path (both indexes, no station) so the index stays hot; only a count leaves.
-const WARM_SEARCH_QUERY = "love";
-export const warmSearch = internalQuery({
-  args: {},
-  handler: async (ctx) => (await runPlaySearch(ctx, { query: WARM_SEARCH_QUERY })).length,
 });
 
 /**
@@ -480,13 +513,5 @@ export const stationArtistShows = query({
       .first();
     if (row === null) return { refreshedAt: null, shows: [] };
     return { refreshedAt: row.refreshedAt, shows: row.shows.slice(0, clampShowLimit(limit)) };
-  },
-});
-
-// Crons can only schedule mutations/actions, so this thin action invokes the warm query.
-export const warmSearchCron = internalAction({
-  args: {},
-  handler: async (ctx) => {
-    await ctx.runQuery(internal.alexa.warmSearch, {});
   },
 });

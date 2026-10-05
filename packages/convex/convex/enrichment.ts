@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
+import { playSearchFields } from "./memoryLogic";
 
 /**
  * Enrichment pipeline Convex surface.
@@ -285,6 +286,7 @@ export const overrideUnresolvedIdentity = mutation({
       await ctx.db.patch(p._id, {
         artistRaw: nextArtist,
         titleRaw: nextTitle,
+        ...playSearchFields({ artistRaw: nextArtist, titleRaw: nextTitle, playedAt: p.playedAt }),
         enrichmentStatus: "pending",
       });
       flipped += 1;
