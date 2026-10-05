@@ -1,7 +1,19 @@
-import { v } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { v, type Infer } from "convex/values";
+import { internal } from "./_generated/api";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { normalizeArtistForMatch } from "./matchKey";
+import { rankArtistShows } from "./memoryLogic";
+import { stationArtistShowValidator } from "./schema";
+import { nearestMetro } from "./showsByMetro";
 
 /**
  * Cross-source event ingestion + dedup.
@@ -568,6 +580,112 @@ async function loadRotationArtistKeys(
 // Upcoming-from-rotation query (powers the dashboard panel)
 // ---------------------------------------------------------------- //
 
+export type RotationMatch = {
+  artistKey: string;
+  artistName: string;
+  playCount: number;
+  stationIds: Id<"stations">[];
+  event: Doc<"events">;
+  role: "headliner" | "support";
+};
+
+type RotationArgs = {
+  orgSlug: string;
+  lookbackDays?: number;
+  horizonDays?: number;
+  limit?: number;
+  artistCap?: number;
+};
+
+/** The upcomingFromRotation work, shared with the Alexa cache refresh. Soonest event first. */
+export async function computeUpcomingFromRotation(
+  ctx: QueryCtx,
+  args: RotationArgs,
+): Promise<RotationMatch[]> {
+  const lookbackDays = args.lookbackDays ?? 30;
+  const horizonDays = args.horizonDays ?? 90;
+  const limit = args.limit ?? 50;
+  const artistCap = args.artistCap ?? 200;
+
+  const now = Date.now();
+  const lookbackMs = now - lookbackDays * 86_400_000;
+  const horizonMs = now + horizonDays * 86_400_000;
+
+  const org = await ctx.db
+    .query("organizations")
+    .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
+    .first();
+  if (org === null) return [];
+
+  // 1. Scan plays in lookback window across all stations.
+  const recentPlays = await ctx.db
+    .query("plays")
+    .withIndex("by_org_played_at", (q) => q.eq("orgId", org._id).gte("playedAt", lookbackMs))
+    .take(16_000);
+
+  // 2. Group by normalized artistKey, count plays + remember stations.
+  type ArtistInfo = {
+    count: number;
+    stationIds: Set<Id<"stations">>;
+    displayName: string;
+  };
+  const byArtistKey = new Map<string, ArtistInfo>();
+  for (const play of recentPlays) {
+    if (play.deletedAt !== undefined) continue;
+    if (play.enrichmentStatus === "ignored") continue;
+    const key = normalizeEventArtistKey(play.artistRaw);
+    if (key.length === 0) continue;
+    const existing = byArtistKey.get(key);
+    if (existing !== undefined) {
+      existing.count++;
+      existing.stationIds.add(play.stationId);
+    } else {
+      byArtistKey.set(key, {
+        count: 1,
+        stationIds: new Set([play.stationId]),
+        displayName: play.artistRaw,
+      });
+    }
+  }
+
+  // 3. Sort by play count, take top N artists. Bounds the follow-up
+  //    eventArtists lookups to keep the query under Convex's read budget.
+  const topArtists = Array.from(byArtistKey.entries())
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, artistCap);
+
+  // 4. For each top artist, find matching upcoming events.
+  const matches: RotationMatch[] = [];
+
+  for (const [artistKey, info] of topArtists) {
+    const eventArtistRows = await ctx.db
+      .query("eventArtists")
+      .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
+      .take(20);
+
+    for (const ea of eventArtistRows) {
+      const event = await ctx.db.get(ea.eventId);
+      if (event === null) continue;
+      if (event.duplicateOf !== undefined) continue;
+      if (event.startsAt <= now) continue;
+      if (event.startsAt > horizonMs) continue;
+      if (event.status === "cancelled" || event.status === "postponed") continue;
+      matches.push({
+        artistKey,
+        artistName: ea.artistNameRaw,
+        playCount: info.count,
+        stationIds: Array.from(info.stationIds),
+        event,
+        role: ea.role,
+      });
+    }
+  }
+
+  // 5. Sort by event start ascending.
+  matches.sort((a, b) => a.event.startsAt - b.event.startsAt);
+  return matches.slice(0, limit);
+}
+
 /**
  * One row per rotation-artist who has an upcoming event in any of the
  * configured regions. Joins recent plays × eventArtists × events, with
@@ -585,6 +703,7 @@ async function loadRotationArtistKeys(
  * stations = 20000-ish play rows in any window — under budget) and
  * stays correct without invalidation logic. If query latency creeps
  * above 1s on a real load, swap to the cached materialized view.
+ * (Alexa already reads a cache: see refreshStationArtistShows below.)
  */
 export const upcomingFromRotation = query({
   args: {
@@ -600,96 +719,8 @@ export const upcomingFromRotation = query({
     artistCap: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const lookbackDays = args.lookbackDays ?? 30;
-    const horizonDays = args.horizonDays ?? 90;
-    const limit = args.limit ?? 50;
-    const artistCap = args.artistCap ?? 200;
-
-    const now = Date.now();
-    const lookbackMs = now - lookbackDays * 86_400_000;
-    const horizonMs = now + horizonDays * 86_400_000;
-
-    const org = await ctx.db
-      .query("organizations")
-      .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
-      .first();
-    if (org === null) return [];
-
-    // 1. Scan plays in lookback window across all stations.
-    const recentPlays = await ctx.db
-      .query("plays")
-      .withIndex("by_org_played_at", (q) => q.eq("orgId", org._id).gte("playedAt", lookbackMs))
-      .take(16_000);
-
-    // 2. Group by normalized artistKey, count plays + remember stations.
-    type ArtistInfo = {
-      count: number;
-      stationIds: Set<Id<"stations">>;
-      displayName: string;
-    };
-    const byArtistKey = new Map<string, ArtistInfo>();
-    for (const play of recentPlays) {
-      if (play.deletedAt !== undefined) continue;
-      if (play.enrichmentStatus === "ignored") continue;
-      const key = normalizeEventArtistKey(play.artistRaw);
-      if (key.length === 0) continue;
-      const existing = byArtistKey.get(key);
-      if (existing !== undefined) {
-        existing.count++;
-        existing.stationIds.add(play.stationId);
-      } else {
-        byArtistKey.set(key, {
-          count: 1,
-          stationIds: new Set([play.stationId]),
-          displayName: play.artistRaw,
-        });
-      }
-    }
-
-    // 3. Sort by play count, take top N artists. Bounds the follow-up
-    //    eventArtists lookups to keep the query under Convex's read budget.
-    const topArtists = Array.from(byArtistKey.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, artistCap);
-
-    // 4. For each top artist, find matching upcoming events.
-    type Match = {
-      artistKey: string;
-      artistName: string;
-      playCount: number;
-      stationIds: Id<"stations">[];
-      event: Doc<"events">;
-      role: "headliner" | "support";
-    };
-    const matches: Match[] = [];
-
-    for (const [artistKey, info] of topArtists) {
-      const eventArtistRows = await ctx.db
-        .query("eventArtists")
-        .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
-        .take(20);
-
-      for (const ea of eventArtistRows) {
-        const event = await ctx.db.get(ea.eventId);
-        if (event === null) continue;
-        if (event.duplicateOf !== undefined) continue;
-        if (event.startsAt <= now) continue;
-        if (event.startsAt > horizonMs) continue;
-        if (event.status === "cancelled" || event.status === "postponed") continue;
-        matches.push({
-          artistKey,
-          artistName: ea.artistNameRaw,
-          playCount: info.count,
-          stationIds: Array.from(info.stationIds),
-          event,
-          role: ea.role,
-        });
-      }
-    }
-
-    // 5. Sort by event start ascending, return shaped results.
-    matches.sort((a, b) => a.event.startsAt - b.event.startsAt);
-    return matches.slice(0, limit).map((m) => ({
+    const matches = await computeUpcomingFromRotation(ctx, args);
+    return matches.map((m) => ({
       artistKey: m.artistKey,
       artistName: m.artistName,
       playCount: m.playCount,
@@ -706,5 +737,95 @@ export const upcomingFromRotation = query({
       role: m.role,
       source: m.event.source,
     }));
+  },
+});
+
+// ---------------------------------------------------------------- //
+// Alexa cache: rotation artists with upcoming shows, per station
+// ---------------------------------------------------------------- //
+
+/** Single tenant; seed.ts creates this org. */
+const ORG_SLUG = "radiomilwaukee";
+const ALL_STATIONS_KEY = "all";
+const MAX_CACHED_SHOWS = 40;
+
+type CachedShow = Infer<typeof stationArtistShowValidator>;
+type CacheSource = {
+  stationSlugs: string[];
+  matches: Array<{ stationSlugs: string[]; show: CachedShow }>;
+};
+
+function toCachedShow(match: RotationMatch): CachedShow {
+  const { event } = match;
+  return {
+    artistName: match.artistName,
+    playCount: match.playCount,
+    venueName: event.venueName,
+    city: event.city,
+    region: event.region,
+    metro: nearestMetro(event.latitude, event.longitude, event.city),
+    startsAtMs: event.startsAt,
+    dateOnly: event.dateOnly === true,
+    ticketUrl: event.ticketUrl ?? null,
+    imageUrl: event.imageUrl ?? null,
+    role: match.role,
+  };
+}
+
+export const rotationShowsForCache = internalQuery({
+  args: {},
+  handler: async (ctx): Promise<CacheSource> => {
+    // Every match, not the dashboard's 50: the per-station split needs them all.
+    const matches = await computeUpcomingFromRotation(ctx, {
+      orgSlug: ORG_SLUG,
+      limit: Number.POSITIVE_INFINITY,
+    });
+    const stations = await ctx.db.query("stations").collect();
+    const slugById = new Map(stations.map((station) => [station._id, station.slug]));
+    return {
+      stationSlugs: stations.map((station) => station.slug),
+      matches: matches.map((match) => ({
+        stationSlugs: match.stationIds.flatMap((id) => slugById.get(id) ?? []),
+        show: toCachedShow(match),
+      })),
+    };
+  },
+});
+
+export const storeStationArtistShows = internalMutation({
+  args: {
+    refreshedAt: v.number(),
+    rows: v.array(v.object({ key: v.string(), shows: v.array(stationArtistShowValidator) })),
+  },
+  handler: async (ctx, { refreshedAt, rows }) => {
+    for (const row of rows) {
+      const existing = await ctx.db
+        .query("stationArtistShows")
+        .withIndex("by_key", (q) => q.eq("key", row.key))
+        .first();
+      if (existing === null) await ctx.db.insert("stationArtistShows", { ...row, refreshedAt });
+      else await ctx.db.patch(existing._id, { shows: row.shows, refreshedAt });
+    }
+  },
+});
+
+/** Cron: the slow rotation read runs once here so alexa:stationArtistShows is a single index read. */
+export const refreshStationArtistShows = internalAction({
+  args: {},
+  handler: async (ctx): Promise<null> => {
+    const source: CacheSource = await ctx.runQuery(internal.events.rotationShowsForCache, {});
+    const rows = [ALL_STATIONS_KEY, ...source.stationSlugs].map((key) => ({
+      key,
+      shows: rankArtistShows(
+        source.matches
+          .filter((m) => key === ALL_STATIONS_KEY || m.stationSlugs.includes(key))
+          .map((m) => m.show),
+      ).slice(0, MAX_CACHED_SHOWS),
+    }));
+    await ctx.runMutation(internal.events.storeStationArtistShows, {
+      refreshedAt: Date.now(),
+      rows,
+    });
+    return null;
   },
 });

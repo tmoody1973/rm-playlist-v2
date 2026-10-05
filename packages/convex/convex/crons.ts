@@ -27,4 +27,12 @@ crons.daily(
   {},
 );
 
+// Alexa answers "any 88Nine artists playing soon?" from this cache; the live query takes 7-11 s.
+crons.interval(
+  "station artist shows refresh",
+  { hours: 3 },
+  internal.events.refreshStationArtistShows,
+  {},
+);
+
 export default crons;

@@ -14,6 +14,8 @@ import {
   hasRecentOtherSave,
   pickFindStory,
   pickHomeShow,
+  clampShowLimit,
+  rankArtistShows,
   playAtNumber,
   rankDigest,
   storyCutoff,
@@ -498,5 +500,54 @@ describe("preferFullMatches", () => {
   test("stopword or misspelled query with no full match returns all hits", () => {
     const hits = [play("A", "Groove Thang"), play("B", "Groove Holmes")];
     expect(preferFullMatches(hits, "the groove thing")).toEqual(hits);
+  });
+});
+
+describe("rankArtistShows", () => {
+  const show = (artistName: string, metro: string, day: number) => ({
+    artistName,
+    metro,
+    startsAtMs: day * 86_400_000,
+  });
+
+  test("one show per artist, Milwaukee preferred over a sooner show elsewhere", () => {
+    const ranked = rankArtistShows([show("Nas", "Chicago", 1), show("Nas", "Milwaukee", 5)]);
+    expect(ranked).toEqual([show("Nas", "Milwaukee", 5)]);
+  });
+
+  test("without a Milwaukee show, the artist's soonest show wins", () => {
+    const ranked = rankArtistShows([show("Nas", "Madison", 9), show("Nas", "Chicago", 3)]);
+    expect(ranked).toEqual([show("Nas", "Chicago", 3)]);
+  });
+
+  test("Milwaukee shows first by date, then other metros by date", () => {
+    const ranked = rankArtistShows([
+      show("A", "Chicago", 1),
+      show("B", "Milwaukee", 8),
+      show("C", "Madison", 2),
+      show("D", "Milwaukee", 4),
+    ]);
+    expect(ranked.map((s) => s.artistName)).toEqual(["D", "B", "A", "C"]);
+  });
+
+  test("artist names that differ only in case or punctuation are the same artist", () => {
+    const ranked = rankArtistShows([
+      show("The Roots", "Chicago", 2),
+      show("the roots", "Chicago", 1),
+    ]);
+    expect(ranked).toHaveLength(1);
+    expect(ranked[0]!.startsAtMs).toBe(86_400_000);
+  });
+
+  test("empty in, empty out", () => expect(rankArtistShows([])).toEqual([]));
+});
+
+describe("clampShowLimit", () => {
+  test("defaults to 10", () => expect(clampShowLimit(undefined)).toBe(10));
+  test("caps at 20", () => expect(clampShowLimit(99)).toBe(20));
+  test("floors to at least 1", () => {
+    expect(clampShowLimit(0)).toBe(1);
+    expect(clampShowLimit(2.7)).toBe(2);
+    expect(clampShowLimit(Number.NaN)).toBe(10);
   });
 });
