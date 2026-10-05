@@ -57,6 +57,8 @@ type SaveResult =
       appleMusic: "pending" | "not_linked";
       artist: string;
       title: string;
+      artworkUrl: string | null;
+      previewUrl: string | null;
       alreadySaved: boolean;
       artistName: string;
       artistId: string | null;
@@ -136,6 +138,8 @@ export const save = mutation({
       appleMusic: status,
       artist,
       title,
+      artworkUrl: track?.artworkUrl ?? null,
+      previewUrl: track?.previewUrl ?? null,
       alreadySaved: existing !== null,
       artistName: artist,
       artistId,
