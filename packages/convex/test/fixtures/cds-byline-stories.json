@@ -1,0 +1,106 @@
+{
+  "resources": [
+    {
+      "id": "g-s921-16853",
+      "title": "The top albums from New Music Friday for Oct. 2",
+      "publishDateTime": "2026-10-02T05:30:00-05:00",
+      "webPages": [
+        {
+          "href": "https://radiomilwaukee.org/new-music/2026-10-02/new-music-friday-oct-2-best-albums",
+          "rels": ["canonical"]
+        }
+      ],
+      "bylines": [
+        {
+          "href": "#/assets/g-s921-16853-1"
+        }
+      ],
+      "collections": [
+        {
+          "href": "/v1/documents/g-s921-4166",
+          "rels": ["topic", "theme", "slug"]
+        },
+        {
+          "href": "/v1/documents/g-s921-6879",
+          "rels": ["category"]
+        },
+        {
+          "href": "/v1/documents/1179410589",
+          "rels": ["byline"]
+        },
+        {
+          "href": "/v1/documents/319418027",
+          "rels": ["collection"]
+        }
+      ]
+    },
+    {
+      "id": "g-s921-16494",
+      "title": "The top albums from New Music Friday for Sept. 25",
+      "publishDateTime": "2026-09-25T05:30:00-05:00",
+      "webPages": [
+        {
+          "href": "https://radiomilwaukee.org/new-music/2026-09-25/new-music-friday-sept-25-best-albums",
+          "rels": ["canonical"]
+        }
+      ],
+      "bylines": [
+        {
+          "href": "#/assets/g-s921-16494-1"
+        }
+      ],
+      "collections": [
+        {
+          "href": "/v1/documents/g-s921-4166",
+          "rels": ["topic", "theme", "slug"]
+        },
+        {
+          "href": "/v1/documents/g-s921-6879",
+          "rels": ["category"]
+        },
+        {
+          "href": "/v1/documents/1179410589",
+          "rels": ["byline"]
+        },
+        {
+          "href": "/v1/documents/319418027",
+          "rels": ["collection"]
+        }
+      ]
+    },
+    {
+      "id": "g-s921-16430",
+      "title": "Best new music: Stella Dunai’s ‘Move on!’ embraces chaos, connection",
+      "publishDateTime": "2026-09-22T06:59:49.448-05:00",
+      "webPages": [
+        {
+          "href": "https://radiomilwaukee.org/show/whats-all-this/2026-09-22/best-new-indie-music-stella-dunai",
+          "rels": ["canonical"]
+        }
+      ],
+      "bylines": [
+        {
+          "href": "#/assets/g-s921-16430-1"
+        }
+      ],
+      "collections": [
+        {
+          "href": "/v1/documents/g-s921-4166",
+          "rels": ["topic"]
+        },
+        {
+          "href": "/v1/documents/g-s921-4637",
+          "rels": ["series"]
+        },
+        {
+          "href": "/v1/documents/1179410589",
+          "rels": ["byline"]
+        },
+        {
+          "href": "/v1/documents/319418027",
+          "rels": ["collection"]
+        }
+      ]
+    }
+  ]
+}

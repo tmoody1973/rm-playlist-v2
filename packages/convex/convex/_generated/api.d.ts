@@ -29,6 +29,8 @@ import type * as findsLogic from "../findsLogic.js";
 import type * as follows from "../follows.js";
 import type * as health from "../health.js";
 import type * as healthRules from "../healthRules.js";
+import type * as hostProfiles from "../hostProfiles.js";
+import type * as hostProfilesLogic from "../hostProfilesLogic.js";
 import type * as ingestionEvents from "../ingestionEvents.js";
 import type * as ingestionSources from "../ingestionSources.js";
 import type * as listenerGuard from "../listenerGuard.js";
@@ -73,6 +75,8 @@ declare const fullApi: ApiFromModules<{
   follows: typeof follows;
   health: typeof health;
   healthRules: typeof healthRules;
+  hostProfiles: typeof hostProfiles;
+  hostProfilesLogic: typeof hostProfilesLogic;
   ingestionEvents: typeof ingestionEvents;
   ingestionSources: typeof ingestionSources;
   listenerGuard: typeof listenerGuard;

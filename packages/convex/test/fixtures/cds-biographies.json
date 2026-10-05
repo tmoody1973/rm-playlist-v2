@@ -1,0 +1,164 @@
+{
+  "resources": [
+    {
+      "id": "1266875568",
+      "title": "Lodewijk (Lodi) Broekhuizen",
+      "profiles": [
+        {
+          "href": "/v1/profiles/aggregation",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/biography",
+          "rels": ["type"]
+        },
+        {
+          "href": "/v1/profiles/publishable",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/document"
+        },
+        {
+          "href": "/v1/profiles/buildout",
+          "rels": ["interface"]
+        }
+      ],
+      "owners": [
+        {
+          "href": "https://organization.api.npr.org/v4/services/s921"
+        }
+      ],
+      "publishDateTime": "2025-02-21T12:38:35-05:00",
+      "items": []
+    },
+    {
+      "id": "1167538791",
+      "title": "Mallorey Wallace",
+      "profiles": [
+        {
+          "href": "/v1/profiles/aggregation",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/biography",
+          "rels": ["type"]
+        },
+        {
+          "href": "/v1/profiles/publishable",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/document"
+        },
+        {
+          "href": "/v1/profiles/buildout",
+          "rels": ["interface"]
+        }
+      ],
+      "owners": [
+        {
+          "href": "https://organization.api.npr.org/v4/services/s921"
+        }
+      ],
+      "publishDateTime": "2022-12-13T19:41:06-05:00",
+      "items": []
+    },
+    {
+      "id": "1192772202",
+      "title": "Tarik Moody",
+      "profiles": [
+        {
+          "href": "/v1/profiles/aggregation",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/biography",
+          "rels": ["type"]
+        },
+        {
+          "href": "/v1/profiles/publishable",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/document"
+        },
+        {
+          "href": "/v1/profiles/buildout",
+          "rels": ["interface"]
+        }
+      ],
+      "owners": [
+        {
+          "href": "https://organization.api.npr.org/v4/services/s921"
+        }
+      ],
+      "publishDateTime": "2022-12-14T11:07:50-05:00",
+      "items": []
+    },
+    {
+      "id": "1178217169",
+      "title": "Brett Krzykowski",
+      "profiles": [
+        {
+          "href": "/v1/profiles/aggregation",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/biography",
+          "rels": ["type"]
+        },
+        {
+          "href": "/v1/profiles/publishable",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/document"
+        },
+        {
+          "href": "/v1/profiles/buildout",
+          "rels": ["interface"]
+        }
+      ],
+      "owners": [
+        {
+          "href": "https://organization.api.npr.org/v4/services/s921"
+        }
+      ],
+      "publishDateTime": "2022-12-13T13:54:15-05:00",
+      "items": []
+    },
+    {
+      "id": "1179410589",
+      "title": "Erin Wolf",
+      "profiles": [
+        {
+          "href": "/v1/profiles/aggregation",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/biography",
+          "rels": ["type"]
+        },
+        {
+          "href": "/v1/profiles/publishable",
+          "rels": ["interface"]
+        },
+        {
+          "href": "/v1/profiles/document"
+        },
+        {
+          "href": "/v1/profiles/buildout",
+          "rels": ["interface"]
+        }
+      ],
+      "owners": [
+        {
+          "href": "https://organization.api.npr.org/v4/services/s921"
+        }
+      ],
+      "publishDateTime": "2022-12-13T19:05:02-05:00",
+      "items": []
+    }
+  ]
+}

@@ -49,6 +49,27 @@ export const scheduleProgramValidator = v.object({
   airtimes: v.array(v.object({ dayOfWeek: v.number(), startMin: v.number(), endMin: v.number() })),
 });
 
+/** One 88Nine host's cached profile; see hostProfiles.refresh and hostProfilesLogic.ts. */
+export const hostProfileValidator = v.object({
+  name: v.string(),
+  /** CDS biography document id, null when the host has no s921 biography. */
+  cdsId: v.union(v.string(), v.null()),
+  matchMethod: v.union(v.literal("exact"), v.literal("fuzzy"), v.null()),
+  imageUrl: v.union(v.string(), v.null()),
+  profileUrl: v.union(v.string(), v.null()),
+  /** Up to 5 newest s921 stories bylined to the biography, newest first. */
+  latest: v.array(
+    v.object({ cdsId: v.string(), title: v.string(), url: v.string(), publishedAt: v.number() }),
+  ),
+});
+
+/** A radiomilwaukee.org /show page and the art it uses. */
+export const showPageValidator = v.object({
+  slug: v.string(),
+  url: v.string(),
+  imageUrl: v.union(v.string(), v.null()),
+});
+
 export default defineSchema({
   // ------------------------------------------------------------------
   // Organizations + stations (forward-compat multi-tenant)
@@ -696,5 +717,18 @@ export default defineSchema({
     station: v.string(),
     programs: v.array(scheduleProgramValidator),
     refreshedAt: v.number(),
+  }).index("by_station", ["station"]),
+
+  /**
+   * Host profiles and show art per station slug for alexa:stationSchedule and
+   * alexa:hostProfile. Latest pieces refresh every 30 minutes; page images
+   * (pagesRefreshedAt) about daily.
+   */
+  hostProfiles: defineTable({
+    station: v.string(),
+    hosts: v.array(hostProfileValidator),
+    shows: v.array(showPageValidator),
+    refreshedAt: v.number(),
+    pagesRefreshedAt: v.number(),
   }).index("by_station", ["station"]),
 });

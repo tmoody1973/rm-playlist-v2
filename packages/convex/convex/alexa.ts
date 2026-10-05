@@ -2,7 +2,8 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
-import { findPrograms, scheduleAt } from "./scheduleLogic";
+import { findHost, publicProfiles, showArt } from "./hostProfilesLogic";
+import { findPrograms, labelAirtimes, scheduleAt } from "./scheduleLogic";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
@@ -522,6 +523,10 @@ export const stationArtistShows = query({
  * Audio Taste Test". Reads the Cadence cache that cadence.refreshStationSchedule
  * writes every 15 minutes. `at` (epoch ms) defaults to now. Public read, like
  * the other alexa:* queries.
+ *
+ * onNow, next and each match also carry `imageUrl` and `link` (the show's
+ * radiomilwaukee.org page, null for dayparts and syndicated shows) and
+ * `hostProfiles` from the hostProfiles cache.
  */
 export const stationSchedule = query({
   args: { station: v.string(), query: v.optional(v.string()), at: v.optional(v.number()) },
@@ -530,6 +535,12 @@ export const stationSchedule = query({
       .query("stationSchedule")
       .withIndex("by_station", (q) => q.eq("station", args.station))
       .first();
+    const profiles = await hostProfilesRow(ctx, args.station);
+    const decorate = <T extends { name: string; hosts: string[] }>(program: T) => ({
+      ...program,
+      ...showArt(program.name, profiles?.shows ?? []),
+      hostProfiles: publicProfiles(program.hosts, profiles?.hosts ?? []),
+    });
     if (row === null)
       return {
         refreshedAt: null,
@@ -543,7 +554,45 @@ export const stationSchedule = query({
     const { onNow, next } = scheduleAt(row.programs, at);
     const matches = args.query ? findPrograms(row.programs, args.query, at) : [];
     // `match` predates `matches`; kept for callers that read one program.
-    const match = matches[0] ?? null;
-    return { refreshedAt: row.refreshedAt, station: args.station, onNow, next, match, matches };
+    const decorated = matches.map(decorate);
+    return {
+      refreshedAt: row.refreshedAt,
+      station: args.station,
+      onNow: onNow && decorate(onNow),
+      next: next && decorate(next),
+      match: decorated[0] ?? null,
+      matches: decorated,
+    };
   },
 });
+
+/**
+ * Alexa: "what has Erin Wolf written lately / who is Mallory Wallace". One
+ * host's cached profile plus the programs they host, or null for a name that
+ * isn't a station host. Matches exact names, then one-letter spelling slips.
+ */
+export const hostProfile = query({
+  args: { name: v.string(), station: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const station = args.station ?? "88nine";
+    const profiles = await hostProfilesRow(ctx, station);
+    const host = findHost(profiles?.hosts ?? [], args.name);
+    if (host === null) return null;
+    const schedule = await ctx.db
+      .query("stationSchedule")
+      .withIndex("by_station", (q) => q.eq("station", station))
+      .first();
+    const programs = (schedule?.programs ?? [])
+      .filter((p) => p.hosts.includes(host.name))
+      .map((p) => ({ name: p.name, airtimes: labelAirtimes(p.airtimes) }));
+    const [profile] = publicProfiles([host.name], [host]);
+    return { ...profile!, programs };
+  },
+});
+
+function hostProfilesRow(ctx: QueryCtx, station: string) {
+  return ctx.db
+    .query("hostProfiles")
+    .withIndex("by_station", (q) => q.eq("station", station))
+    .first();
+}
