@@ -56,6 +56,8 @@ export interface DigestShow {
   venue: string;
   city: string;
   startsAtMs: number;
+  imageUrl: string | null;
+  ticketUrl: string | null;
 }
 export interface DigestStory {
   storyId: string;

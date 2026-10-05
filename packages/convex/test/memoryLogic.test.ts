@@ -113,14 +113,26 @@ describe("rankDigest", () => {
       artists: [
         artist("Thao", {
           spins: [{ station: "88nine", count: 2 }],
-          nextShow: { venue: "Turner Hall", city: "Milwaukee", startsAtMs: NOW + 2 * 86_400_000 },
+          nextShow: {
+            venue: "Turner Hall",
+            city: "Milwaukee",
+            startsAtMs: NOW + 2 * 86_400_000,
+            imageUrl: "https://img/thao.jpg",
+            ticketUrl: "https://tix/thao",
+          },
         }),
         artist("Nas", {
           spins: [
             { station: "hyfin", count: 3 },
             { station: "88nine", count: 1 },
           ],
-          nextShow: { venue: "Riviera", city: "Chicago", startsAtMs: NOW + 20 * 86_400_000 },
+          nextShow: {
+            venue: "Riviera",
+            city: "Chicago",
+            startsAtMs: NOW + 20 * 86_400_000,
+            imageUrl: null,
+            ticketUrl: null,
+          },
         }),
         artist("Zhané", {
           stories: [
@@ -144,6 +156,11 @@ describe("rankDigest", () => {
       "apple:",
     ]);
     expect(items[1]).toMatchObject({ kind: "spins", artist: "Nas", total: 4 });
+    expect(items[0]).toMatchObject({
+      kind: "show",
+      imageUrl: "https://img/thao.jpg",
+      ticketUrl: "https://tix/thao",
+    });
   });
   test("every show, spins and story item carries its artistId", () => {
     const items = rankDigest({
@@ -152,7 +169,13 @@ describe("rankDigest", () => {
       artists: [
         artist("Thao", {
           spins: [{ station: "88nine", count: 2 }],
-          nextShow: { venue: "Turner Hall", city: "Milwaukee", startsAtMs: NOW + 86_400_000 },
+          nextShow: {
+            venue: "Turner Hall",
+            city: "Milwaukee",
+            startsAtMs: NOW + 86_400_000,
+            imageUrl: null,
+            ticketUrl: null,
+          },
           stories: [{ storyId: "s", title: "t", show: "x", publishedAt: NOW - 86_400_000 }],
         }),
       ],
@@ -190,7 +213,13 @@ describe("rankDigest", () => {
       expect(storyCutoff(since)).toBe(since - STORY_LOOKBACK_MS));
   });
   describe("boundaries", () => {
-    const show = (offsetMs: number) => ({ venue: "V", city: "C", startsAtMs: NOW + offsetMs });
+    const show = (offsetMs: number) => ({
+      venue: "V",
+      city: "C",
+      startsAtMs: NOW + offsetMs,
+      imageUrl: null,
+      ticketUrl: null,
+    });
     test("a show starting exactly now is excluded", () =>
       expect(
         rankDigest({
