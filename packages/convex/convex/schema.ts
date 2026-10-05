@@ -22,6 +22,22 @@ export const appleMusicStatusValidator = v.union(
  * `apiKeyRef` / env-var indirection pattern in `ingestionSources.config`.
  */
 
+/** One cached "rotation artist has a show coming up" entry; see events.refreshStationArtistShows. */
+export const stationArtistShowValidator = v.object({
+  artistName: v.string(),
+  playCount: v.number(),
+  venueName: v.string(),
+  city: v.string(),
+  region: v.string(),
+  /** Milwaukee / Madison / Chicago, or the city when the event has no coordinates. */
+  metro: v.string(),
+  startsAtMs: v.number(),
+  dateOnly: v.boolean(),
+  ticketUrl: v.union(v.string(), v.null()),
+  imageUrl: v.union(v.string(), v.null()),
+  role: v.union(v.literal("headliner"), v.literal("support")),
+});
+
 export default defineSchema({
   // ------------------------------------------------------------------
   // Organizations + stations (forward-compat multi-tenant)
@@ -644,4 +660,14 @@ export default defineSchema({
     ),
     checkedAt: v.number(),
   }).index("by_artist", ["artistId"]),
+
+  /**
+   * events.upcomingFromRotation is too slow for Alexa (7-11 s), so a cron
+   * stores its answer here. key = station slug, or "all" for every station.
+   */
+  stationArtistShows: defineTable({
+    key: v.string(),
+    shows: v.array(stationArtistShowValidator),
+    refreshedAt: v.number(),
+  }).index("by_key", ["key"]),
 });

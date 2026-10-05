@@ -3,7 +3,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
-import { mergeSearchHits, preferFullMatches, searchCutoff, searchTerms } from "./memoryLogic";
+import {
+  clampShowLimit,
+  mergeSearchHits,
+  preferFullMatches,
+  searchCutoff,
+  searchTerms,
+} from "./memoryLogic";
 import {
   chooseRecallStatus,
   clampConnectionLimit,
@@ -442,5 +448,22 @@ export const searchPlays = query({
         };
       }),
     );
+  },
+});
+
+/**
+ * Alexa: "any 88Nine artists have concerts coming up?". Reads the cache that
+ * events.refreshStationArtistShows writes every 3 hours, already ranked
+ * (Milwaukee first). No station = every station. Public read, like the other alexa:* queries.
+ */
+export const stationArtistShows = query({
+  args: { station: v.optional(v.string()), limit: v.optional(v.number()) },
+  handler: async (ctx, { station, limit }) => {
+    const row = await ctx.db
+      .query("stationArtistShows")
+      .withIndex("by_key", (q) => q.eq("key", station ?? "all"))
+      .first();
+    if (row === null) return { refreshedAt: null, shows: [] };
+    return { refreshedAt: row.refreshedAt, shows: row.shows.slice(0, clampShowLimit(limit)) };
   },
 });

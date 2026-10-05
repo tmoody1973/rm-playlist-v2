@@ -1,3 +1,4 @@
+import { normalizeArtistForMatch } from "./matchKey";
 import { METROS } from "./showsByMetro";
 // Pure listener-memory logic: no Convex imports, so it unit-tests without a deployment.
 export const SCREEN_TTL_MS = 30 * 60_000;
@@ -225,6 +226,30 @@ export function pickHomeShow<T extends { metro: string; startsAtMs: number }>(
     (a, s) => (a === null || s.startsAtMs < a.startsAtMs ? s : a),
     null,
   );
+}
+
+/** "Rotation artists with shows coming up": one show per artist (pickHomeShow), Milwaukee shows first, each group by date. */
+export function rankArtistShows<
+  T extends { artistName: string; metro: string; startsAtMs: number },
+>(shows: readonly T[]): T[] {
+  const byArtist = new Map<string, T[]>();
+  for (const show of [...shows].sort((a, b) => a.startsAtMs - b.startsAtMs)) {
+    const key = normalizeArtistForMatch(show.artistName);
+    byArtist.set(key, [...(byArtist.get(key) ?? []), show]);
+  }
+  const isHome = (show: T) => (show.metro === HOME_METRO ? 0 : 1);
+  return [...byArtist.values()]
+    .map((artistShows) => pickHomeShow(artistShows)!)
+    .sort((a, b) => isHome(a) - isHome(b) || a.startsAtMs - b.startsAtMs);
+}
+
+const DEFAULT_SHOW_LIMIT = 10;
+const MAX_SHOW_LIMIT = 20;
+
+export function clampShowLimit(limit: number | undefined): number {
+  const requested =
+    limit === undefined || Number.isNaN(limit) ? DEFAULT_SHOW_LIMIT : Math.floor(limit);
+  return Math.min(MAX_SHOW_LIMIT, Math.max(1, requested));
 }
 
 export const DIGEST_DEFAULT_WINDOW_MS = 7 * 86_400_000;
