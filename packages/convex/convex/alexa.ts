@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
+import { findProgram, scheduleAt } from "./scheduleLogic";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
@@ -513,5 +514,27 @@ export const stationArtistShows = query({
       .first();
     if (row === null) return { refreshedAt: null, shows: [] };
     return { refreshedAt: row.refreshedAt, shows: row.shows.slice(0, clampShowLimit(limit)) };
+  },
+});
+
+/**
+ * Alexa: "what's on 88Nine right now / when is Rhythm Lab / did I miss
+ * Audio Taste Test". Reads the Cadence cache that cadence.refreshStationSchedule
+ * writes every 15 minutes. `at` (epoch ms) defaults to now. Public read, like
+ * the other alexa:* queries.
+ */
+export const stationSchedule = query({
+  args: { station: v.string(), query: v.optional(v.string()), at: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("stationSchedule")
+      .withIndex("by_station", (q) => q.eq("station", args.station))
+      .first();
+    if (row === null)
+      return { refreshedAt: null, station: args.station, onNow: null, next: null, match: null };
+    const at = args.at ?? Date.now();
+    const { onNow, next } = scheduleAt(row.programs, at);
+    const match = args.query ? findProgram(row.programs, args.query, at) : null;
+    return { refreshedAt: row.refreshedAt, station: args.station, onNow, next, match };
   },
 });

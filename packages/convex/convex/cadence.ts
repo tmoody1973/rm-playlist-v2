@@ -17,6 +17,8 @@ import {
   type CadenceSong,
 } from "./cadenceSong";
 import { summarizePushEvents } from "./cadenceSummary";
+import { buildSchedulePrograms, weekDateRange } from "./scheduleLogic";
+import { scheduleProgramValidator } from "./schema";
 
 /**
  * Live push of resolved plays into NPR Cadence.
@@ -267,6 +269,82 @@ async function logEvent(
     message,
     context,
   });
+}
+
+// --- Station schedule cache --------------------------------------------------
+
+/** Stations whose Cadence schedule is cached; HYFIN joins once its Cadence schedule is current. */
+const SCHEDULE_STATIONS = ["88nine"] as const;
+
+export const storeStationSchedule = internalMutation({
+  args: {
+    station: v.string(),
+    programs: v.array(scheduleProgramValidator),
+    refreshedAt: v.number(),
+  },
+  handler: async (ctx, { station, programs, refreshedAt }) => {
+    const existing = await ctx.db
+      .query("stationSchedule")
+      .withIndex("by_station", (q) => q.eq("station", station))
+      .first();
+    if (existing === null)
+      await ctx.db.insert("stationSchedule", { station, programs, refreshedAt });
+    else await ctx.db.patch(existing._id, { programs, refreshedAt });
+  },
+});
+
+/**
+ * Cron (15 min): program details (hosts, description) from the authenticated
+ * program API, weekly airtimes from the public widget's next seven days of
+ * episodes. Any failure keeps the previous row; alexa:stationSchedule then
+ * answers from the older refreshedAt.
+ */
+export const refreshStationSchedule = internalAction({
+  args: {},
+  handler: async (ctx): Promise<null> => {
+    for (const station of SCHEDULE_STATIONS) {
+      const channelId = channelIdFor(station);
+      if (channelId === undefined) {
+        console.warn(`stationSchedule: no Cadence channel configured for ${station}`);
+        continue;
+      }
+      try {
+        const programs = await fetchSchedulePrograms(channelId);
+        if (programs.length === 0) throw new Error("Cadence returned no programs");
+        await ctx.runMutation(internal.cadence.storeStationSchedule, {
+          station,
+          programs,
+          refreshedAt: Date.now(),
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`stationSchedule: refresh failed for ${station}, keeping cache: ${message}`);
+      }
+    }
+    return null;
+  },
+});
+
+async function fetchSchedulePrograms(channelId: string) {
+  const token = await fetchToken();
+  const list = (await (
+    await cadenceFetch(`/api/cadence/program/${channelId}/all`, {}, token)
+  ).json()) as Array<{ programId?: string }>;
+  const details: unknown[] = [];
+  // ponytail: sequential on purpose, ~21 small GETs every 15 min; NPR rate limits are unknown.
+  for (const { programId } of list) {
+    if (programId === undefined) continue;
+    const res = await cadenceFetch(`/api/cadence/program/${channelId}/${programId}`, {}, token);
+    details.push(await res.json());
+  }
+  const range = weekDateRange(Date.now());
+  const week = (await (
+    await cadenceFetch(`/api/cadence/widget/${channelId}/day?date=${range}`, {})
+  ).json()) as { episodes?: Array<{ episode?: unknown }> };
+  return buildSchedulePrograms(
+    details,
+    (week.episodes ?? []).map((row) => row.episode),
+  );
 }
 
 // --- Cadence HTTP -----------------------------------------------------------

@@ -35,4 +35,12 @@ crons.interval(
   {},
 );
 
+// Alexa answers "what's on 88Nine / when is Rhythm Lab" from this Cadence schedule cache.
+crons.interval(
+  "station schedule refresh",
+  { minutes: 15 },
+  internal.cadence.refreshStationSchedule,
+  {},
+);
+
 export default crons;
