@@ -3,7 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
-import { mergeSearchHits, searchCutoff, searchTerms } from "./memoryLogic";
+import { mergeSearchHits, preferFullMatches, searchCutoff, searchTerms } from "./memoryLogic";
 import {
   chooseRecallStatus,
   clampConnectionLimit,
@@ -421,11 +421,10 @@ export const searchPlays = query({
         })
         .take(SEARCH_HITS_PER_INDEX),
     ]);
-    const hits = mergeSearchHits(
-      byArtist.filter(visible),
-      byTitle.filter(visible),
-      SEARCH_RESULT_LIMIT,
-    ).flatMap((play) => {
+    // Full-match preference spans both indexes, so filter the union, then merge/dedupe newest-first.
+    const candidates = preferFullMatches([...byArtist, ...byTitle].filter(visible), searchText);
+    // mergeSearchHits is reused here for dedupe + newest-first.
+    const hits = mergeSearchHits(candidates, [], SEARCH_RESULT_LIMIT).flatMap((play) => {
       const stationRow = stationById.get(play.stationId);
       return stationRow ? [{ play, stationRow }] : [];
     });

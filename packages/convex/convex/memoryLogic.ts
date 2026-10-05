@@ -278,3 +278,17 @@ export function searchTerms(query: string): string {
     .join(" ");
   return usable.slice(0, SEARCH_MAX_CHARS).trim();
 }
+
+/** Convex search matches ANY query word; when some play contains every word (whole-word), drop the partial matches so the top hit is the song asked for. */
+export function preferFullMatches<T extends { artistRaw: string; titleRaw: string }>(
+  hits: T[],
+  query: string,
+): T[] {
+  const queryWords = words(query).trim().split(" ").filter(Boolean);
+  if (queryWords.length === 0) return hits;
+  const full = hits.filter((hit) => {
+    const haystack = words(`${hit.artistRaw} ${hit.titleRaw}`);
+    return queryWords.every((word) => haystack.includes(` ${word} `));
+  });
+  return full.length > 0 ? full : hits;
+}
