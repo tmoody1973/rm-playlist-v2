@@ -80,14 +80,33 @@ describe("programHosts", () => {
     ]);
   });
 
-  test("displayHost false hides hosts, even ones Cadence or the name would give", () => {
+  test("Cadence's displayHost flag is ignored: it is false for nearly every hosted show", () => {
     expect(
-      programHosts({
-        programName: "88Nine Weekends with Kat Froehlich",
-        hosts: ["Kat Froehlich"],
-        displayHost: false,
-      }),
-    ).toEqual([]);
+      buildSchedulePrograms(
+        [
+          {
+            programId: "p",
+            programName: "88Nine Midday Show",
+            hosts: ["Erin Wolf"],
+            displayHost: false,
+          },
+        ],
+        [],
+      )[0]?.hosts,
+    ).toEqual(["Erin Wolf"]);
+    expect(
+      buildSchedulePrograms(
+        [
+          {
+            programId: "q",
+            programName: "88Nine Weekends with Kat Froehlich",
+            hosts: [],
+            displayHost: false,
+          },
+        ],
+        [],
+      )[0]?.hosts,
+    ).toEqual(["Kat Froehlich"]);
   });
 });
 

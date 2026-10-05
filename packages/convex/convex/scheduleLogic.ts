@@ -58,13 +58,12 @@ export function hostsFromName(name: string): string[] {
   return host ? [host] : [];
 }
 
-/** Cadence hosts, else the name's "with <Name>"; `displayHost: false` hides hosts entirely. */
-export function programHosts(detail: {
-  programName: string;
-  hosts?: string[];
-  displayHost?: boolean;
-}): string[] {
-  if (detail.displayHost === false) return [];
+/**
+ * Cadence hosts, else the name's "with <Name>". Cadence's `displayHost` is
+ * deliberately ignored: it defaults to false and is false for 12 of 13 hosted
+ * 88Nine shows (Tarik approved naming hosts regardless, 2026-10-05).
+ */
+export function programHosts(detail: { programName: string; hosts?: string[] }): string[] {
   const hosts = (detail.hosts ?? []).map((h) => h.trim()).filter((h) => h.length > 0);
   return hosts.length > 0 ? hosts : hostsFromName(detail.programName);
 }
@@ -96,7 +95,6 @@ interface ProgramDetail {
   programId?: unknown;
   programName?: unknown;
   hosts?: unknown;
-  displayHost?: unknown;
   description?: unknown;
   link?: unknown;
 }
@@ -127,7 +125,6 @@ export function buildSchedulePrograms(
         hosts: programHosts({
           programName: name,
           hosts: Array.isArray(detail.hosts) ? detail.hosts.filter(isString) : [],
-          displayHost: detail.displayHost === false ? false : undefined,
         }),
         ...(description ? { description } : {}),
         ...(link ? { link } : {}),
