@@ -38,6 +38,17 @@ export const stationArtistShowValidator = v.object({
   role: v.union(v.literal("headliner"), v.literal("support")),
 });
 
+/** One cached Cadence program; see cadence.refreshStationSchedule and scheduleLogic.ts. */
+export const scheduleProgramValidator = v.object({
+  programId: v.string(),
+  name: v.string(),
+  hosts: v.array(v.string()),
+  description: v.optional(v.string()),
+  link: v.optional(v.string()),
+  /** Weekly, America/Chicago civil time; endMin passes 1440 when a show crosses midnight. */
+  airtimes: v.array(v.object({ dayOfWeek: v.number(), startMin: v.number(), endMin: v.number() })),
+});
+
 export default defineSchema({
   // ------------------------------------------------------------------
   // Organizations + stations (forward-compat multi-tenant)
@@ -679,4 +690,11 @@ export default defineSchema({
     shows: v.array(stationArtistShowValidator),
     refreshedAt: v.number(),
   }).index("by_key", ["key"]),
+
+  /** Cadence program schedule per station slug, refreshed every 15 minutes for alexa:stationSchedule. */
+  stationSchedule: defineTable({
+    station: v.string(),
+    programs: v.array(scheduleProgramValidator),
+    refreshedAt: v.number(),
+  }).index("by_station", ["station"]),
 });
