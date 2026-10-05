@@ -227,12 +227,21 @@ export default defineSchema({
     /** Audit copy of the adapter's raw payload. */
     raw: v.any(),
     createdAt: v.number(),
+    /** artistRaw + " " + titleRaw for the search_text index (memoryLogic.playSearchFields). Optional only until backfills:backfillPlaySearchFields has run. */
+    searchText: v.optional(v.string()),
+    /** floor(playedAt / 14 days): the search window filters on this inside search_text. */
+    playedFortnight: v.optional(v.number()),
   })
     .index("by_station_played_at", ["stationId", "playedAt"])
     .index("by_org_played_at", ["orgId", "playedAt"])
     .index("by_enrichment_status", ["enrichmentStatus"])
     .index("by_canonical_artist", ["canonicalArtistId"])
     .index("by_canonical_track", ["canonicalTrackId"])
+    .searchIndex("search_text", {
+      searchField: "searchText",
+      filterFields: ["stationId", "playedFortnight"],
+    })
+    // ponytail: legacy indexes kept only for runPlaySearch's migration fallback; drop both (and the fallback) once the backfill has run.
     .searchIndex("search_artist", { searchField: "artistRaw", filterFields: ["stationId"] })
     .searchIndex("search_title", { searchField: "titleRaw", filterFields: ["stationId"] }),
 

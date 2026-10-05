@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalQuery, mutation } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
+import { playSearchFields } from "./memoryLogic";
 
 /**
  * Operator-invoked backfills for tracks that landed with incomplete
@@ -18,6 +19,8 @@ import { action, internalQuery, mutation } from "./_generated/server";
  *     path (artist-matched, no track row, no artworkUrl) back to
  *     `pending` so the next enrich cron tick re-runs them through
  *     the new CAA cover-art fallback.
+ *   - backfillPlaySearchFields: set searchText + playedFortnight on recent
+ *     plays so alexa:searchPlays' search_text index can see them.
  */
 
 /** Apple Music's max quota is generous but the docs recommend pacing. */
@@ -250,5 +253,60 @@ export const reEnrichMbOnlyPlays = mutation({
     }
 
     return { flipped, scanned };
+  },
+});
+
+const SEARCH_BACKFILL_BATCH = 500;
+const SEARCH_BACKFILL_DEFAULT_DAYS = 60;
+const DAY_MS = 86_400_000;
+
+/**
+ * Sets searchText + playedFortnight on plays created in the last `days`
+ * (default 60), newest first, 500 per mutation, rescheduling itself until
+ * it passes the cutoff. Idempotent: rows already correct are skipped, so a
+ * rerun is cheap. Created-time bounds it because a play is always created
+ * after it was played, so this covers every play from the window.
+ *
+ * Run once after the deploy that adds the search_text index:
+ *   cd packages/convex && bunx convex run backfills:backfillPlaySearchFields '{}'
+ */
+export const backfillPlaySearchFields = internalMutation({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    days: v.optional(v.number()),
+    cutoff: v.optional(v.number()),
+    patchedSoFar: v.optional(v.number()),
+  },
+  handler: async (ctx, { cursor, days, cutoff, patchedSoFar }) => {
+    const oldest = cutoff ?? Date.now() - (days ?? SEARCH_BACKFILL_DEFAULT_DAYS) * DAY_MS;
+    const page = await ctx.db
+      .query("plays")
+      .order("desc")
+      .paginate({ cursor: cursor ?? null, numItems: SEARCH_BACKFILL_BATCH });
+    const inWindow = page.page.filter((play) => play._creationTime >= oldest);
+    let patched = 0;
+    for (const play of inWindow) {
+      const fields = playSearchFields(play);
+      if (
+        play.searchText === fields.searchText &&
+        play.playedFortnight === fields.playedFortnight
+      ) {
+        continue;
+      }
+      await ctx.db.patch(play._id, fields);
+      patched += 1;
+    }
+    const total = (patchedSoFar ?? 0) + patched;
+    const finished = page.isDone || inWindow.length < page.page.length;
+    if (finished) {
+      console.log(`backfillPlaySearchFields done: ${total} plays patched`);
+    } else {
+      await ctx.scheduler.runAfter(0, internal.backfills.backfillPlaySearchFields, {
+        cursor: page.continueCursor,
+        cutoff: oldest,
+        patchedSoFar: total,
+      });
+    }
+    return { patched, scanned: page.page.length, finished };
   },
 });

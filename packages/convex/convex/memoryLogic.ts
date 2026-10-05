@@ -282,6 +282,34 @@ export function searchCutoff(days: number | undefined, now: number): number {
   return now - Math.min(Math.max(requested, 1), SEARCH_MAX_DAYS) * DAY_MS;
 }
 
+/**
+ * Plays carry `playedFortnight` = floor(playedAt / 14 days) so the search window filters
+ * inside the search index. Convex search filters are equality-only (no OR, no range), so a
+ * window costs one search per bucket it touches: 14-day buckets make the default 14-day window
+ * exactly 2 searches (3-4 at the 30-day cap). Weeks would need 3 (5-6), days 15 (31); months need
+ * 1-2 but read up to a month of out-of-window plays into the take. Changing this needs a re-backfill.
+ */
+const PLAYED_BUCKET_MS = 14 * DAY_MS;
+
+export function playedFortnight(playedAt: number): number {
+  return Math.floor(playedAt / PLAYED_BUCKET_MS);
+}
+
+/** Every bucket that holds plays between `cutoff` and `now`, newest first. */
+export function fortnightsInWindow(cutoff: number, now: number): number[] {
+  const newest = playedFortnight(now);
+  const oldest = playedFortnight(Math.min(cutoff, now));
+  return Array.from({ length: newest - oldest + 1 }, (_, offset) => newest - offset);
+}
+
+/** Fields every plays writer sets so the play is findable by alexa:searchPlays. Convex search tokenizes and lowercases, so artist + title joined by a space is all the index needs. */
+export function playSearchFields(play: { artistRaw: string; titleRaw: string; playedAt: number }) {
+  return {
+    searchText: `${play.artistRaw} ${play.titleRaw}`,
+    playedFortnight: playedFortnight(play.playedAt),
+  };
+}
+
 /** Union of two search result lists: deduped by _id, newest first, capped at `limit`. */
 export function mergeSearchHits<T extends { _id: string; playedAt: number }>(
   a: T[],

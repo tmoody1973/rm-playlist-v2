@@ -4,6 +4,9 @@ import {
   SCREEN_TTL_MS,
   countSpinsSince,
   digestSince,
+  fortnightsInWindow,
+  playedFortnight,
+  playSearchFields,
   mergeSearchHits,
   preferFullMatches,
   searchCutoff,
@@ -549,5 +552,50 @@ describe("clampShowLimit", () => {
     expect(clampShowLimit(0)).toBe(1);
     expect(clampShowLimit(2.7)).toBe(2);
     expect(clampShowLimit(Number.NaN)).toBe(10);
+  });
+});
+
+describe("search window buckets", () => {
+  const DAY = 86_400_000;
+  const FORTNIGHT = 14 * DAY;
+  test("playedFortnight is the 14-day bucket index", () => {
+    expect(playedFortnight(0)).toBe(0);
+    expect(playedFortnight(FORTNIGHT - 1)).toBe(0);
+    expect(playedFortnight(FORTNIGHT)).toBe(1);
+  });
+  test("the default 14-day window is always exactly two buckets, newest first", () => {
+    for (const now of [100 * FORTNIGHT, 100 * FORTNIGHT + 1, 100 * FORTNIGHT + 13 * DAY]) {
+      expect(fortnightsInWindow(searchCutoff(undefined, now), now)).toEqual([100, 99]);
+    }
+  });
+  test("the 30-day cap needs three or four buckets", () => {
+    const early = 100 * FORTNIGHT + DAY;
+    expect(fortnightsInWindow(searchCutoff(90, early), early)).toEqual([100, 99, 98, 97]);
+    const later = 100 * FORTNIGHT + 3 * DAY;
+    expect(fortnightsInWindow(searchCutoff(90, later), later)).toEqual([100, 99, 98]);
+  });
+  test("a one-day window inside one bucket is one search", () => {
+    const now = 100 * FORTNIGHT + 5 * DAY;
+    expect(fortnightsInWindow(searchCutoff(1, now), now)).toEqual([100]);
+  });
+  test("every bucket holding an in-window play is searched", () => {
+    const now = 100 * FORTNIGHT + 3 * DAY;
+    const cutoff = searchCutoff(undefined, now);
+    const buckets = fortnightsInWindow(cutoff, now);
+    for (let at = cutoff; at <= now; at += DAY / 2) expect(buckets).toContain(playedFortnight(at));
+  });
+});
+
+describe("playSearchFields", () => {
+  test("joins artist and title so one index matches either", () =>
+    expect(playSearchFields({ artistRaw: "Le Tigre", titleRaw: "TKO", playedAt: 0 })).toEqual({
+      searchText: "Le Tigre TKO",
+      playedFortnight: 0,
+    }));
+  test("the stored text satisfies preferFullMatches for an artist + title query", () => {
+    const play = { artistRaw: "Les Nubians", titleRaw: "Makeda", playedAt: 0 };
+    const { searchText } = playSearchFields(play);
+    expect(searchTerms(searchText)).toBe("Les Nubians Makeda");
+    expect(preferFullMatches([play], "Makeda Les Nubians")).toEqual([play]);
   });
 });

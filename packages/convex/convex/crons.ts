@@ -35,10 +35,4 @@ crons.interval(
   {},
 );
 
-// alexa:searchPlays measured 757-1004 ms on the first call after idle vs ~55 ms warm; after a quiet
-// night that blew Radio Commons' 2,000 ms client timeout (two live eval failures, 05:40).
-// Touching the search indexes every 4 minutes keeps them warm.
-// ponytail: if it stays slow despite warming, raise the client timeout or cache hot queries.
-crons.interval("alexa search warm", { minutes: 4 }, internal.alexa.warmSearchCron, {});
-
 export default crons;
