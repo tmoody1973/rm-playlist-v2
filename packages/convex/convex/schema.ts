@@ -687,6 +687,34 @@ export default defineSchema({
     lastDigestAt: v.optional(v.number()),
   }).index("by_listener", ["listenerId"]),
 
+  /**
+   * A listener's named playlists (Radio Commons in ChatGPT). Personal data, behind
+   * the server key like finds. itemCount is kept in step by playlists.ts so caps and
+   * the list view never count rows.
+   */
+  listenerPlaylists: defineTable({
+    listenerId: v.string(),
+    name: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    itemCount: v.number(),
+  }).index("by_listener", ["listenerId", "updatedAt"]),
+
+  /** One song in a listener playlist; dedupeKey matches finds (track:<id>, else play:<id>). */
+  listenerPlaylistItems: defineTable({
+    playlistId: v.id("listenerPlaylists"),
+    listenerId: v.string(),
+    playId: v.id("plays"),
+    trackId: v.optional(v.id("tracks")),
+    dedupeKey: v.string(),
+    artist: v.string(),
+    title: v.string(),
+    stationSlug: v.string(),
+    addedAt: v.number(),
+  })
+    .index("by_playlist", ["playlistId", "addedAt"])
+    .index("by_playlist_dedupe", ["playlistId", "dedupeKey"]),
+
   /** Radio Milwaukee stories about an artist, gathered from Backstory; shared, no personal data. */
   artistWatch: defineTable({
     artistId: v.id("artists"),

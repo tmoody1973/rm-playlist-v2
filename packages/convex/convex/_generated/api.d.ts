@@ -39,6 +39,8 @@ import type * as memory from "../memory.js";
 import type * as memoryLogic from "../memoryLogic.js";
 import type * as notifications from "../notifications.js";
 import type * as playDuration from "../playDuration.js";
+import type * as playlists from "../playlists.js";
+import type * as playlistsLogic from "../playlistsLogic.js";
 import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as recall from "../recall.js";
@@ -85,6 +87,8 @@ declare const fullApi: ApiFromModules<{
   memoryLogic: typeof memoryLogic;
   notifications: typeof notifications;
   playDuration: typeof playDuration;
+  playlists: typeof playlists;
+  playlistsLogic: typeof playlistsLogic;
   plays: typeof plays;
   preview: typeof preview;
   recall: typeof recall;
