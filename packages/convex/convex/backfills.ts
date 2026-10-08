@@ -10,7 +10,7 @@ import {
 } from "./_generated/server";
 import { fillPlayDuration, needsReportLength } from "./durationFill";
 import { playSearchFields } from "./memoryLogic";
-import { type DurationBasis, observedDurationSec, pairWithNext } from "./playDuration";
+import { type DurationBasis, gapSec, pairWithNext } from "./playDuration";
 
 /**
  * Operator-invoked backfills for tracks that landed with incomplete
@@ -329,6 +329,7 @@ const durationCountsValidator = v.object({
   observed: v.number(),
   estimatedFromTrack: v.number(),
   estimatedDefault: v.number(),
+  leftBlank: v.number(),
 });
 type DurationCounts = Infer<typeof durationCountsValidator>;
 
@@ -338,12 +339,16 @@ const NO_DURATION_COUNTS: DurationCounts = {
   observed: 0,
   estimatedFromTrack: 0,
   estimatedDefault: 0,
+  leftBlank: 0,
 };
 
 const COUNT_BY_BASIS: Record<
   DurationBasis,
   "observed" | "estimatedFromTrack" | "estimatedDefault"
 > = { observed: "observed", track: "estimatedFromTrack", default: "estimatedDefault" };
+
+/** Next play started the same second, so no length fits without overlapping it. */
+const LEFT_BLANK = "leftBlank";
 
 const backfillDurationArgs = {
   sinceMs: v.number(),
@@ -360,8 +365,10 @@ const backfillDurationArgs = {
 
 /**
  * Give every reportable play since `sinceMs` the length NPR's playlist log
- * requires, by the estimate rule (playDuration.fillDurationSec): observed
- * gap to the next play, else the song's median length, else 210 s. Only
+ * requires, by the estimate rule (playDuration.fillDurationSec): the gap to
+ * the next play when it is 8 min or less, else the song's median length,
+ * else 210 s, never past the next play's start. A play whose next play
+ * started the same second can't get a length and is counted leftBlank. Only
  * plays the export has no length for are touched (no play length, no
  * catalog length, not rewound, not a station ID); existing lengths and
  * track.durationSec are never written.
@@ -428,8 +435,8 @@ async function fillDurationBatch(
   let tally = counts;
   for (const { play, nextPlayedAt } of pairs) {
     if (!(await needsReportLength(ctx, play))) continue;
-    const observedSec = observedDurationSec(play.playedAt, nextPlayedAt);
-    const key = COUNT_BY_BASIS[await fillPlayDuration(ctx, play, observedSec, dryRun)];
+    const basis = await fillPlayDuration(ctx, play, gapSec(play.playedAt, nextPlayedAt), dryRun);
+    const key = basis === null ? LEFT_BLANK : COUNT_BY_BASIS[basis];
     tally = { ...tally, missing: tally.missing + 1, [key]: tally[key] + 1 };
   }
   return tally;

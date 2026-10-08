@@ -46,7 +46,9 @@ function mixedStation() {
       play("stationId", SINCE + sec(1800), { enrichmentStatus: "ignored" }),
       play("glitch", SINCE + sec(1805)),
       play("rewound", SINCE + sec(1810), { deletedAt: 1 }),
-      play("onAir", SINCE + sec(2000)),
+      play("localSong", SINCE + sec(2000)),
+      play("twin", SINCE + sec(3500)),
+      play("onAir", SINCE + sec(3500.5)),
     ],
   };
 }
@@ -58,11 +60,12 @@ describe("backfills:backfillPlayDurations", () => {
     expect(result).toEqual({
       station: "88nine",
       dryRun: true,
-      scanned: 8,
-      missing: 3,
-      observed: 1,
+      scanned: 10,
+      missing: 5,
+      observed: 2,
       estimatedFromTrack: 1,
       estimatedDefault: 1,
+      leftBlank: 1,
       finished: true,
     });
     expect(fake.patches).toEqual([]);
@@ -74,16 +77,17 @@ describe("backfills:backfillPlayDurations", () => {
     expect(fake.patches).toEqual([
       { id: "a", fields: { durationSec: 200, durationSource: "observed" } },
       { id: "talkBreak", fields: { durationSec: 205, durationSource: "estimated" } },
-      { id: "glitch", fields: { durationSec: 210, durationSource: "estimated" } },
+      { id: "glitch", fields: { durationSec: 5, durationSource: "observed" } },
+      { id: "localSong", fields: { durationSec: 210, durationSource: "estimated" } },
     ]);
   });
 
-  test("a rerun is a no-op", async () => {
+  test("a rerun writes nothing new; only the same-second twin is still blank", async () => {
     const fake = fakeCtx(mixedStation());
     await run(fake.ctx, { sinceMs: SINCE, dryRun: false });
     const rerun = await run(fake.ctx, { sinceMs: SINCE, dryRun: false });
-    expect(rerun).toMatchObject({ missing: 0 });
-    expect(fake.patches).toHaveLength(3);
+    expect(rerun).toMatchObject({ missing: 1, leftBlank: 1, observed: 0 });
+    expect(fake.patches).toHaveLength(4);
   });
 
   test("batches carry the previous play, so the play at a batch edge still gets its observed length", async () => {

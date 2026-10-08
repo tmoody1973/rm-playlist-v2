@@ -79,9 +79,16 @@ describe("stampPreviousPlayDuration (going forward)", () => {
   });
 
   test("nothing known about the song: the 210 s default, flagged estimated", async () => {
-    const patches = await stampAfter([play("p1", T0)], T0 + sec(10));
+    const patches = await stampAfter([play("p1", T0)], T0 + TALK_BREAK_GAP);
     expect(patches).toEqual([
       { id: "p1", fields: { durationSec: 210, durationSource: "estimated" } },
+    ]);
+  });
+
+  test("a 12 s gap (song cut off) stores the 12 s that aired, observed, not an estimate", async () => {
+    const patches = await stampAfter([play("p1", T0)], T0 + sec(12));
+    expect(patches).toEqual([
+      { id: "p1", fields: { durationSec: 12, durationSource: "observed" } },
     ]);
   });
 
@@ -93,10 +100,15 @@ describe("stampPreviousPlayDuration (going forward)", () => {
     expect(await stampAfter([play("p1", T0, estimated)], T0 + TALK_BREAK_GAP)).toEqual([]);
   });
 
-  test("never overwrites a play's length, never estimates a station ID or a catalog-timed song", async () => {
-    expect(await stampAfter([play("p1", T0, { durationSec: 180 })], T0 + TALK_BREAK_GAP)).toEqual(
-      [],
-    );
+  test("a recovered play landing before the old next play re-measures our observed length, so rows can't overlap", async () => {
+    const observed = { durationSec: 400, durationSource: "observed" };
+    expect(await stampAfter([play("p1", T0, observed)], T0 + sec(200))).toEqual([
+      { id: "p1", fields: { durationSec: 200, durationSource: "observed" } },
+    ]);
+  });
+
+  test("never overwrites a feed length, never estimates a station ID or a catalog-timed song", async () => {
+    expect(await stampAfter([play("p1", T0, { durationSec: 180 })], T0 + sec(60))).toEqual([]);
     expect(
       await stampAfter([play("p1", T0, { enrichmentStatus: "ignored" })], T0 + TALK_BREAK_GAP),
     ).toEqual([]);

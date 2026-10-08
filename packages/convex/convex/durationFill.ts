@@ -6,8 +6,9 @@ import {
   type DurationBasis,
   durationSourceOf,
   fillDurationSec,
+  gapNeedsEstimate,
+  gapSec,
   hasLength,
-  observedDurationSec,
 } from "./playDuration";
 
 /**
@@ -20,13 +21,16 @@ import {
 /** Recent plays of a song sampled for its median length. */
 const SONG_LENGTH_SAMPLE = 25;
 
-/**
- * True when the playlist log would have no length for this play: it is
- * reportable (not rewound, not a station ID) and neither the play nor its
- * catalog track has a length.
- */
+/** True when the playlist log has no length for this play and needs one. */
 export async function needsReportLength(ctx: QueryCtx, play: Doc<"plays">): Promise<boolean> {
-  if (hasLength(play.durationSec)) return false;
+  return !hasLength(play.durationSec) && (await wouldExportBlank(ctx, play));
+}
+
+/**
+ * Leaving aside any length on the play itself: it is reportable (not
+ * rewound, not a station ID) and its catalog track has no length.
+ */
+async function wouldExportBlank(ctx: QueryCtx, play: Doc<"plays">): Promise<boolean> {
   if (play.deletedAt !== undefined || play.enrichmentStatus === "ignored") return false;
   if (play.canonicalTrackId === undefined) return true;
   const track = await ctx.db.get(play.canonicalTrackId);
@@ -34,33 +38,34 @@ export async function needsReportLength(ctx: QueryCtx, play: Doc<"plays">): Prom
 }
 
 /**
- * Apply the estimate rule to one play and write it unless `dryRun`.
- * `observedSec` is the gap to the next play (null when out of range).
+ * Apply the estimate rule to one play, given `gap` (gapSec) to the next
+ * play, and write it unless `dryRun` or nothing changed. Null when no
+ * length fits (next play in the same second).
  */
 export async function fillPlayDuration(
   ctx: MutationCtx,
   play: Doc<"plays">,
-  observedSec: number | null,
+  gap: number,
   dryRun: boolean,
-): Promise<DurationBasis> {
-  const songLengths = observedSec === null ? await songLengthsSec(ctx, play) : [];
-  const fill = fillDurationSec(observedSec, songLengths);
-  if (!dryRun) {
-    await ctx.db.patch(play._id, {
-      durationSec: fill.durationSec,
-      durationSource: durationSourceOf(fill.basis),
-    });
+): Promise<DurationBasis | null> {
+  const songLengths = gapNeedsEstimate(gap) ? await songLengthsSec(ctx, play) : [];
+  const fill = fillDurationSec(gap, songLengths);
+  if (fill === null) return null;
+  const durationSource = durationSourceOf(fill.basis);
+  const unchanged = play.durationSec === fill.durationSec && play.durationSource === durationSource;
+  if (!dryRun && !unchanged) {
+    await ctx.db.patch(play._id, { durationSec: fill.durationSec, durationSource });
   }
   return fill.basis;
 }
 
 /**
- * A new play's start is the previous play's end. When the previous play
- * has no length from its feed, write the observed gap (any play, as since
- * PR #52); when the gap can't be trusted and the log would otherwise be
- * blank, write an estimate so the NPR export never loses the row. A play
- * recovered late (outage backfill) can still turn our own estimate into
- * the observed gap; feed and observed lengths are never overwritten.
+ * A new play's start is the previous play's end. Any gap up to the cap is
+ * written as the observed length (any play, as since PR #52); a longer gap
+ * gets an estimate, capped at the gap, only where the log would otherwise
+ * be blank. Our own lengths (observed or estimated) are re-derived when a
+ * play recovered late lands in between, so rows never overlap; a
+ * feed-reported length is never overwritten.
  */
 export async function stampPreviousPlayDuration(
   ctx: MutationCtx,
@@ -75,10 +80,10 @@ export async function stampPreviousPlayDuration(
     .order("desc")
     .first();
   if (previous === null) return;
-  if (hasLength(previous.durationSec) && previous.durationSource !== "estimated") return;
-  const observedSec = observedDurationSec(previous.playedAt, newPlayedAt);
-  if (observedSec === null && !(await needsReportLength(ctx, previous))) return;
-  await fillPlayDuration(ctx, previous, observedSec, false);
+  if (hasLength(previous.durationSec) && previous.durationSource === undefined) return;
+  const gap = gapSec(previous.playedAt, newPlayedAt);
+  if (gapNeedsEstimate(gap) && !(await wouldExportBlank(ctx, previous))) return;
+  await fillPlayDuration(ctx, previous, gap, false);
 }
 
 /** Feed-reported or observed lengths of other plays of the same song; an estimate never feeds another. */

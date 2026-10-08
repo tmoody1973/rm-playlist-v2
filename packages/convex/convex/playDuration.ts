@@ -3,30 +3,37 @@
  *
  * SGmetadata (88Nine, HYFIN, 414 Music) reports start times but no
  * lengths, and local releases rarely exist in any catalog. On automation
- * the next start is the previous song's end to within a few seconds; the
- * exception is a song followed by a talk break, whose gap includes the
- * break. Gaps outside [MIN, CAP] are treated as unknown rather than
- * written down as a wrong number.
+ * the next start is the previous song's end to within a few seconds, so a
+ * gap up to CAP is the length, short ones included (a song cut off after
+ * 12 s aired 12 s). A longer gap usually swallowed a talk break, so the
+ * length is estimated instead. No filled length ever runs past the next
+ * play's start: NPR's playlist log would show overlapping rows.
  */
 
-export const OBSERVED_DURATION_MIN_SEC = 30;
 export const OBSERVED_DURATION_CAP_SEC = 8 * 60;
+
+/**
+ * NPR rejects a playlist-log row without a length, so a play whose gap
+ * hides a talk break gets an estimate instead of a blank. 210 s is a
+ * typical song; the row is flagged "estimated" so staff can correct it in
+ * Needs Attention.
+ */
+export const DEFAULT_ESTIMATED_DURATION_SEC = 210;
 
 const MS_PER_SEC = 1000;
 
-export function observedDurationSec(playedAt: number, nextPlayedAt: number): number | null {
-  const gapSec = Math.round((nextPlayedAt - playedAt) / MS_PER_SEC);
-  if (gapSec < OBSERVED_DURATION_MIN_SEC || gapSec > OBSERVED_DURATION_CAP_SEC) return null;
-  return gapSec;
+/**
+ * Whole seconds between two starts, each floored the way the playlist log
+ * prints it, so a length no longer than this can't overlap the next row.
+ */
+export function gapSec(playedAt: number, nextPlayedAt: number): number {
+  return Math.floor(nextPlayedAt / MS_PER_SEC) - Math.floor(playedAt / MS_PER_SEC);
 }
 
-/**
- * NPR rejects a playlist-log row without a length, so a play the gap
- * can't measure (talk break, re-poll glitch, last song before an outage)
- * gets an estimate instead of a blank. 210 s is a typical song; the row
- * is flagged "estimated" so staff can correct it in Needs Attention.
- */
-export const DEFAULT_ESTIMATED_DURATION_SEC = 210;
+/** A gap too long to be the song itself (a talk break swallowed): estimate instead. */
+export function gapNeedsEstimate(gap: number): boolean {
+  return gap > OBSERVED_DURATION_CAP_SEC;
+}
 
 /** How a filled length was arrived at; only "observed" is a measurement. */
 export type DurationBasis = "observed" | "track" | "default";
@@ -51,17 +58,23 @@ export function medianSec(lengthsSec: readonly number[]): number | null {
 }
 
 /**
- * The estimate rule, in order: the observed gap to the next play; else the
- * median of the same song's other known lengths; else the default.
+ * The estimate rule. `gap` is gapSec to the next play on the station. A gap
+ * up to the cap is the length (observed); a longer one gets the median of
+ * the same song's other known lengths, else the default, capped at the gap.
+ * Null when the next play started in the same second: no length fits.
  */
 export function fillDurationSec(
-  observedSec: number | null,
+  gap: number,
   songLengthsSec: readonly number[],
-): DurationFill {
-  if (observedSec !== null) return { durationSec: observedSec, basis: "observed" };
+): DurationFill | null {
+  if (gap <= 0) return null;
+  if (!gapNeedsEstimate(gap)) return { durationSec: gap, basis: "observed" };
   const median = medianSec(songLengthsSec);
-  if (median !== null) return { durationSec: median, basis: "track" };
-  return { durationSec: DEFAULT_ESTIMATED_DURATION_SEC, basis: "default" };
+  const estimate: DurationFill =
+    median === null
+      ? { durationSec: DEFAULT_ESTIMATED_DURATION_SEC, basis: "default" }
+      : { durationSec: median, basis: "track" };
+  return { ...estimate, durationSec: Math.min(estimate.durationSec, gap) };
 }
 
 export function durationSourceOf(basis: DurationBasis): "observed" | "estimated" {
