@@ -17,6 +17,7 @@ import {
   type CadenceSong,
 } from "./cadenceSong";
 import { summarizePushEvents } from "./cadenceSummary";
+import { hasLength } from "./playDuration";
 import { buildSchedulePrograms, weekDateRange } from "./scheduleLogic";
 import { scheduleProgramValidator } from "./schema";
 
@@ -198,7 +199,10 @@ async function pushToCadence(
   const episode = await findEpisode(token, channelId, play.playedAt);
   if (episode === null) return skipPush(ctx, play, "no Cadence episode on air at playedAt");
 
-  return sendSong(ctx, play, episode, built, token);
+  // A stamped estimate (playDuration.ts) is final, so it is sent without waiting, but logged as estimated.
+  const sentPlayEstimate = play.durationSource === "estimated" && !hasLength(track?.durationSec);
+  const durationEstimated = built.durationEstimated || sentPlayEstimate;
+  return sendSong(ctx, play, episode, { ...built, durationEstimated }, token);
 }
 
 async function sendSong(
