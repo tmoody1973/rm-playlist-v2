@@ -56,21 +56,47 @@ export function formatDuration(totalSec: number): string {
 /**
  * Render rows as NPR's tab-delimited playlist log. Lengths are rounded to
  * whole seconds and both times are taken from the whole-second start, so
- * End Time − Start Time always equals Duration. A row with no length
- * (should be none once durations are filled) leaves both blank.
+ * End Time − Start Time always equals Duration. No row runs past the
+ * next row's start. A row with no length (should be none once durations
+ * are filled) leaves both blank.
  */
 export function toPlaylistTxt(rows: readonly PlaylistRow[]): string {
-  const body = rows.map((row) => [...timeColumns(row), ...textColumns(row)].join("\t"));
+  const body = rows.map((row, i) =>
+    [...timeColumns(row, rows[i + 1]?.playedAt), ...textColumns(row)].join("\t"),
+  );
   return [HEADER.join("\t"), ...body].join("\n");
 }
 
-function timeColumns(row: PlaylistRow): [string, string, string] {
-  const startMs = Math.floor(row.playedAt / MS_PER_SEC) * MS_PER_SEC;
+function timeColumns(row: PlaylistRow, nextPlayedAt: number | undefined): [string, string, string] {
+  const startMs = wholeSecondMs(row.playedAt);
   const start = formatPlaylistTimestamp(startMs);
-  const lengthSec = row.durationSec === null ? 0 : Math.round(row.durationSec);
+  const lengthSec = onAirLengthSec(row, startMs, nextPlayedAt);
   if (lengthSec <= 0) return [start, "", ""];
   const end = formatPlaylistTimestamp(startMs + lengthSec * MS_PER_SEC);
   return [start, end, formatDuration(lengthSec)];
+}
+
+/**
+ * The row's length, cut at the next row's start. A catalog length can
+ * belong to a longer version than the one aired (album cut, live take) and
+ * ignores crossfades, so on its own it would overlap the next song. A next
+ * play in the same second leaves 1 s, since NPR wants a length on every row.
+ */
+function onAirLengthSec(
+  row: PlaylistRow,
+  startMs: number,
+  nextPlayedAt: number | undefined,
+): number {
+  const lengthSec = row.durationSec === null ? 0 : Math.round(row.durationSec);
+  if (lengthSec <= 0 || nextPlayedAt === undefined || nextPlayedAt < row.playedAt) {
+    return lengthSec;
+  }
+  const untilNextSec = (wholeSecondMs(nextPlayedAt) - startMs) / MS_PER_SEC;
+  return Math.min(lengthSec, Math.max(untilNextSec, 1));
+}
+
+function wholeSecondMs(epochMs: number): number {
+  return Math.floor(epochMs / MS_PER_SEC) * MS_PER_SEC;
 }
 
 function textColumns(row: PlaylistRow): string[] {
