@@ -1,8 +1,16 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
+import {
+  type MutationCtx,
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+} from "./_generated/server";
+import { fillPlayDuration, needsReportLength } from "./durationFill";
 import { playSearchFields } from "./memoryLogic";
+import { type DurationBasis, gapSec, pairWithNext } from "./playDuration";
 
 /**
  * Operator-invoked backfills for tracks that landed with incomplete
@@ -21,6 +29,8 @@ import { playSearchFields } from "./memoryLogic";
  *     the new CAA cover-art fallback.
  *   - backfillPlaySearchFields: set searchText + playedFortnight on recent
  *     plays so alexa:searchPlays' search_text index can see them.
+ *   - backfillPlayDurations: give historical plays the playlist-log length
+ *     NPR requires (observed gap, else estimate), dry run first.
  */
 
 /** Apple Music's max quota is generous but the docs recommend pacing. */
@@ -310,3 +320,139 @@ export const backfillPlaySearchFields = internalMutation({
     return { patched, scanned: page.page.length, finished };
   },
 });
+
+const DURATION_BACKFILL_BATCH = 200;
+
+const durationCountsValidator = v.object({
+  scanned: v.number(),
+  missing: v.number(),
+  observed: v.number(),
+  estimatedFromTrack: v.number(),
+  estimatedDefault: v.number(),
+  leftBlank: v.number(),
+});
+type DurationCounts = Infer<typeof durationCountsValidator>;
+
+const NO_DURATION_COUNTS: DurationCounts = {
+  scanned: 0,
+  missing: 0,
+  observed: 0,
+  estimatedFromTrack: 0,
+  estimatedDefault: 0,
+  leftBlank: 0,
+};
+
+const COUNT_BY_BASIS: Record<
+  DurationBasis,
+  "observed" | "estimatedFromTrack" | "estimatedDefault"
+> = { observed: "observed", track: "estimatedFromTrack", default: "estimatedDefault" };
+
+/** Next play started the same second, so no length fits without overlapping it. */
+const LEFT_BLANK = "leftBlank";
+
+const backfillDurationArgs = {
+  sinceMs: v.number(),
+  dryRun: v.boolean(),
+  stationSlug: v.optional(
+    v.union(v.literal("hyfin"), v.literal("88nine"), v.literal("414music"), v.literal("rhythmlab")),
+  ),
+  // Continuation state, set only by the batch that schedules the next one.
+  stationIds: v.optional(v.array(v.id("stations"))),
+  cursor: v.optional(v.union(v.string(), v.null())),
+  previousPlayId: v.optional(v.id("plays")),
+  counts: v.optional(durationCountsValidator),
+};
+
+/**
+ * Give every reportable play since `sinceMs` the length NPR's playlist log
+ * requires, by the estimate rule (playDuration.fillDurationSec): the gap to
+ * the next play when it is 8 min or less, else the song's median length,
+ * else 210 s, never past the next play's start. A play whose next play
+ * started the same second can't get a length and is counted leftBlank. Only
+ * plays the export has no length for are touched (no play length, no
+ * catalog length, not rewound, not a station ID); existing lengths and
+ * track.durationSec are never written.
+ *
+ * Walks each station (one, or all by slug) chronologically, 200 plays per
+ * mutation, rescheduling itself; the last play of a batch is carried into
+ * the next so it still pairs with its next play. Idempotent. The newest
+ * play on a station has no next play yet and is left to live ingestion.
+ * Each station's totals are logged when it finishes; the dry run writes
+ * nothing. Commands (sinceMs = 2026-06-08 00:00 America/Chicago):
+ *   cd packages/convex && bunx convex run backfills:backfillPlayDurations '{"sinceMs": 1780894800000, "dryRun": true}'
+ *   cd packages/convex && bunx convex run backfills:backfillPlayDurations '{"sinceMs": 1780894800000, "dryRun": false}'
+ */
+export const backfillPlayDurations = internalMutation({
+  args: backfillDurationArgs,
+  handler: async (ctx, args) => {
+    const stationIds = args.stationIds ?? (await stationIdsToBackfill(ctx, args.stationSlug));
+    const [stationId, ...laterStationIds] = stationIds;
+    if (stationId === undefined) return null;
+
+    const page = await ctx.db
+      .query("plays")
+      .withIndex("by_station_played_at", (q) =>
+        q.eq("stationId", stationId).gte("playedAt", args.sinceMs),
+      )
+      .paginate({ cursor: args.cursor ?? null, numItems: DURATION_BACKFILL_BATCH });
+    const previous = args.previousPlayId ? await ctx.db.get(args.previousPlayId) : null;
+    const { pairs, carry } = pairWithNext(previous, page.page);
+    const before = args.counts ?? NO_DURATION_COUNTS;
+    const scanned = { ...before, scanned: before.scanned + page.page.length };
+    const counts = await fillDurationBatch(ctx, pairs, args.dryRun, scanned);
+
+    const station = await ctx.db.get(stationId);
+    const result = { station: station?.slug ?? stationId, dryRun: args.dryRun, ...counts };
+    const shared = { sinceMs: args.sinceMs, dryRun: args.dryRun };
+    if (!page.isDone) {
+      const carried = carry === null ? {} : { previousPlayId: carry._id };
+      await ctx.scheduler.runAfter(0, internal.backfills.backfillPlayDurations, {
+        ...shared,
+        stationIds,
+        cursor: page.continueCursor,
+        counts,
+        ...carried,
+      });
+      return { ...result, finished: false };
+    }
+    console.log(`backfillPlayDurations ${JSON.stringify(result)}`);
+    if (laterStationIds.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.backfills.backfillPlayDurations, {
+        ...shared,
+        stationIds: laterStationIds,
+      });
+    }
+    return { ...result, finished: true };
+  },
+});
+
+async function fillDurationBatch(
+  ctx: MutationCtx,
+  pairs: ReadonlyArray<{ play: Doc<"plays">; nextPlayedAt: number }>,
+  dryRun: boolean,
+  counts: DurationCounts,
+): Promise<DurationCounts> {
+  let tally = counts;
+  for (const { play, nextPlayedAt } of pairs) {
+    if (!(await needsReportLength(ctx, play))) continue;
+    const basis = await fillPlayDuration(ctx, play, gapSec(play.playedAt, nextPlayedAt), dryRun);
+    const key = basis === null ? LEFT_BLANK : COUNT_BY_BASIS[basis];
+    tally = { ...tally, missing: tally.missing + 1, [key]: tally[key] + 1 };
+  }
+  return tally;
+}
+
+async function stationIdsToBackfill(
+  ctx: MutationCtx,
+  slug: Doc<"stations">["slug"] | undefined,
+): Promise<Id<"stations">[]> {
+  if (slug !== undefined) {
+    const station = await ctx.db
+      .query("stations")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    return station === null ? [] : [station._id];
+  }
+  const stations = await ctx.db.query("stations").collect();
+  return [...stations].sort((a, b) => a.slug.localeCompare(b.slug)).map((station) => station._id);
+}

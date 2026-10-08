@@ -237,8 +237,12 @@ export default defineSchema({
     albumRaw: v.optional(v.string()),
     labelRaw: v.optional(v.string()),
     durationSec: v.optional(v.number()),
-    /** "observed" when durationSec was inferred from the next play's start (playDuration.ts). */
-    durationSource: v.optional(v.literal("observed")),
+    /**
+     * How durationSec was filled when the feed had none (playDuration.ts):
+     * "observed" = gap to the next play's start; "estimated" = median of the
+     * song's other lengths, else 210 s. Unset = feed-reported or not filled.
+     */
+    durationSource: v.optional(v.union(v.literal("observed"), v.literal("estimated"))),
     /** Unix ms when the play started (source timestamp, not ingestion time). */
     playedAt: v.number(),
     /** Canonical artist ID assigned by enrichment, when resolved. */

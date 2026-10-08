@@ -376,7 +376,9 @@ export const patchTrackMetadata = mutation({
  * Reports groups keyed by the canonical track so a popular song isn't
  * shown once per play. Primary use case: dashboard "metadata
  * incomplete" surface that tells a music director WHICH SoundExchange
- * fields are still blank before SOR filing.
+ * fields are still blank before SOR filing. `durationEstimated` marks a
+ * track whose plays export with a guessed length (playDuration.ts); a
+ * catalog duration entered here replaces the guess in the export.
  */
 export const tracksMissingSoundExchangeFields = query({
   args: {
@@ -408,6 +410,7 @@ export const tracksMissingSoundExchangeFields = query({
       playCount: number;
       stationNames: string[];
       lastPlayedAt: number;
+      durationEstimated: boolean;
     }
     const groups = new Map<string, Group>();
 
@@ -427,6 +430,7 @@ export const tracksMissingSoundExchangeFields = query({
       if (!track.isrc || track.isrc.trim().length === 0) missing.push("ISRC");
       if (typeof track.durationSec !== "number" || track.durationSec <= 0) missing.push("duration");
       if (missing.length === 0) continue;
+      const estimated = missing.includes("duration") && play.durationSource === "estimated";
 
       const existing = groups.get(tid);
       const station = stationNameById.get(play.stationId) ?? "?";
@@ -434,6 +438,7 @@ export const tracksMissingSoundExchangeFields = query({
         existing.playCount += 1;
         if (!existing.stationNames.includes(station)) existing.stationNames.push(station);
         if (play.playedAt > existing.lastPlayedAt) existing.lastPlayedAt = play.playedAt;
+        if (estimated) existing.durationEstimated = true;
         continue;
       }
       const artistIdStr = track.artistId as string;
@@ -451,6 +456,7 @@ export const tracksMissingSoundExchangeFields = query({
         playCount: 1,
         stationNames: [station],
         lastPlayedAt: play.playedAt,
+        durationEstimated: estimated,
       });
     }
 
