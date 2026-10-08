@@ -4,6 +4,7 @@ import {
   collectPages,
   formatDuration,
   formatPlaylistTimestamp,
+  rangeProgress,
   toPlaylistTxt,
   type PlaylistRow,
 } from "../app/dashboard/playlistLog";
@@ -105,6 +106,41 @@ describe("collectPages", () => {
     });
     expect(cursorsSeen).toEqual([null, "c1", "c2"]);
     expect(collected.map((page) => page.items)).toEqual([[1, 2], [3], [4]]);
+  });
+
+  test("hands each page to onPage as it arrives, so callers can show progress", async () => {
+    const pages = [
+      { items: [1], isDone: false, continueCursor: "c1" },
+      { items: [2], isDone: true, continueCursor: "c2" },
+    ];
+    const seen: number[][] = [];
+    let call = 0;
+    await collectPages(
+      async () => pages[call++]!,
+      (page) => seen.push(page.items),
+    );
+    expect(seen).toEqual([[1], [2]]);
+  });
+});
+
+describe("rangeProgress", () => {
+  const range = { startMs: 1_000, endMs: 5_000 };
+
+  test("the share of the date range read so far", () => {
+    expect(rangeProgress({ scannedThroughMs: 2_000, isDone: false }, range)).toBe(0.25);
+  });
+
+  test("a finished read is complete whatever its position says", () => {
+    expect(rangeProgress({ scannedThroughMs: 2_000, isDone: true }, range)).toBe(1);
+  });
+
+  test("stays between 0 and 1", () => {
+    expect(rangeProgress({ scannedThroughMs: 0, isDone: false }, range)).toBe(0);
+    expect(rangeProgress({ scannedThroughMs: 9_000, isDone: false }, range)).toBe(1);
+  });
+
+  test("unknown when the server doesn't report a position (older deploy)", () => {
+    expect(rangeProgress({ isDone: false }, range)).toBeNull();
   });
 });
 

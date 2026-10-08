@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAction, useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@rm/convex/api";
-import { MILWAUKEE_TIMEZONE, collectPages, toPlaylistTxt } from "./playlistLog";
+import { MILWAUKEE_TIMEZONE, collectPages, rangeProgress, toPlaylistTxt } from "./playlistLog";
 
 type SummaryPage = FunctionReturnType<typeof api.reports.soundExchangePlaylistSummary>;
 
@@ -67,6 +67,7 @@ export function ReportsPanel() {
   const [startDate, setStartDate] = useState<string>(defaultStart);
   const [endDate, setEndDate] = useState<string>(defaultEnd);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(0);
   const [error, setError] = useState<string | null>(null);
 
   const convex = useConvex();
@@ -82,6 +83,7 @@ export function ReportsPanel() {
   // preview; re-pick the range to refresh. undefined = loading,
   // null = failed (message lands in the shared error block).
   const [summary, setSummary] = useState<SummaryTotals | undefined | null>(undefined);
+  const [summaryProgress, setSummaryProgress] = useState<number | null>(0);
 
   useEffect(() => {
     if (range === null) {
@@ -90,16 +92,21 @@ export function ReportsPanel() {
     }
     let cancelled = false;
     setSummary(undefined);
+    setSummaryProgress(0);
     setError(null);
     (async () => {
       try {
-        const pages = await collectPages((cursor) =>
-          convex.query(api.reports.soundExchangePlaylistSummary, {
-            stationSlug: station,
-            startMs: range.startMs,
-            endMs: range.endMs,
-            cursor,
-          }),
+        const pages = await collectPages(
+          (cursor) =>
+            convex.query(api.reports.soundExchangePlaylistSummary, {
+              stationSlug: station,
+              startMs: range.startMs,
+              endMs: range.endMs,
+              cursor,
+            }),
+          (page) => {
+            if (!cancelled) setSummaryProgress(rangeProgress(page, range));
+          },
         );
         if (cancelled) return;
         setSummary(sumSummaryPages(pages));
@@ -148,17 +155,20 @@ export function ReportsPanel() {
   const onDownload = async () => {
     if (range === null) return;
     setDownloading(true);
+    setDownloadProgress(0);
     setError(null);
     try {
       // Pages arrive in playedAt order (index order server-side), so
       // straight concatenation keeps the log chronological.
-      const pages = await collectPages((cursor) =>
-        convex.query(api.reports.soundExchangePlaylist, {
-          stationSlug: station,
-          startMs: range.startMs,
-          endMs: range.endMs,
-          cursor,
-        }),
+      const pages = await collectPages(
+        (cursor) =>
+          convex.query(api.reports.soundExchangePlaylist, {
+            stationSlug: station,
+            startMs: range.startMs,
+            endMs: range.endMs,
+            cursor,
+          }),
+        (page) => setDownloadProgress(rangeProgress(page, range)),
       );
       const rows = pages.flatMap((page) => page.rows);
       if (rows.length === 0) {
@@ -225,7 +235,7 @@ export function ReportsPanel() {
         </div>
       </div>
 
-      <SummaryLine summary={summary} rangeValid={rangeValid} />
+      <SummaryLine summary={summary} progress={summaryProgress} rangeValid={rangeValid} />
 
       {missingDurationCount > 0 && (
         <div className="flex flex-col gap-1 rounded-sm border border-status-warn/40 bg-status-warn/5 px-2 py-1.5">
@@ -261,6 +271,8 @@ export function ReportsPanel() {
         </p>
       )}
 
+      {downloading && <ExportProgress label="Building playlist log" fraction={downloadProgress} />}
+
       <button
         type="button"
         onClick={onDownload}
@@ -280,9 +292,11 @@ export function ReportsPanel() {
 
 function SummaryLine({
   summary,
+  progress,
   rangeValid,
 }: {
   summary: SummaryTotals | undefined | null;
+  progress: number | null;
   rangeValid: boolean;
 }) {
   if (!rangeValid) {
@@ -292,9 +306,7 @@ function SummaryLine({
       </p>
     );
   }
-  if (summary === undefined) {
-    return <div className="h-4 w-full animate-pulse rounded-sm bg-bg-elevated/60" />;
-  }
+  if (summary === undefined) return <ExportProgress label="Counting plays" fraction={progress} />;
   // null = fetch failed; the panel's shared error block shows the message.
   if (summary === null) return null;
   if (summary.resolvedPlays === 0) {
@@ -321,6 +333,43 @@ function SummaryLine({
         estimated duration: {summary.estimatedDuration}
       </span>
     </p>
+  );
+}
+
+/**
+ * Progress for the paged report reads, which take a while for a busy
+ * station over several months. A null fraction means the server sent no
+ * position (older deploy): the bar pulses with no number instead.
+ */
+function ExportProgress({ label, fraction }: { label: string; fraction: number | null }) {
+  const percent = fraction === null ? null : Math.round(fraction * 100);
+  return (
+    <div className="flex flex-col gap-1">
+      <p
+        className="flex justify-between text-[10px] text-text-muted"
+        style={{ fontFamily: "var(--font-mono)" }}
+      >
+        <span>{label}…</span>
+        {percent !== null && <span>{percent}%</span>}
+      </p>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent ?? undefined}
+        className="h-1 w-full overflow-hidden rounded-sm bg-border"
+      >
+        <div
+          className={
+            percent === null
+              ? "h-full w-full animate-pulse bg-text-secondary/40 motion-reduce:animate-none"
+              : "h-full bg-text-secondary transition-[width] duration-200 ease-out motion-reduce:transition-none"
+          }
+          style={percent === null ? undefined : { width: `${percent}%` }}
+        />
+      </div>
+    </div>
   );
 }
 

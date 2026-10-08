@@ -23,6 +23,12 @@ interface PlaysPage {
   page: Doc<"plays">[];
   isDone: boolean;
   continueCursor: string | null;
+  /**
+   * How far into [startMs, endMs) this page read: the last play's time, or
+   * endMs once done. Pages run in time order, so the dashboard turns this
+   * into a progress bar without knowing the page count up front.
+   */
+  scannedThroughMs: number;
 }
 
 async function fetchPlaysPage(
@@ -38,7 +44,13 @@ async function fetchPlaysPage(
       q.eq("stationId", stationId).gte("playedAt", startMs).lt("playedAt", endMs),
     )
     .paginate({ numItems: REPORT_PAGE_SIZE, cursor: cursor ?? null });
-  return { page: result.page, isDone: result.isDone, continueCursor: result.continueCursor };
+  const lastPlay = result.page.at(-1);
+  return {
+    page: result.page,
+    isDone: result.isDone,
+    continueCursor: result.continueCursor,
+    scannedThroughMs: result.isDone ? endMs : (lastPlay?.playedAt ?? startMs),
+  };
 }
 
 /**
@@ -95,6 +107,7 @@ export const soundExchangePlaylist = query({
       totalPlays: 0,
       isDone: true,
       continueCursor: null,
+      scannedThroughMs: endMs,
     };
     if (endMs <= startMs) return emptyResult;
 
@@ -108,6 +121,7 @@ export const soundExchangePlaylist = query({
       page: plays,
       isDone,
       continueCursor,
+      scannedThroughMs,
     } = await fetchPlaysPage(ctx, station._id, startMs, endMs, cursor);
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
@@ -159,7 +173,14 @@ export const soundExchangePlaylist = query({
 
     // The by_station_played_at index yields ascending playedAt, so pages
     // concatenate in chronological order on the client.
-    return { rows, stationName: station.name, totalPlays: rows.length, isDone, continueCursor };
+    return {
+      rows,
+      stationName: station.name,
+      totalPlays: rows.length,
+      isDone,
+      continueCursor,
+      scannedThroughMs,
+    };
   },
 });
 
@@ -193,6 +214,7 @@ export const soundExchangePlaylistSummary = query({
       estimatedDuration: 0,
       isDone: true,
       continueCursor: null,
+      scannedThroughMs: endMs,
     };
     if (endMs <= startMs) return emptyResult;
 
@@ -206,6 +228,7 @@ export const soundExchangePlaylistSummary = query({
       page: plays,
       isDone,
       continueCursor,
+      scannedThroughMs,
     } = await fetchPlaysPage(ctx, station._id, startMs, endMs, cursor);
 
     const trackCache = new Map<string, Doc<"tracks"> | null>();
@@ -246,6 +269,7 @@ export const soundExchangePlaylistSummary = query({
       estimatedDuration,
       isDone,
       continueCursor,
+      scannedThroughMs,
     };
   },
 });
