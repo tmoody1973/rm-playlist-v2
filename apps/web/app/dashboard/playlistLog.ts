@@ -125,13 +125,31 @@ interface CursorPage {
  */
 export async function collectPages<Page extends CursorPage>(
   fetchPage: (cursor: string | null) => Promise<Page>,
+  onPage?: (page: Page) => void,
 ): Promise<Page[]> {
   const pages: Page[] = [];
   let cursor: string | null = null;
   do {
     const page: Page = await fetchPage(cursor);
     pages.push(page);
+    onPage?.(page);
     cursor = page.isDone ? null : page.continueCursor;
   } while (cursor !== null);
   return pages;
+}
+
+/**
+ * Share (0–1) of the date range a paged report read has covered, from the
+ * page's `scannedThroughMs`. Plays are spread across the day on every
+ * station, so time read tracks work done. Null when the server sent no
+ * position (a deploy that predates it); show an open-ended bar then.
+ */
+export function rangeProgress(
+  page: { scannedThroughMs?: number; isDone: boolean },
+  range: { startMs: number; endMs: number },
+): number | null {
+  if (page.isDone) return 1;
+  if (typeof page.scannedThroughMs !== "number") return null;
+  const share = (page.scannedThroughMs - range.startMs) / (range.endMs - range.startMs);
+  return Math.min(1, Math.max(0, share));
 }

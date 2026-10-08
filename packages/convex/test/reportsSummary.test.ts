@@ -77,6 +77,34 @@ describe("reports:soundExchangePlaylistSummary", () => {
   });
 });
 
+describe("report pages say how far through the range they have read", () => {
+  test.each([
+    ["summary", summary],
+    ["playlist", playlist],
+  ] as const)("%s: scannedThroughMs moves forward each page and ends at endMs", async (_, run) => {
+    const fake = fakeCtx(month(2_500));
+    const positions: number[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = (await run(fake.ctx, {
+        stationSlug: "88nine",
+        startMs: START,
+        endMs: END,
+        cursor,
+      })) as unknown as { scannedThroughMs: number; isDone: boolean; continueCursor: string };
+      positions.push(page.scannedThroughMs);
+      cursor = page.isDone ? null : page.continueCursor;
+    } while (cursor !== null);
+
+    expect(positions.length).toBeGreaterThan(1);
+    expect(positions.at(-1)).toBe(END);
+    positions.slice(0, -1).forEach((position, i) => {
+      expect(position).toBeGreaterThan(START);
+      expect(position).toBeLessThan(positions[i + 1]!);
+    });
+  });
+});
+
 describe("reports:soundExchangePlaylist", () => {
   test("rows carry the catalog length first, else the play's own (observed or estimated)", async () => {
     const tables = month(0);
