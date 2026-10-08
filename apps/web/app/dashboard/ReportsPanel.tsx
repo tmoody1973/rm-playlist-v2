@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAction, useConvex } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { api } from "@rm/convex/api";
+import { MILWAUKEE_TIMEZONE, collectPages, toPlaylistTxt } from "./playlistLog";
 
 type SummaryPage = FunctionReturnType<typeof api.reports.soundExchangePlaylistSummary>;
-type PlaylistPage = FunctionReturnType<typeof api.reports.soundExchangePlaylist>;
 
 type StationSlug = "hyfin" | "88nine" | "414music" | "rhythmlab";
 
@@ -15,6 +15,7 @@ interface SummaryTotals {
   missingLabel: number;
   missingIsrc: number;
   missingDuration: number;
+  estimatedDuration: number;
 }
 
 const EMPTY_TOTALS: SummaryTotals = {
@@ -22,7 +23,21 @@ const EMPTY_TOTALS: SummaryTotals = {
   missingLabel: 0,
   missingIsrc: 0,
   missingDuration: 0,
+  estimatedDuration: 0,
 };
+
+function sumSummaryPages(pages: readonly SummaryPage[]): SummaryTotals {
+  return pages.reduce<SummaryTotals>(
+    (sum, page) => ({
+      resolvedPlays: sum.resolvedPlays + page.resolvedPlays,
+      missingLabel: sum.missingLabel + page.missingLabel,
+      missingIsrc: sum.missingIsrc + page.missingIsrc,
+      missingDuration: sum.missingDuration + page.missingDuration,
+      estimatedDuration: sum.estimatedDuration + page.estimatedDuration,
+    }),
+    EMPTY_TOTALS,
+  );
+}
 
 const STATIONS: ReadonlyArray<{ slug: StationSlug; label: string }> = [
   { slug: "88nine", label: "88Nine" },
@@ -37,11 +52,10 @@ const STATIONS: ReadonlyArray<{ slug: StationSlug; label: string }> = [
  * Operators pick a station + date range, preview resolved-play count
  * (with per-column completeness), and download a tab-delimited TXT
  * file that matches NPR's SoundExchange playlist log format:
- *   Start Time <tab> End Time <tab> Title <tab> Artist <tab> Album <tab> Label
- * Times are rendered in Milwaukee local time (America/Chicago) as
- * `MM/dd/yyyy HH:mm:ss`. End Time = Start Time + durationSec when
- * duration is known; blank when it isn't (those rows must be filled
- * via Needs Attention before submission).
+ *   Start Time, End Time, Duration, Title, Artist, Album, Label
+ * (see playlistLog.ts for NPR's rules). Plays the feed gave no length get
+ * an observed or estimated one at ingestion (playDuration.ts); estimated
+ * rows are counted here and listed in Needs Attention for correction.
  *
  * Default range: previous calendar month — music-rights reporting is
  * monthly, and we'd rather default to a completed period than a partial
@@ -79,25 +93,16 @@ export function ReportsPanel() {
     setError(null);
     (async () => {
       try {
-        let totals = EMPTY_TOTALS;
-        let cursor: string | null = null;
-        do {
-          const page: SummaryPage = await convex.query(api.reports.soundExchangePlaylistSummary, {
+        const pages = await collectPages((cursor) =>
+          convex.query(api.reports.soundExchangePlaylistSummary, {
             stationSlug: station,
             startMs: range.startMs,
             endMs: range.endMs,
             cursor,
-          });
-          if (cancelled) return;
-          totals = {
-            resolvedPlays: totals.resolvedPlays + page.resolvedPlays,
-            missingLabel: totals.missingLabel + page.missingLabel,
-            missingIsrc: totals.missingIsrc + page.missingIsrc,
-            missingDuration: totals.missingDuration + page.missingDuration,
-          };
-          cursor = page.isDone ? null : page.continueCursor;
-        } while (cursor !== null);
-        setSummary(totals);
+          }),
+        );
+        if (cancelled) return;
+        setSummary(sumSummaryPages(pages));
       } catch (err) {
         if (cancelled) return;
         setSummary(null);
@@ -147,18 +152,15 @@ export function ReportsPanel() {
     try {
       // Pages arrive in playedAt order (index order server-side), so
       // straight concatenation keeps the log chronological.
-      const rows: PlaylistRow[] = [];
-      let cursor: string | null = null;
-      do {
-        const page: PlaylistPage = await convex.query(api.reports.soundExchangePlaylist, {
+      const pages = await collectPages((cursor) =>
+        convex.query(api.reports.soundExchangePlaylist, {
           stationSlug: station,
           startMs: range.startMs,
           endMs: range.endMs,
           cursor,
-        });
-        rows.push(...page.rows);
-        cursor = page.isDone ? null : page.continueCursor;
-      } while (cursor !== null);
+        }),
+      );
+      const rows = pages.flatMap((page) => page.rows);
       if (rows.length === 0) {
         setError("No resolved plays in that range.");
         return;
@@ -304,7 +306,7 @@ function SummaryLine({
   }
   return (
     <p
-      className="flex gap-3 text-[10px] text-text-muted"
+      className="flex flex-wrap gap-x-3 text-[10px] text-text-muted"
       style={{ fontFamily: "var(--font-mono)" }}
     >
       <span className="text-text-secondary">{summary.resolvedPlays} plays</span>
@@ -312,14 +314,17 @@ function SummaryLine({
         missing label: {summary.missingLabel}
       </span>
       <span title="rows missing ISRC — optional for SOR">missing ISRC: {summary.missingIsrc}</span>
-      <span title="rows missing duration">missing duration: {summary.missingDuration}</span>
+      <span title="rows exported with no length — NPR rejects these">
+        missing duration: {summary.missingDuration}
+      </span>
+      <span title="rows exported with an estimated length — correct the track's duration in Needs Attention">
+        estimated duration: {summary.estimatedDuration}
+      </span>
     </p>
   );
 }
 
 // ---------- helpers ----------
-
-const MILWAUKEE_TIMEZONE = "America/Chicago";
 
 /**
  * Compute the previous calendar month in UTC as YYYY-MM-DD strings.
@@ -408,84 +413,6 @@ function chicagoOffsetMinutes(atEpochMs: number): number | null {
   const minutes = match[2] === undefined ? 0 : Number.parseInt(match[2], 10);
   const sign = hours < 0 ? -1 : 1;
   return hours * 60 + sign * minutes;
-}
-
-interface PlaylistRow {
-  playedAt: number;
-  channelName: string;
-  featuredArtist: string;
-  soundRecordingTitle: string;
-  albumTitle: string;
-  marketingLabel: string;
-  isrc: string;
-  durationSec: number | null;
-}
-
-const PLAYLIST_DATE_FMT = new Intl.DateTimeFormat("en-US", {
-  timeZone: MILWAUKEE_TIMEZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
-/**
- * Format an epoch-ms timestamp as `MM/dd/yyyy HH:mm:ss` in Milwaukee
- * local time. NPR's playlist log spec accepts this format by default
- * (it's one of the three listed formats, and they assume local time
- * unless an offset is appended).
- */
-function formatPlaylistTimestamp(epochMs: number): string {
-  const parts = PLAYLIST_DATE_FMT.formatToParts(new Date(epochMs));
-  const get = (type: Intl.DateTimeFormatPart["type"]): string =>
-    parts.find((p) => p.type === type)?.value ?? "";
-  const hour = get("hour");
-  // Intl can emit "24" for midnight under hour12:false on some engines.
-  const normalizedHour = hour === "24" ? "00" : hour;
-  return `${get("month")}/${get("day")}/${get("year")} ${normalizedHour}:${get("minute")}:${get("second")}`;
-}
-
-/**
- * Render rows to NPR's tab-delimited playlist-log format. Columns:
- * Start Time, End Time, Title, Artist, Album, Label. One row per play,
- * chronological (query already sorts). End Time is blank when the
- * track's durationSec is unknown — that row needs the Duration filled
- * in Needs Attention before NPR will accept it.
- *
- * Tabs, CR, and LF are stripped from every field so they can't break
- * the row boundaries NPR parses on.
- */
-function toPlaylistTxt(rows: readonly PlaylistRow[]): string {
-  const header = ["Start Time", "End Time", "Title", "Artist", "Album", "Label"].join("\t");
-  const body = rows.map((r) => {
-    const startTime = formatPlaylistTimestamp(r.playedAt);
-    const endTime =
-      r.durationSec !== null && r.durationSec > 0
-        ? formatPlaylistTimestamp(r.playedAt + r.durationSec * 1000)
-        : "";
-    return [
-      startTime,
-      endTime,
-      tsvEscape(r.soundRecordingTitle),
-      tsvEscape(r.featuredArtist),
-      tsvEscape(r.albumTitle),
-      tsvEscape(r.marketingLabel),
-    ].join("\t");
-  });
-  return [header, ...body].join("\n");
-}
-
-/**
- * Tab, CR, and LF are the only characters that can break TSV row / field
- * boundaries. Collapse each to a single space so the file stays
- * parseable even if a track title contains them (rare but possible).
- */
-function tsvEscape(value: string): string {
-  if (value.length === 0) return "";
-  return value.replace(/[\t\r\n]+/g, " ");
 }
 
 function downloadTxt(content: string, filename: string): void {

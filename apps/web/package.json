@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'no unit tests yet in @rm/web — e2e via Playwright comes later'",
+    "test": "bun test test/",
     "lint": "next lint"
   },
   "dependencies": {

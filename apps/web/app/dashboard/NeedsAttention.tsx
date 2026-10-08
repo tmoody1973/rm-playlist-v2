@@ -13,7 +13,9 @@ import type { Id } from "@rm/convex/values";
  *   1. Enrichment failures — grouped by (station × reason × song).
  *      Actions: Retry, Edit (manual resolve), Ignore.
  *   2. Missing SoundExchange metadata — resolved tracks that still
- *      lack recordLabel / ISRC / durationSec.
+ *      lack recordLabel / ISRC / durationSec. A blank duration covered by
+ *      an estimated play length shows as "duration (estimated)": it
+ *      exports, but staff should enter the real length.
  *      Actions: Edit (inline patch fields), Re-enrich.
  *
  * One-at-a-time expansion state: clicking Edit on any row closes any
@@ -239,7 +241,9 @@ export function NeedsAttention() {
                         <p className="flex gap-2 text-text-muted">
                           <span>{t.stationNames.join(", ")}</span>
                           <span aria-hidden>·</span>
-                          <span>missing: {t.missingFields.join(", ")}</span>
+                          <span>
+                            missing: {describeMissing(t.missingFields, t.durationEstimated)}
+                          </span>
                         </p>
                       </div>
                     </div>
@@ -493,6 +497,12 @@ interface GroupRow {
   readonly count: number;
   readonly lastSeenAt: number;
   readonly stationId: string;
+}
+
+function describeMissing(fields: readonly string[], durationEstimated: boolean): string {
+  return fields
+    .map((field) => (field === "duration" && durationEstimated ? "duration (estimated)" : field))
+    .join(", ");
 }
 
 function displaySong(g: GroupRow): string {
