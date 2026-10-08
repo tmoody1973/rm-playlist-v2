@@ -128,7 +128,11 @@ describe("estimate rule + export: rows never overlap", () => {
     };
   }
 
-  function mixedSequence(next: () => number, length: number): PlaylistRow[] {
+  function mixedSequence(
+    next: () => number,
+    length: number,
+    { withCatalogLengths = false } = {},
+  ): PlaylistRow[] {
     const between = (low: number, high: number) => low + Math.floor(next() * (high - low + 1));
     const starts = [BASE + between(0, 999)];
     for (let i = 1; i < length; i += 1) {
@@ -141,33 +145,76 @@ describe("estimate rule + export: rows never overlap", () => {
       const songLengths = Array.from({ length: between(0, 3) }, () => between(60, 900));
       return fillDurationSec(gapSec(play.playedAt, nextPlayedAt), songLengths)?.durationSec ?? null;
     });
+    // A catalog length wins over our own in the export, and it can be any
+    // version of the song (album cut, live take), so model it as unrelated.
+    const catalogLength = () => (withCatalogLengths && next() < 0.5 ? between(60, 1_300) : null);
     return starts.map((playedAt, i) => ({
       ...row("2026-01-01T00:00:00Z", null),
       playedAt,
-      durationSec: filled[i] ?? null,
+      durationSec: catalogLength() ?? filled[i] ?? null,
     }));
   }
 
-  test("no End Time runs past the next row's Start Time, and End − Start = Duration", () => {
-    const next = random(20261008);
-    const violations: string[] = [];
-    for (let sequence = 0; sequence < 40; sequence += 1) {
-      const lines = toPlaylistTxt(mixedSequence(next, 25)).split("\n").slice(1);
-      lines.forEach((line, i) => {
-        const [start, end, duration] = line.split("\t");
-        if (end === "") return;
-        const [minutes, seconds] = duration!.split(":").map(Number);
-        if (wallClockSeconds(start!, end!) !== minutes! * 60 + seconds!) {
-          violations.push(`math: ${line}`);
-        }
-        const following = lines[i + 1];
-        if (following !== undefined && wallClockSeconds(end!, following.split("\t")[0]!) < 0) {
-          violations.push(`overlap: ${line} | ${following}`);
-        }
-      });
-    }
-    expect(violations).toEqual([]);
-  }, 20_000);
+  test.each([
+    ["our own lengths", false],
+    ["catalog lengths too", true],
+  ])(
+    "with %s, no End Time runs past the next row's Start Time, and End − Start = Duration",
+    (_, withCatalogLengths) => {
+      const next = random(20261008);
+      const violations: string[] = [];
+      for (let sequence = 0; sequence < 40; sequence += 1) {
+        const rows = mixedSequence(next, 25, { withCatalogLengths });
+        const lines = toPlaylistTxt(rows).split("\n").slice(1);
+        lines.forEach((line, i) => {
+          const [start, end, duration] = line.split("\t");
+          if (end === "") return;
+          const [minutes, seconds] = duration!.split(":").map(Number);
+          if (wallClockSeconds(start!, end!) !== minutes! * 60 + seconds!) {
+            violations.push(`math: ${line}`);
+          }
+          const following = lines[i + 1];
+          // Next play in the same second: the row keeps a 1 s length rather than none.
+          const sameSecondFloor = duration === "0:01";
+          if (
+            following !== undefined &&
+            !sameSecondFloor &&
+            wallClockSeconds(end!, following.split("\t")[0]!) < 0
+          ) {
+            violations.push(`overlap: ${line} | ${following}`);
+          }
+        });
+      }
+      expect(violations).toEqual([]);
+    },
+    20_000,
+  );
+
+  test("a catalog length longer than what aired ends at the next row's start", () => {
+    // Real case, 88Nine 08/08/2026: catalog has the 11:52 album version; the next song started 3:56 later.
+    const lines = toPlaylistTxt([
+      row("2026-08-08T15:05:29Z", 712, "Got to Give It Up"),
+      row("2026-08-08T15:09:25Z", 200, "Next Song"),
+    ]).split("\n");
+    expect(lines[1]!.split("\t").slice(0, 3)).toEqual([
+      "08/08/2026 10:05:29",
+      "08/08/2026 10:09:25",
+      "3:56",
+    ]);
+    expect(lines[2]!.split("\t")[2]).toBe("3:20");
+  });
+
+  test("a row whose next play starts in the same second keeps a 1 s length, not a blank", () => {
+    const [, line] = toPlaylistTxt([
+      row("2026-08-08T15:05:29.100Z", 240),
+      row("2026-08-08T15:05:29.800Z", 200),
+    ]).split("\n");
+    expect(line!.split("\t").slice(0, 3)).toEqual([
+      "08/08/2026 10:05:29",
+      "08/08/2026 10:05:30",
+      "0:01",
+    ]);
+  });
 
   test("a song cut off after 12 s exports as 0:12, ending exactly when the next one starts", () => {
     const start = Date.parse("2026-09-15T14:05:09.300Z");
