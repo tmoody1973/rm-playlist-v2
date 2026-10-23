@@ -328,11 +328,11 @@
   flex: 1;
 }
 
+/* Wrap, never truncate: a concert title is the one thing a listener came for (docs/design/003). */
 .rmke-event-title,
-.rmke-event-venue {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rmke-event-venue,
+.rmke-event-support {
+  overflow-wrap: anywhere;
 }
 
 @container rmke-widget (max-width: 460px) {
@@ -354,14 +354,5 @@
    */
   .rmke-event-info {
     flex: 1 1 60%;
-  }
-
-  .rmke-event-title,
-  .rmke-event-venue,
-  .rmke-event-support {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    overflow-wrap: anywhere;
   }
 }
