@@ -9,17 +9,17 @@ import { assertServerKey } from "./listenerGuard";
  * the listener apps, and a leak there must not let someone forge plays, which
  * are the station's royalty record.
  *
- * Rollout, see docs/decisions/012-worker-server-key.md: while the workers are
- * being given the key, a call without one is logged and allowed. Once the logs
- * show no unkeyed calls for a day, `serverKey` becomes required.
+ * Rollout, see docs/decisions/012-worker-server-key.md. The validator stays
+ * optional so a missing key is refused by our check, not by Convex's argument
+ * validator (whose error would echo the args), and so staff can still call
+ * events.upsertBatch from the dashboard without one.
  */
 export const ingestKeyArg = v.optional(v.string());
 
 export function checkIngestKey(serverKey: string | undefined, caller: string): void {
   if (serverKey === undefined) {
-    // ponytail: stage-1 grace period; stage 3 replaces this branch with a throw.
-    console.warn(`[ingest-key] unkeyed call to ${caller}`);
-    return;
+    console.warn(`[ingest-key] refused unkeyed call to ${caller}`);
+    throw new Error("Unauthorized");
   }
   assertServerKey(serverKey, process.env.INGEST_SERVER_KEY);
 }
