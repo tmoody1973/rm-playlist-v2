@@ -33,7 +33,9 @@ describe("checkIngestKey", () => {
   test("refuses a missing key and logs which function was called", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     expect(() => checkIngestKey(undefined, "plays.recordStreamPlay")).toThrow("Unauthorized");
-    expect(warn).toHaveBeenCalledWith("[ingest-key] refused unkeyed call to plays.recordStreamPlay");
+    expect(warn).toHaveBeenCalledWith(
+      "[ingest-key] refused unkeyed call to plays.recordStreamPlay",
+    );
     warn.mockRestore();
   });
 });
