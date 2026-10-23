@@ -8,6 +8,7 @@ import {
   internalQuery,
   mutation,
 } from "./_generated/server";
+import { requireStaff } from "./staff";
 import { fillPlayDuration, needsReportLength } from "./durationFill";
 import { playSearchFields } from "./memoryLogic";
 import { type DurationBasis, gapSec, pairWithNext } from "./playDuration";
@@ -92,10 +93,10 @@ export interface BackfillResult {
  * else. If Apple returns unauthorized, we abort the whole batch
  * (token is dead) so we don't burn quota on doomed calls.
  */
-// TODO(security): HMAC + user attribution. Session 3 security pass.
 export const fillMissingDurationsFromApple = action({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }): Promise<BackfillResult> => {
+    await requireStaff(ctx);
     const requested = Math.min(Math.max(limit ?? DEFAULT_BATCH_LIMIT, 1), MAX_BATCH_LIMIT);
 
     const token = await ctx.runQuery(api.appleMusic.getDeveloperToken, {});
@@ -211,8 +212,7 @@ type _CandidateTypeCheck = Doc<"tracks">;
  * Returns `{ flipped, scanned }`. Safe to invoke multiple times —
  * once a play has a canonicalTrackId, it's skipped.
  */
-// TODO(security): HMAC + admin-role check. Session 3 security pass.
-export const reEnrichMbOnlyPlays = mutation({
+export const reEnrichMbOnlyPlays = internalMutation({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit }): Promise<{ flipped: number; scanned: number }> => {
     const cap = Math.min(Math.max(limit ?? 200, 1), 2000);

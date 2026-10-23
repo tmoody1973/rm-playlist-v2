@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { isStaff, requireStaff } from "./staff";
 
 /**
  * Ensure a `users` row exists for the currently-signed-in Clerk identity.
@@ -18,6 +19,7 @@ export const ensureUserRecord = mutation({
     if (identity === null) {
       throw new Error("ensureUserRecord called without a signed-in user");
     }
+    await requireStaff(ctx);
 
     const existing = await ctx.db
       .query("users")
@@ -107,6 +109,7 @@ export const currentUser = query({
 export const listForOrg = query({
   args: { orgSlug: v.string() },
   handler: async (ctx, { orgSlug }) => {
+    if (!(await isStaff(ctx))) return [];
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_slug", (q) => q.eq("slug", orgSlug))

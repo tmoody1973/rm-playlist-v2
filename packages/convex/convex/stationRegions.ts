@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireStaff } from "./staff";
 import type { Id } from "./_generated/dataModel";
 
 /**
@@ -97,11 +98,6 @@ export const listAllForOrg = query({
 // Mutations
 // ---------------------------------------------------------------- //
 
-// TODO(security): same threat profile as plays.recordPolledPlays —
-// public mutation, callable by anyone with the Convex URL. Add a
-// shared-secret HMAC + role check (admin only) before partner
-// stations onboard. For shakedown the dashboard is allowlist-gated
-// to RM emails so this is acceptable.
 export const create = mutation({
   args: {
     orgSlug: v.string(),
@@ -117,6 +113,7 @@ export const create = mutation({
     enabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireStaff(ctx);
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_slug", (q) => q.eq("slug", args.orgSlug))
@@ -148,6 +145,7 @@ export const update = mutation({
     enabled: v.optional(v.boolean()),
   },
   handler: async (ctx, { regionId, config, label, enabled }) => {
+    await requireStaff(ctx);
     const patch: Record<string, unknown> = {};
     if (config !== undefined) patch.config = config;
     if (label !== undefined) patch.label = label;
@@ -161,6 +159,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { regionId: v.id("stationRegions") },
   handler: async (ctx, { regionId }) => {
+    await requireStaff(ctx);
     await ctx.db.delete(regionId);
   },
 });
