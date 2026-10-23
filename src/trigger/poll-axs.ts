@@ -2,7 +2,7 @@ import { logger, schedules } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../packages/convex/convex/_generated/api.js";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel.js";
-import { getConvexUrl } from "./env";
+import { getConvexUrl, ingestServerKey } from "./env";
 import { normalizeAxsEvent } from "./axs-normalize";
 import type { AxsEvent, AxsResponse, NormalizedEvent } from "./axs-normalize";
 
@@ -169,6 +169,7 @@ export const pollAxs = schedules.task({
     }
 
     const result = await client.mutation(api.events.upsertBatch, {
+      serverKey: ingestServerKey(),
       orgId: orgId as Id<"organizations">,
       source: "axs",
       events: normalized,

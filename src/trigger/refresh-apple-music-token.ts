@@ -2,7 +2,7 @@ import { logger, schedules } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { signDeveloperToken } from "../../packages/enrichment/src/apple-music/jwt";
 import { api } from "../../packages/convex/convex/_generated/api.js";
-import { getConvexUrl, requireEnv } from "./env";
+import { getConvexUrl, ingestServerKey, requireEnv } from "./env";
 
 /**
  * Weekly Apple Music JWT refresh.
@@ -44,6 +44,7 @@ export const refreshAppleMusicToken = schedules.task({
 
     const client = new ConvexHttpClient(getConvexUrl());
     await client.mutation(api.appleMusic.writeDeveloperToken, {
+      serverKey: ingestServerKey(),
       token,
       expiresAt,
       mintedAt,

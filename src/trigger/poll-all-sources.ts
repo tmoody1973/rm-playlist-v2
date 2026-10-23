@@ -4,6 +4,7 @@ import type { NormalizedPlay, StationSlug } from "../../packages/types/src";
 import { sgmetadataAdapter, spinitronAdapter } from "../../packages/ingestion/src";
 import type { AdapterContract } from "../../packages/ingestion/src/types";
 import { api } from "../../packages/convex/convex/_generated/api.js";
+import { ingestServerKey } from "./env";
 
 /**
  * Dispatcher task — polls every enabled ingestion source once per minute.
@@ -96,6 +97,7 @@ async function pollOneSource(
     });
 
     const result = await client.mutation(api.plays.recordPolledPlays, {
+      serverKey: ingestServerKey(),
       sourceId: source._id as Parameters<typeof api.plays.recordPolledPlays>[0]["sourceId"],
       plays: plays.map((p) => ({
         artistRaw: p.artistRaw,
@@ -126,6 +128,7 @@ async function recordFailure(
 ): Promise<void> {
   try {
     await client.mutation(api.plays.recordPollFailure, {
+      serverKey: ingestServerKey(),
       sourceId: sourceId as Parameters<typeof api.plays.recordPollFailure>[0]["sourceId"],
       errorMessage,
     });

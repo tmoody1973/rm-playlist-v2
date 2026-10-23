@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 import { normalizeEventArtistKey } from "./events";
+import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 import { pickShowsByMetro } from "./showsByMetro";
 
 /**
@@ -108,11 +109,9 @@ async function isIgnoredByRule(
  * `lastSuccessAt`. On empty input (the source returned nothing — valid),
  * still logs the success but records 0 inserts.
  */
-// TODO(security): currently callable by anyone with the Convex URL. Add a
-// shared-secret HMAC check before partner stations go live — signed header from
-// the Trigger.dev task, verified here.
 export const recordPolledPlays = mutation({
   args: {
+    serverKey: ingestKeyArg,
     sourceId: v.id("ingestionSources"),
     plays: v.array(
       v.object({
@@ -126,7 +125,8 @@ export const recordPolledPlays = mutation({
       }),
     ),
   },
-  handler: async (ctx, { sourceId, plays: incoming }) => {
+  handler: async (ctx, { serverKey, sourceId, plays: incoming }) => {
+    checkIngestKey(serverKey, "plays.recordPolledPlays");
     const source = await loadSourceOrThrow(ctx, sourceId);
 
     let inserted = 0;
@@ -197,15 +197,11 @@ export const recordPolledPlays = mutation({
  * from duplicates without catching exceptions, and surface unknown-source
  * errors up to the supervisor for abort-this-source handling.
  */
-// TODO(security): unauthenticated public mutation — same threat profile as
-// `recordPolledPlays` above. Before partner stations go live: (a) HMAC-sign
-// requests from the Fly worker using a shared secret, verify here with
-// `crypto.timingSafeEqual`; (b) sliding-window rate limit per sourceId to
-// cap at ~60 inserts/min/source (real ICY streams tick ~20/hr). These two
-// mitigations collapse the DoS + sourceId-trust + playedAt-displacement
-// concerns flagged in M8 session 2 security review.
+// TODO(security): sliding-window rate limit per sourceId (~60 inserts/min;
+// real ICY streams tick ~20/hr) in case the worker key ever leaks.
 export const recordStreamPlay = mutation({
   args: {
+    serverKey: ingestKeyArg,
     sourceId: v.id("ingestionSources"),
     play: v.object({
       artistRaw: v.string(),
@@ -217,7 +213,8 @@ export const recordStreamPlay = mutation({
       raw: v.any(),
     }),
   },
-  handler: async (ctx, { sourceId, play }) => {
+  handler: async (ctx, { serverKey, sourceId, play }) => {
+    checkIngestKey(serverKey, "plays.recordStreamPlay");
     const source = await loadSourceOrThrow(ctx, sourceId);
 
     const dup = await findDuplicatePlay(ctx, source.stationId, play);
@@ -257,11 +254,13 @@ export const recordStreamPlay = mutation({
  */
 export const recordPollFailure = mutation({
   args: {
+    serverKey: ingestKeyArg,
     sourceId: v.id("ingestionSources"),
     errorMessage: v.string(),
     context: v.optional(v.any()),
   },
-  handler: async (ctx, { sourceId, errorMessage, context }) => {
+  handler: async (ctx, { serverKey, sourceId, errorMessage, context }) => {
+    checkIngestKey(serverKey, "plays.recordPollFailure");
     const source = await loadSourceOrThrow(ctx, sourceId);
     await ctx.runMutation(internal.ingestionEvents.log, {
       orgId: source.orgId,

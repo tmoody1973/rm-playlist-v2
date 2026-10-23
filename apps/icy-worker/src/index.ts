@@ -26,7 +26,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 runSupervisor({
-  gateway: createConvexGateway({ url: CONVEX_URL }),
+  gateway: createConvexGateway({
+    url: CONVEX_URL,
+    serverKey: process.env.INGEST_SERVER_KEY || undefined,
+  }),
   signal: controller.signal,
   refreshMs,
 }).catch((err: unknown) => {
