@@ -30,10 +30,12 @@ describe("checkIngestKey", () => {
     expect(() => checkIngestKey(KEY, "plays.recordPolledPlays")).toThrow("Unauthorized");
   });
 
-  test("allows a missing key during the rollout but logs which function was called", () => {
+  test("refuses a missing key and logs which function was called", () => {
     const warn = spyOn(console, "warn").mockImplementation(() => {});
-    expect(() => checkIngestKey(undefined, "plays.recordStreamPlay")).not.toThrow();
-    expect(warn).toHaveBeenCalledWith("[ingest-key] unkeyed call to plays.recordStreamPlay");
+    expect(() => checkIngestKey(undefined, "plays.recordStreamPlay")).toThrow("Unauthorized");
+    expect(warn).toHaveBeenCalledWith(
+      "[ingest-key] refused unkeyed call to plays.recordStreamPlay",
+    );
     warn.mockRestore();
   });
 });

@@ -29,7 +29,7 @@ export interface ConvexGateway {
 
 export interface RealGatewayOptions {
   readonly url: string;
-  /** INGEST_SERVER_KEY; omitted until set, see docs/decisions/012. */
+  /** INGEST_SERVER_KEY; Convex refuses stream plays without it, see docs/decisions/012. */
   readonly serverKey?: string;
 }
 

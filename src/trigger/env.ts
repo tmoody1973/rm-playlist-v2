@@ -19,10 +19,7 @@ export function requireEnv(name: string): string {
   return value;
 }
 
-/**
- * Proves a Convex write came from our workers (docs/decisions/012). Undefined
- * until INGEST_SERVER_KEY is set; the Convex client then drops the field.
- */
+/** Proves a Convex write came from our workers (docs/decisions/012); Convex refuses writes without it. */
 export function ingestServerKey(): string | undefined {
   return process.env.INGEST_SERVER_KEY || undefined;
 }
