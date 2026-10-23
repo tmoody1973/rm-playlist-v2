@@ -179,6 +179,7 @@ async function backfillStation(
   if (!args.apply || fresh.length === 0) return { found: spins.length, duplicates, written: 0 };
 
   const result = await client.mutation(api.plays.recordPolledPlays, {
+    serverKey: process.env.INGEST_SERVER_KEY || undefined,
     sourceId: target.sourceId as Parameters<typeof api.plays.recordPolledPlays>[0]["sourceId"],
     plays: fresh.map((p) => ({
       artistRaw: p.artistRaw,

@@ -16,7 +16,7 @@ import type {
 import { api } from "../../packages/convex/convex/_generated/api.js";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel";
 import { collectTrackCredits } from "../../packages/enrichment/src/credits/collect";
-import { getConvexUrl } from "./env";
+import { getConvexUrl, ingestServerKey } from "./env";
 import { enrichCreditsBatch } from "./enrich-credits";
 
 export type UnresolvedReason = "mb_miss" | "no_match" | "other";
@@ -435,12 +435,14 @@ async function resolveBoth(
   resolvedLabel: string | undefined,
 ): Promise<void> {
   const artistId = (await client.mutation(api.enrichment.upsertArtistByMbid, {
+    serverKey: ingestServerKey(),
     mbid: mb.artistMbid,
     displayName: mb.artistName,
     appleMusicId: am.artistAppleMusicId,
   })) as Id<"artists">;
 
   const trackId = (await client.mutation(api.enrichment.upsertTrack, {
+    serverKey: ingestServerKey(),
     artistId,
     displayTitle: am.title,
     appleMusicSongId: am.songId,
@@ -453,6 +455,7 @@ async function resolveBoth(
   })) as Id<"tracks">;
 
   await client.mutation(api.enrichment.markPlayEnriched, {
+    serverKey: ingestServerKey(),
     playId,
     canonicalArtistId: artistId,
     canonicalTrackId: trackId,
@@ -468,6 +471,7 @@ async function resolveMbOnly(
   coverArtUrl: string | null,
 ): Promise<void> {
   const artistId = (await client.mutation(api.enrichment.upsertArtistByMbid, {
+    serverKey: ingestServerKey(),
     mbid: mb.artistMbid,
     displayName: mb.artistName,
   })) as Id<"artists">;
@@ -479,6 +483,7 @@ async function resolveMbOnly(
   let canonicalTrackId: Id<"tracks"> | undefined;
   if (coverArtUrl !== null) {
     canonicalTrackId = (await client.mutation(api.enrichment.upsertTrack, {
+      serverKey: ingestServerKey(),
       artistId,
       displayTitle: mb.title,
       artworkUrl: coverArtUrl,
@@ -486,6 +491,7 @@ async function resolveMbOnly(
   }
 
   await client.mutation(api.enrichment.markPlayEnriched, {
+    serverKey: ingestServerKey(),
     playId,
     canonicalArtistId: artistId,
     canonicalTrackId,
@@ -525,6 +531,7 @@ async function markUnresolved(
   const amReason = result.appleMusic.matched === false ? result.appleMusic.reason : "matched";
   const mbReason = result.musicBrainz.matched === false ? result.musicBrainz.reason : "matched";
   await client.mutation(api.enrichment.markPlayUnresolved, {
+    serverKey: ingestServerKey(),
     playId,
     reason: classifyUnresolvedReason(result),
     context: { amReason, mbReason },

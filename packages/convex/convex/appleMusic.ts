@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 
 /**
  * Apple Music developer token cache.
@@ -20,10 +21,9 @@ import { mutation, query } from "./_generated/server";
 
 const REFRESH_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
-// TODO(security): unauthenticated public query — currently callable by
-// anyone with the Convex URL. The cached token is short-lived (30d) and
-// scoped to Apple Music catalog reads, but still a secret. Session 3
-// adds HMAC-signed requests from the Trigger worker so only it can read.
+// Public on purpose: a MusicKit JS developer token is meant to ship to
+// browsers, and Radio Commons' Apple connect page reads it from here.
+// Overwriting it is what needs a key (writeDeveloperToken below).
 export const getDeveloperToken = query({
   args: {},
   handler: async (ctx) => {
@@ -34,20 +34,18 @@ export const getDeveloperToken = query({
   },
 });
 
-// TODO(security): unauthenticated public mutation — an attacker with
-// `CONVEX_URL` can replace the cached JWT with their own, causing
-// enrichment reads to point at their Apple Music account. Session 3
-// adds HMAC auth matching `plays.recordStreamPlay`.
 export const writeDeveloperToken = mutation({
   args: {
+    serverKey: ingestKeyArg,
     token: v.string(),
     expiresAt: v.number(),
     mintedAt: v.number(),
   },
-  handler: async (ctx, args) => {
-    for await (const row of ctx.db.query("appleMusicTokenCache")) {
-      await ctx.db.delete(row._id);
+  handler: async (ctx, { serverKey, ...row }) => {
+    checkIngestKey(serverKey, "appleMusic.writeDeveloperToken");
+    for await (const old of ctx.db.query("appleMusicTokenCache")) {
+      await ctx.db.delete(old._id);
     }
-    await ctx.db.insert("appleMusicTokenCache", args);
+    await ctx.db.insert("appleMusicTokenCache", row);
   },
 });

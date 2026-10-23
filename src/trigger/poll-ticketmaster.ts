@@ -2,7 +2,7 @@ import { logger, schedules } from "@trigger.dev/sdk/v3";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../packages/convex/convex/_generated/api.js";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel.js";
-import { getConvexUrl } from "./env";
+import { getConvexUrl, ingestServerKey } from "./env";
 
 /**
  * Poll Ticketmaster every 6 hours for upcoming Music events across the
@@ -523,6 +523,7 @@ export const pollTicketmaster = schedules.task({
     let result = { inserted: 0, updated: 0, dedupedNew: 0, dedupedExisting: 0 };
     for (const eventChunk of chunk(normalized, UPSERT_CHUNK_SIZE)) {
       const chunkResult = await client.mutation(api.events.upsertBatch, {
+        serverKey: ingestServerKey(),
         orgId: orgId as Id<"organizations">,
         source: "ticketmaster",
         events: eventChunk,

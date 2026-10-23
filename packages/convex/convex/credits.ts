@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { creditsStatusValidator, factBodyFields, matchConfidenceValidator } from "./factValidators";
+import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 
 /** How many of the newest plays count as "on air right now" for priority. */
 const RECENT_PLAYS_WINDOW = 80;
@@ -95,6 +96,7 @@ async function replaceFacts(ctx: MutationCtx, trackId: Id<"tracks">, facts: Fact
 /** Replace a track's facts and credits fields in one transaction. */
 export const writeTrackCredits = mutation({
   args: {
+    serverKey: ingestKeyArg,
     trackId: v.id("tracks"),
     creditsStatus: creditsStatusValidator,
     facts: v.array(v.object(factBodyFields)),
@@ -104,6 +106,7 @@ export const writeTrackCredits = mutation({
     matchConfidence: v.optional(matchConfidenceValidator),
   },
   handler: async (ctx, args) => {
+    checkIngestKey(args.serverKey, "credits.writeTrackCredits");
     const track = await ctx.db.get(args.trackId);
     if (track === null) throw new Error(`Unknown track: ${args.trackId}`);
     // A transient error must not wipe facts a previous run found.

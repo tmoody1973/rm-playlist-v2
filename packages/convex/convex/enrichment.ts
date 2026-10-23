@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query, internalMutation } from "./_generated/server";
 import { requireStaff } from "./staff";
+import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 import { playSearchFields } from "./memoryLogic";
 
 /**
@@ -13,11 +14,8 @@ import { playSearchFields } from "./memoryLogic";
  * `@rm/enrichment` (Apple Music + MusicBrainz in parallel), then
  * persist matches via `upsertArtist*` / `upsertTrack` / `markPlay*`.
  *
- * Dashboard-called mutations here require staff (./staff).
- * TODO(security): the worker-called ones (`upsertArtistByMbid`,
- * `upsertTrack`, `markPlay*`) are still unauthenticated public callable —
- * the Trigger worker reaches them through ConvexHttpClient and needs a
- * shared secret first. The widgets already ship the Convex URL.
+ * Dashboard-called mutations here require staff (./staff); worker-called
+ * ones check the worker key (./ingestKey).
  */
 
 export const pendingPlays = query({
@@ -55,11 +53,13 @@ export const pendingPlays = query({
 
 export const upsertArtistByMbid = mutation({
   args: {
+    serverKey: ingestKeyArg,
     mbid: v.string(),
     displayName: v.string(),
     appleMusicId: v.optional(v.string()),
   },
-  handler: async (ctx, { mbid, displayName, appleMusicId }) => {
+  handler: async (ctx, { serverKey, mbid, displayName, appleMusicId }) => {
+    checkIngestKey(serverKey, "enrichment.upsertArtistByMbid");
     const existing = await ctx.db
       .query("artists")
       .withIndex("by_mbid", (q) => q.eq("mbid", mbid))
@@ -104,6 +104,7 @@ export const upsertArtistByAppleMusicId = internalMutation({
 
 export const upsertTrack = mutation({
   args: {
+    serverKey: ingestKeyArg,
     artistId: v.id("artists"),
     displayTitle: v.string(),
     appleMusicSongId: v.optional(v.string()),
@@ -115,6 +116,7 @@ export const upsertTrack = mutation({
     previewUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    checkIngestKey(args.serverKey, "enrichment.upsertTrack");
     const artworkUrl = sanitizeArtworkUrl(args.artworkUrl);
 
     // Dedup path A: matched on Apple Music → guaranteed-unique songId.
@@ -200,6 +202,7 @@ async function patchMissingFields(
 
 export const markPlayEnriched = mutation({
   args: {
+    serverKey: ingestKeyArg,
     playId: v.id("plays"),
     canonicalArtistId: v.id("artists"),
     // Relaxed to optional in session 2 — an MB-only match produces a
@@ -208,7 +211,8 @@ export const markPlayEnriched = mutation({
     canonicalTrackId: v.optional(v.id("tracks")),
     context: v.optional(v.any()),
   },
-  handler: async (ctx, { playId, canonicalArtistId, canonicalTrackId, context }) => {
+  handler: async (ctx, { serverKey, playId, canonicalArtistId, canonicalTrackId, context }) => {
+    checkIngestKey(serverKey, "enrichment.markPlayEnriched");
     const play = await loadPlay(ctx, playId);
     const patch: Partial<Doc<"plays">> = {
       canonicalArtistId,
@@ -707,6 +711,7 @@ function normalizeMatchKey(value: string): string {
 
 export const markPlayUnresolved = mutation({
   args: {
+    serverKey: ingestKeyArg,
     playId: v.id("plays"),
     // Constrained union — matches the `UnresolvedReason` type exported
     // from `src/trigger/enrich-pending-plays.ts`. Prevents typo drift
@@ -714,7 +719,8 @@ export const markPlayUnresolved = mutation({
     reason: v.union(v.literal("mb_miss"), v.literal("no_match"), v.literal("other")),
     context: v.optional(v.any()),
   },
-  handler: async (ctx, { playId, reason, context }) => {
+  handler: async (ctx, { serverKey, playId, reason, context }) => {
+    checkIngestKey(serverKey, "enrichment.markPlayUnresolved");
     const play = await loadPlay(ctx, playId);
     await ctx.db.patch(playId, { enrichmentStatus: "unresolved" });
     // A real song still aired even though no catalog matched it (local

@@ -4,6 +4,7 @@ import type {
   TrackForCredits,
 } from "../../packages/enrichment/src/credits/types";
 import { api } from "../../packages/convex/convex/_generated/api.js";
+import { ingestServerKey } from "./env";
 import type { Id } from "../../packages/convex/convex/_generated/dataModel";
 
 /** Tracks fetched per credits phase; the deadline usually ends the loop first. */
@@ -31,6 +32,7 @@ async function writeResult(
   result: TrackCreditsResult,
 ) {
   await client.mutation(api.credits.writeTrackCredits, {
+    serverKey: ingestServerKey(),
     trackId: trackId as Id<"tracks">,
     creditsStatus: result.creditsStatus,
     facts: result.facts.map((fact) => ({ ...fact, sources: [...fact.sources] })),
@@ -53,6 +55,7 @@ function errorMessage(err: unknown): string {
 async function parkAsError(deps: CreditsBatchDeps, trackId: string): Promise<void> {
   try {
     await deps.client.mutation(api.credits.writeTrackCredits, {
+      serverKey: ingestServerKey(),
       trackId: trackId as Id<"tracks">,
       creditsStatus: "error",
       facts: [],

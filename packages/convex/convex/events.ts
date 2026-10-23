@@ -14,6 +14,8 @@ import { normalizeArtistForMatch } from "./matchKey";
 import { rankArtistShows } from "./memoryLogic";
 import { stationArtistShowValidator } from "./schema";
 import { nearestMetro } from "./showsByMetro";
+import { checkIngestKey, ingestKeyArg } from "./ingestKey";
+import { isStaff } from "./staff";
 
 /**
  * Cross-source event ingestion + dedup.
@@ -205,17 +207,19 @@ function normalizeVenueName(name: string): string {
 // Mutation
 // ---------------------------------------------------------------- //
 
-// TODO(security): currently callable by anyone with the Convex URL. Same
-// threat profile as plays.recordPolledPlays — add a shared-secret HMAC
-// check before partner stations go live. Internal mutation isn't an option
-// because Trigger.dev tasks call this via the external ConvexHttpClient.
+/**
+ * Two callers: the Ticketmaster/AXS crons (worker key) and the dashboard's
+ * EventCreatorDrawer (a signed-in staff member, no key).
+ */
 export const upsertBatch = mutation({
   args: {
+    serverKey: ingestKeyArg,
     orgId: v.id("organizations"),
     source: SOURCE,
     events: v.array(NORMALIZED_EVENT),
   },
-  handler: async (ctx, { orgId, source, events }) => {
+  handler: async (ctx, { serverKey, orgId, source, events }) => {
+    if (!(await isStaff(ctx))) checkIngestKey(serverKey, "events.upsertBatch");
     let inserted = 0;
     let updated = 0;
     let dedupedNew = 0;

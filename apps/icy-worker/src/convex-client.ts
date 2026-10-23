@@ -29,9 +29,11 @@ export interface ConvexGateway {
 
 export interface RealGatewayOptions {
   readonly url: string;
+  /** INGEST_SERVER_KEY; omitted until set, see docs/decisions/012. */
+  readonly serverKey?: string;
 }
 
-export function createConvexGateway({ url }: RealGatewayOptions): ConvexGateway {
+export function createConvexGateway({ url, serverKey }: RealGatewayOptions): ConvexGateway {
   const client = new ConvexHttpClient(url);
 
   return {
@@ -55,6 +57,7 @@ export function createConvexGateway({ url }: RealGatewayOptions): ConvexGateway 
     async writePlay(sourceId: string, play: NormalizedPlay): Promise<WriteResult> {
       try {
         const result = await client.mutation(api.plays.recordStreamPlay, {
+          serverKey,
           sourceId: sourceId as Id<"ingestionSources">,
           play: {
             artistRaw: play.artistRaw,
