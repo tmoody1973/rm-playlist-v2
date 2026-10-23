@@ -41,10 +41,15 @@ jobs:
     name: Deploy Trigger.dev tasks
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only run when CI succeeded (or when manually dispatched).
+    # Only run when CI succeeded on a push to this repo's main (or when
+    # manually dispatched). The `branches: [main]` filter above matches the
+    # triggering run's head *branch name*, so a fork PR from a branch named
+    # `main` would otherwise pass and deploy the fork's code with our secrets.
     if: >
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v4
