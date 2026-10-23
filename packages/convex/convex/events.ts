@@ -163,6 +163,23 @@ type NormalizedEvent = {
  * from `artists.artistKey` (which uses a slugify form for canonical
  * artist rows) — this key is the cross-source matching key.
  */
+const LINK_PROTOCOLS = new Set(["https:", "http:"]);
+
+/**
+ * Ticket URLs end up as a raw `<a href>` in the Preact widget, which (unlike
+ * React 19) doesn't block `javascript:` URLs — and the widget renders inside
+ * station websites' own pages. Plain http stays: Ticketmaster sends a few
+ * venue links (cubs.com) without TLS.
+ */
+export function safeLinkUrl(url: string | undefined): string | undefined {
+  if (url === undefined) return undefined;
+  try {
+    return LINK_PROTOCOLS.has(new URL(url).protocol) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function normalizeEventArtistKey(name: string): string {
   return normalizeArtistForMatch(name);
 }
@@ -254,7 +271,7 @@ async function upsertOneEvent(
     dateOnly: incoming.dateOnly,
     doorsAt: incoming.doorsAt,
     onSaleAt: incoming.onSaleAt,
-    ticketUrl: incoming.ticketUrl,
+    ticketUrl: safeLinkUrl(incoming.ticketUrl),
     status: incoming.status,
     imageUrl: incoming.imageUrl,
     genre: incoming.genre,

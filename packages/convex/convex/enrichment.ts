@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type MutationCtx, mutation, query } from "./_generated/server";
+import { type MutationCtx, mutation, query, internalMutation } from "./_generated/server";
+import { requireStaff } from "./staff";
 import { playSearchFields } from "./memoryLogic";
 
 /**
@@ -12,11 +13,11 @@ import { playSearchFields } from "./memoryLogic";
  * `@rm/enrichment` (Apple Music + MusicBrainz in parallel), then
  * persist matches via `upsertArtist*` / `upsertTrack` / `markPlay*`.
  *
- * TODO(security): every function here is unauthenticated public
- * callable, mirroring the `plays.recordPolledPlays` pattern. Session 3
- * adds HMAC-signed requests from the Trigger worker — the single-
- * tenant RM shakedown is acceptable exposure; do NOT ship widgets that
- * expose the Convex URL until auth lands.
+ * Dashboard-called mutations here require staff (./staff).
+ * TODO(security): the worker-called ones (`upsertArtistByMbid`,
+ * `upsertTrack`, `markPlay*`) are still unauthenticated public callable —
+ * the Trigger worker reaches them through ConvexHttpClient and needs a
+ * shared secret first. The widgets already ship the Convex URL.
  */
 
 export const pendingPlays = query({
@@ -80,7 +81,7 @@ export const upsertArtistByMbid = mutation({
   },
 });
 
-export const upsertArtistByAppleMusicId = mutation({
+export const upsertArtistByAppleMusicId = internalMutation({
   args: {
     appleMusicId: v.string(),
     displayName: v.string(),
@@ -245,7 +246,6 @@ export const markPlayEnriched = mutation({
  * kind — reusing rather than expanding the union for session 3. A
  * dedicated `override_applied` kind is a session-4 clean-up.
  */
-// TODO(security): HMAC + user attribution. Session 3 security pass.
 export const overrideUnresolvedIdentity = mutation({
   args: {
     stationId: v.id("stations"),
@@ -259,6 +259,7 @@ export const overrideUnresolvedIdentity = mutation({
     ctx,
     { stationId, fromArtistRaw, fromTitleRaw, toArtistRaw, toTitleRaw, limit },
   ) => {
+    await requireStaff(ctx);
     const nextArtist = toArtistRaw.trim();
     const nextTitle = toTitleRaw.trim();
     if (nextArtist.length === 0 || nextTitle.length === 0) {
@@ -326,7 +327,6 @@ export const overrideUnresolvedIdentity = mutation({
  * Separate from re-enrichment: this persists the operator's ground
  * truth into the track. `reEnrichTrack` re-hits APIs instead.
  */
-// TODO(security): HMAC + user attribution. Session 3 security pass.
 export const patchTrackMetadata = mutation({
   args: {
     trackId: v.id("tracks"),
@@ -336,6 +336,7 @@ export const patchTrackMetadata = mutation({
     albumDisplayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireStaff(ctx);
     const track = await ctx.db.get(args.trackId);
     if (track === null) throw new Error(`Unknown track: ${args.trackId}`);
 
@@ -565,13 +566,13 @@ export const stationCoverage = query({
  * after the track was first resolved (session 3 MB label fallback
  * will be a common trigger).
  */
-// TODO(security): same HMAC plan. Session 3.
 export const reEnrichTrack = mutation({
   args: {
     trackId: v.id("tracks"),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { trackId, limit }) => {
+    await requireStaff(ctx);
     const cap = Math.min(limit ?? 200, 1000);
     const matching = await ctx.db
       .query("plays")
@@ -599,7 +600,6 @@ export const reEnrichTrack = mutation({
  * Deliberately conservative: only touches `unresolved` plays. Resolved or
  * already-pending plays are left alone.
  */
-// TODO(security): same HMAC plan as the enrichment mutations. Session 3.
 export const retryUnresolvedGroup = mutation({
   args: {
     stationId: v.id("stations"),
@@ -608,6 +608,7 @@ export const retryUnresolvedGroup = mutation({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { stationId, artistRaw, titleRaw, limit }) => {
+    await requireStaff(ctx);
     const cap = Math.min(limit ?? 500, 1000);
     const matching = await ctx.db
       .query("plays")
@@ -640,7 +641,6 @@ export const retryUnresolvedGroup = mutation({
  * occurrences so they stop surfacing in Needs Attention; the former
  * short-circuits future ticks of the same promo.
  */
-// TODO(security): same HMAC plan. Session 3.
 export const ignoreUnresolvedGroup = mutation({
   args: {
     stationId: v.id("stations"),
@@ -649,6 +649,7 @@ export const ignoreUnresolvedGroup = mutation({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { stationId, artistRaw, titleRaw, limit }) => {
+    await requireStaff(ctx);
     const station = await ctx.db.get(stationId);
     if (station === null) throw new Error(`Unknown station: ${stationId}`);
 

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 
 /**
  * Return all four stations for the RM org, ordered alphabetically by slug
@@ -25,9 +25,10 @@ export const list = query({
 });
 
 /**
- * Set (or clear) a station's fallback artwork URL. Surfaced as a public
- * mutation so a later dashboard admin panel can call it, but today the
- * expected caller is a one-off CLI invocation:
+ * Set (or clear) a station's fallback artwork URL. Internal — the only
+ * caller is a one-off CLI invocation (`convex run` can call internal
+ * functions). Make it public behind requireStaff if a dashboard panel
+ * ever needs it:
  *
  *   bunx convex run stations:setDefaultArtwork \
  *     '{"stationSlug":"414music","defaultArtworkUrl":"https://..."}'
@@ -36,10 +37,7 @@ export const list = query({
  * — widgets render inside secure embeds so `http://` images would be
  * mixed-content blocked by browsers.
  */
-// TODO(security): same HMAC + admin-role check as the other operator
-// mutations (session 3). Today this is admin-only by discipline, not
-// enforcement.
-export const setDefaultArtwork = mutation({
+export const setDefaultArtwork = internalMutation({
   args: {
     stationSlug: v.union(
       v.literal("hyfin"),

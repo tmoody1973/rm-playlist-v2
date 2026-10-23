@@ -7,8 +7,8 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { isStaff, requireStaff } from "./staff";
 import { internal } from "./_generated/api";
-import type { Auth } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 
 /**
@@ -35,19 +35,10 @@ const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Anything that can cause an outbound email is gated on a signed-in identity.
- *
- * Most mutations in this codebase are still open (see the TODO in plays.ts),
- * but "add an arbitrary address and make our verified domain email it" is a
- * spam relay, not just an unauthenticated write. The gate goes here now rather
- * than waiting for the project-wide auth pass.
+ * Anything that can cause an outbound email is gated on staff (see ./staff).
+ * "Add an arbitrary address and make our verified domain email it" is a spam
+ * relay, and sign-up is open — a bare signed-in check let any Gmail user in.
  */
-async function requireSignedIn(ctx: { auth: Auth }): Promise<void> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (identity === null) {
-    throw new Error("Not signed in");
-  }
-}
 
 // ---------------------------------------------------------------- //
 // Recipients — read
@@ -57,6 +48,7 @@ async function requireSignedIn(ctx: { auth: Auth }): Promise<void> {
 export const listRecipientsForOrg = query({
   args: { orgSlug: v.string() },
   handler: async (ctx, { orgSlug }) => {
+    if (!(await isStaff(ctx))) return [];
     const org = await ctx.db
       .query("organizations")
       .withIndex("by_slug", (q) => q.eq("slug", orgSlug))
@@ -152,7 +144,7 @@ async function scheduleTestEmail(
 export const sendTestAlert = mutation({
   args: { recipientId: v.id("alertRecipients") },
   handler: async (ctx, { recipientId }) => {
-    await requireSignedIn(ctx);
+    await requireStaff(ctx);
     const row = await ctx.db.get(recipientId);
     if (row === null) throw new Error("That recipient no longer exists.");
     await scheduleTestEmail(ctx, row.orgId, recipientId);
@@ -171,7 +163,7 @@ export const addRecipient = mutation({
     label: v.optional(v.string()),
   },
   handler: async (ctx, { orgSlug, email, label }) => {
-    await requireSignedIn(ctx);
+    await requireStaff(ctx);
     const normalized = email.trim().toLowerCase();
     if (!EMAIL_PATTERN.test(normalized)) {
       throw new Error(`Not a valid email address: ${email}`);
@@ -208,7 +200,7 @@ export const addRecipient = mutation({
 export const setRecipientEnabled = mutation({
   args: { recipientId: v.id("alertRecipients"), enabled: v.boolean() },
   handler: async (ctx, { recipientId, enabled }) => {
-    await requireSignedIn(ctx);
+    await requireStaff(ctx);
     await ctx.db.patch(recipientId, { enabled });
   },
 });
@@ -216,7 +208,7 @@ export const setRecipientEnabled = mutation({
 export const removeRecipient = mutation({
   args: { recipientId: v.id("alertRecipients") },
   handler: async (ctx, { recipientId }) => {
-    await requireSignedIn(ctx);
+    await requireStaff(ctx);
     await ctx.db.delete(recipientId);
   },
 });

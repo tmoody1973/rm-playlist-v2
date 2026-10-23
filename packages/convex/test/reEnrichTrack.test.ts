@@ -3,8 +3,11 @@ import { reEnrichTrack } from "../convex/enrichment";
 
 type Patch = { id: string; fields: Record<string, unknown> };
 
-function fakeCtx(resolvedPlayIds: string[]) {
+const STAFF = { email: "dj@radiomilwaukee.org" };
+
+function fakeCtx(resolvedPlayIds: string[], identity: object | null = STAFF) {
   const patches: Patch[] = [];
+  const auth = { getUserIdentity: async () => identity };
   const chain = {
     withIndex: () => chain,
     filter: () => chain,
@@ -16,7 +19,7 @@ function fakeCtx(resolvedPlayIds: string[]) {
       patches.push({ id, fields });
     },
   };
-  return { ctx: { db }, patches };
+  return { ctx: { db, auth }, patches };
 }
 
 const handler = (
@@ -35,5 +38,11 @@ describe("reEnrichTrack", () => {
       id: "t1",
       fields: { creditsStatus: undefined, creditsFetchedAt: undefined },
     });
+  });
+
+  test("refuses a signed-in outsider and writes nothing", async () => {
+    const { ctx, patches } = fakeCtx(["p1"], { email: "curious@gmail.com" });
+    await expect(handler(ctx, { trackId: "t1" })).rejects.toThrow("staff");
+    expect(patches).toEqual([]);
   });
 });
