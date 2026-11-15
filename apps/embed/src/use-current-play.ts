@@ -72,6 +72,8 @@ export interface SearchPlaysArgs {
   readonly beforeMs: number | undefined;
   readonly limit: number;
   readonly autoUpdate?: boolean;
+  /** False while no filter is active: no request at all, so the hidden search view costs nothing. */
+  readonly enabled?: boolean;
 }
 
 /**
@@ -83,10 +85,14 @@ export interface SearchPlaysArgs {
  * Convex backend on every character.
  */
 export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined {
-  const { station, q, afterMs, beforeMs, limit, autoUpdate = true } = args;
+  const { station, q, afterMs, beforeMs, limit, autoUpdate = true, enabled = true } = args;
   const [plays, setPlays] = useState<PublicPlay[] | undefined>(undefined);
 
   useEffect(() => {
+    if (!enabled) {
+      setPlays(undefined);
+      return;
+    }
     const client = getConvexClient();
     const trimmed = q.trim();
     const unsubscribe = client.onUpdate(
@@ -106,7 +112,7 @@ export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined 
     return () => {
       unsubscribe();
     };
-  }, [station, q, afterMs, beforeMs, limit, autoUpdate]);
+  }, [station, q, afterMs, beforeMs, limit, autoUpdate, enabled]);
 
   return plays;
 }
