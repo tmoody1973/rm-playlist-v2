@@ -745,9 +745,9 @@ export default defineSchema({
   }).index("by_key", ["key"]),
 
   /**
-   * Hourly Top 7 / Top 30 rankings per station for the widget's Top tabs.
+   * Daily Top 7 / Top 30 rankings per station for the widget's Top tabs.
    * Live counting re-read ~12k plays on every new play (~90% of DB I/O in
-   * Nov 2026); this snapshot keeps that read to once an hour.
+   * Nov 2026); this snapshot keeps that read to once a day.
    */
   topSongsSnapshots: defineTable({
     stationId: v.id("stations"),

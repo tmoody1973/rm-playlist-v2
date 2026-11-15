@@ -48,7 +48,13 @@ crons.interval(
 // Alexa names the host's photo, profile and latest pieces from this cache (CDS + radiomilwaukee.org).
 crons.interval("host profiles refresh", { minutes: 30 }, internal.hostProfiles.refresh, {});
 
-// Widget Top 7 / Top 30 rankings. Hourly instead of live: live counting was ~90% of DB I/O.
-crons.interval("top songs snapshot refresh", { hours: 1 }, internal.topSongs.refreshAll, {});
+// 3 a.m. Milwaukee (CST; 4 a.m. CDT): widget Top 7 / Top 30 rankings. Daily instead of live:
+// live counting was ~90% of DB I/O.
+crons.daily(
+  "top songs snapshot refresh",
+  { hourUTC: 9, minuteUTC: 0 },
+  internal.topSongs.refreshAll,
+  {},
+);
 
 export default crons;

@@ -657,9 +657,9 @@ export const searchByStation = query({
 /**
  * Top songs for the widget's Top 7 / Top 30 tabs and the Reports export.
  *
- * Reads the hourly ranking in `topSongsSnapshots` (see topSongs.ts) and
+ * Reads the daily ranking in `topSongsSnapshots` (see topSongs.ts) and
  * hydrates only the requested rows, so a new play no longer forces a re-read
- * of the whole window. Rankings lag up to an hour; artwork and enrichment on
+ * of the whole window. Rankings lag up to a day; artwork and enrichment on
  * each row stay live. Falls back to counting live when no snapshot exists yet.
  */
 export const topSongsByStation = query({

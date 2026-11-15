@@ -1,7 +1,7 @@
 /**
  * Pure ranking for the widget's Top 7 / Top 30 tabs. Kept free of Convex
  * context so it can be unit-tested and shared by the live fallback path and
- * the hourly snapshot refresh.
+ * the daily snapshot refresh.
  */
 
 /** Snapshot keeps more than the widget shows so `limit` (max 50) never runs short. */

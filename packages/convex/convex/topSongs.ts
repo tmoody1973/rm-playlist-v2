@@ -12,10 +12,10 @@ import {
 } from "./topSongsLogic";
 
 /**
- * Hourly Top 7 / Top 30 snapshots. Counting live inside the widget's
+ * Daily Top 7 / Top 30 snapshots. Counting live inside the widget's
  * subscription re-read every play in the window (~12k rows, ~9.5 MB for
  * 88Nine) each time a play landed or was enriched. Here that read happens
- * once an hour per station.
+ * once a day per station.
  */
 
 export async function loadCountablePlays(

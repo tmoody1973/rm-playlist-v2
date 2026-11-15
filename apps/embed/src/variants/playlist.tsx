@@ -26,7 +26,7 @@ import tokensCss from "../tokens.css?inline";
  * when a search term or date range is set we subscribe to
  * `searchByStation`. Both push live updates by default — set
  * `data-auto-update="false"` for a one-shot snapshot. Top 20 tabs use
- * `topSongsByStation`, whose rankings refresh hourly (see convex/topSongs.ts).
+ * `topSongsByStation`, whose rankings refresh daily (see convex/topSongs.ts).
  */
 const INITIAL_PAGE = 20;
 const PAGE_INCREMENT = 20;

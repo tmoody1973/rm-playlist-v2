@@ -113,7 +113,7 @@ export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined 
 
 /**
  * Subscribe to `plays.topSongsByStation` for the Top 20 tabs. Rankings
- * refresh hourly on the server (convex/topSongs.ts); the subscription
+ * refresh daily on the server (convex/topSongs.ts); the subscription
  * picks up each refresh without polling. `windowDays` is locked to 7 or 30 to match the index range
  * the query expects.
  */
