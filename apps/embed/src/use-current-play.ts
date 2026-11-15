@@ -112,9 +112,9 @@ export function useSearchPlays(args: SearchPlaysArgs): PublicPlay[] | undefined 
 }
 
 /**
- * Subscribe to `plays.topSongsByStation` for the Top 20 tabs. Re-counts
- * automatically as new plays land, so the chart stays current without
- * polling. `windowDays` is locked to 7 or 30 to match the index range
+ * Subscribe to `plays.topSongsByStation` for the Top 20 tabs. Rankings
+ * refresh hourly on the server (convex/topSongs.ts); the subscription
+ * picks up each refresh without polling. `windowDays` is locked to 7 or 30 to match the index range
  * the query expects.
  */
 export function useTopSongs(

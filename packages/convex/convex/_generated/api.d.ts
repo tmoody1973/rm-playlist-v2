@@ -52,6 +52,8 @@ import type * as showsByMetro from "../showsByMetro.js";
 import type * as stationRegions from "../stationRegions.js";
 import type * as stations from "../stations.js";
 import type * as tokenCrypto from "../tokenCrypto.js";
+import type * as topSongs from "../topSongs.js";
+import type * as topSongsLogic from "../topSongsLogic.js";
 import type * as users from "../users.js";
 
 import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";
@@ -101,6 +103,8 @@ declare const fullApi: ApiFromModules<{
   stationRegions: typeof stationRegions;
   stations: typeof stations;
   tokenCrypto: typeof tokenCrypto;
+  topSongs: typeof topSongs;
+  topSongsLogic: typeof topSongsLogic;
   users: typeof users;
 }>;
 

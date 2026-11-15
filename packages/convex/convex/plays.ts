@@ -6,6 +6,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/server";
 import { normalizeEventArtistKey } from "./events";
 import { pickShowsByMetro } from "./showsByMetro";
+import { loadCountablePlays, readTopSongsSnapshot } from "./topSongs";
+import { normalizeForDedup, rankTopPlays, windowStartMs } from "./topSongsLogic";
 
 /**
  * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
@@ -30,10 +32,6 @@ async function loadSourceOrThrow(
  * observed drift while staying well below the shortest realistic song length.
  */
 const DEDUP_WINDOW_MS = 5_000;
-
-function normalizeForDedup(value: string): string {
-  return value.trim().toLowerCase();
-}
 
 /**
  * Look for an existing non-deleted play on this station within ±5s of
@@ -657,16 +655,12 @@ export const searchByStation = query({
 });
 
 /**
- * Top-songs aggregation for the Top 20 tabs (chunk 3 of V1 carry-forward).
+ * Top songs for the widget's Top 7 / Top 30 tabs and the Reports export.
  *
- * Counts plays in a rolling window (7 or 30 days), groups by canonical
- * track when enrichment resolved one, otherwise by normalized
- * artist+title key. Returns the top N (default 20) sorted by spin count
- * desc, with each row hydrated to the same `PublicPlay` shape that
- * powers the recent and search lists — plus a `playCount` field.
- *
- * Cost: O(n) over plays in the window. Worst-case 30-day station has
- * ~3000 plays; well within Convex's per-query budget.
+ * Reads the hourly ranking in `topSongsSnapshots` (see topSongs.ts) and
+ * hydrates only the requested rows, so a new play no longer forces a re-read
+ * of the whole window. Rankings lag up to an hour; artwork and enrichment on
+ * each row stay live. Falls back to counting live when no snapshot exists yet.
  */
 export const topSongsByStation = query({
   args: {
@@ -690,51 +684,26 @@ export const topSongsByStation = query({
     if (station === null) return [];
 
     const take = Math.min(limit ?? 20, 50);
-    const cutoff = Date.now() - windowDays * 24 * 60 * 60 * 1000;
-
-    const plays = await ctx.db
-      .query("plays")
-      .withIndex("by_station_played_at", (q) =>
-        q.eq("stationId", station._id).gte("playedAt", cutoff),
-      )
-      .collect();
-
-    const visible = plays.filter(
-      (p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored",
-    );
-
-    type Bucket = {
-      latestPlay: Doc<"plays">;
-      count: number;
-    };
-
-    const byKey = new Map<string, Bucket>();
-    for (const p of visible) {
-      const key =
-        p.canonicalTrackId !== undefined
-          ? `track:${p.canonicalTrackId}`
-          : `raw:${normalizeForDedup(p.artistRaw)}|${normalizeForDedup(p.titleRaw)}`;
-
-      const existing = byKey.get(key);
-      if (existing === undefined) {
-        byKey.set(key, { latestPlay: p, count: 1 });
-      } else {
-        existing.count += 1;
-        if (p.playedAt > existing.latestPlay.playedAt) {
-          existing.latestPlay = p;
-        }
-      }
-    }
-
-    const ranked = Array.from(byKey.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, take);
+    const ranked =
+      (await readTopSongsSnapshot(ctx, station._id, windowDays, take)) ??
+      (await rankLive(ctx, station._id, windowDays, take));
 
     return Promise.all(
-      ranked.map(async (bucket) => {
-        const built = await buildPublicPlay(ctx, bucket.latestPlay, station);
-        return { ...built, playCount: bucket.count };
+      ranked.map(async ({ play, playCount }) => {
+        const built = await buildPublicPlay(ctx, play, station);
+        return { ...built, playCount };
       }),
     );
   },
 });
+
+async function rankLive(
+  ctx: QueryCtx,
+  stationId: Id<"stations">,
+  windowDays: 7 | 30,
+  take: number,
+): Promise<Array<{ play: Doc<"plays">; playCount: number }>> {
+  const sinceMs = windowStartMs(Date.now(), windowDays);
+  const plays = await loadCountablePlays(ctx, stationId, sinceMs);
+  return rankTopPlays(plays, sinceMs, take);
+}
