@@ -6,10 +6,16 @@ import { GridItem } from "../components/GridItem";
 import { LiveEventRow } from "../components/LiveEventRow";
 import { StationBadge } from "../components/StationBadge";
 import { Skeleton } from "../components/Skeleton";
-import { useRecentPlays, useSearchPlays, useTopSongs } from "../use-current-play";
+import {
+  useRecentPlays,
+  useSearchPlays,
+  useTopSongs,
+  useUpcomingConcerts,
+} from "../use-current-play";
 import { DatePicker } from "../components/DatePicker";
 import { TopSongsList } from "../components/TopSongsList";
 import { AboutTab } from "../components/AboutTab";
+import { ConcertsList } from "../components/ConcertsList";
 import tokensCss from "../tokens.css?inline";
 
 /**
@@ -42,12 +48,13 @@ const SEARCH_DEBOUNCE_MS = 300;
 // number meets the server budget without truncating.
 const SEARCH_LIMIT = 500;
 
-type TabId = "recent" | "top7" | "top30" | "about";
+type TabId = "recent" | "top7" | "top30" | "concerts" | "about";
 
 const TABS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: "recent", label: "Recent" },
   { id: "top7", label: "Last 7 days" },
   { id: "top30", label: "Last 30 days" },
+  { id: "concerts", label: "Concerts" },
   { id: "about", label: "About" },
 ];
 
@@ -90,6 +97,7 @@ function PlaylistWidget({ config }: { config: WidgetConfig }) {
       {activeTab === "recent" && <RecentPane config={config} />}
       {activeTab === "top7" && <TopSongsPane config={config} windowDays={7} />}
       {activeTab === "top30" && <TopSongsPane config={config} windowDays={30} />}
+      {activeTab === "concerts" && <ConcertsPane config={config} />}
       {activeTab === "about" && <AboutTab station={config.station} />}
 
       {config.showFooter === true && (
@@ -116,6 +124,7 @@ const TAB_HEADINGS: Record<TabId, string> = {
   recent: "Recently played",
   top7: "Top 20 — last 7 days",
   top30: "Top 20 — last 30 days",
+  concerts: "Concerts",
   about: "About",
 };
 
@@ -319,6 +328,11 @@ function RecentPane({ config }: { config: WidgetConfig }) {
       )}
     </div>
   );
+}
+
+function ConcertsPane({ config }: { config: WidgetConfig }) {
+  const concerts = useUpcomingConcerts(config.station);
+  return <ConcertsList concerts={concerts} />;
 }
 
 function TopSongsPane({ config, windowDays }: { config: WidgetConfig; windowDays: 7 | 30 }) {

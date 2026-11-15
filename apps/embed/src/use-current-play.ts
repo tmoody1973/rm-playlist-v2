@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { api } from "@rm/convex/api";
-import type { PublicPlay, PublicTopSong, StationSlug } from "./types";
+import type { LiveEventSummary, PublicPlay, PublicTopSong, StationSlug } from "./types";
 import { getConvexClient } from "./convex-client";
 
 /**
@@ -145,4 +145,29 @@ export function useTopSongs(
   }, [station, windowDays, limit]);
 
   return songs;
+}
+
+/**
+ * Subscribe to `concerts.upcomingByStation` for the Concerts tab. The server
+ * answer changes only when the 3-hourly concert cache or an event changes,
+ * so a live subscription stays cheap. The 60-day trim happens in ConcertsList.
+ */
+export function useUpcomingConcerts(station: StationSlug): LiveEventSummary[] | undefined {
+  const [concerts, setConcerts] = useState<LiveEventSummary[] | undefined>(undefined);
+
+  useEffect(() => {
+    const client = getConvexClient();
+    const unsubscribe = client.onUpdate(
+      api.concerts.upcomingByStation,
+      { stationSlug: station },
+      (next) => {
+        setConcerts(next as LiveEventSummary[]);
+      },
+    );
+    return () => {
+      unsubscribe();
+    };
+  }, [station]);
+
+  return concerts;
 }

@@ -17,6 +17,8 @@ import type * as backfills from "../backfills.js";
 import type * as cadence from "../cadence.js";
 import type * as cadenceSong from "../cadenceSong.js";
 import type * as cadenceSummary from "../cadenceSummary.js";
+import type * as concerts from "../concerts.js";
+import type * as concertsLogic from "../concertsLogic.js";
 import type * as credits from "../credits.js";
 import type * as crons from "../crons.js";
 import type * as digest from "../digest.js";
@@ -69,6 +71,8 @@ declare const fullApi: ApiFromModules<{
   cadence: typeof cadence;
   cadenceSong: typeof cadenceSong;
   cadenceSummary: typeof cadenceSummary;
+  concerts: typeof concerts;
+  concertsLogic: typeof concertsLogic;
   credits: typeof credits;
   crons: typeof crons;
   digest: typeof digest;

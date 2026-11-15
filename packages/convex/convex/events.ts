@@ -790,6 +790,7 @@ function toCachedShow(match: RotationMatch): CachedShow {
     ticketUrl: event.ticketUrl ?? null,
     imageUrl: event.imageUrl ?? null,
     role: match.role,
+    eventId: event._id,
   };
 }
 
