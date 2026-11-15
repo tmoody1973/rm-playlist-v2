@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { playSearchFields } from "./memoryLogic";
+import { fortnightsInWindow, playSearchFields } from "./memoryLogic";
 import { stampPreviousPlayDuration } from "./durationFill";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -7,6 +7,14 @@ import { type MutationCtx, type QueryCtx, mutation, query } from "./_generated/s
 import { normalizeEventArtistKey } from "./events";
 import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 import { pickShowsByMetro } from "./showsByMetro";
+import {
+  MAX_SEARCH_FORTNIGHTS,
+  SEARCH_HITS_PER_FORTNIGHT,
+  type SearchWindow,
+  isSearchHit,
+  normalizeNeedle,
+  searchWindow,
+} from "./searchLogic";
 import { loadCountablePlays, readTopSongsSnapshot } from "./topSongs";
 import { normalizeForDedup, rankTopPlays, windowStartMs } from "./topSongsLogic";
 
@@ -576,17 +584,16 @@ export const recentByStation = query({
 });
 
 /**
- * Filtered playlist view — drives the embed playlist widget's search and
- * date-range filters (chunk 2 of V1 carry-forward). Substring match on
- * artist OR title (case-insensitive); date range bounds the index scan.
+ * Filtered playlist view for the embed widget's search and date-range filters.
  *
- * Reactive by default — Convex pushes new matching plays to subscribers
- * without polling. The widget's `data-auto-update="false"` opts out at
- * the client by switching to a one-shot fetch.
+ * Text search goes through the `search_text` index, newest two-week bucket
+ * first, and defaults to the last 14 days (searchLogic.ts), so it reads only
+ * matching plays. The old path scanned the latest 2,500 plays per search and
+ * re-scanned on every new play while the search stayed open. Matching uses
+ * whole words with prefix on the last word ("simz" finds Little Simz; "imz"
+ * does not). Plays before the searchText backfill are not findable by text.
  *
- * Over-fetches more aggressively than `recentByStation` because both the
- * "ignored" filter AND the substring filter can shrink the visible set.
- * Capped at 500 candidates to keep query cost bounded.
+ * A date range without text still uses the station/time index, capped.
  */
 export const searchByStation = query({
   args: {
@@ -608,50 +615,69 @@ export const searchByStation = query({
       .first();
     if (station === null) return [];
 
-    // Take cap raised 100 → 500 so a search that matches 50+ plays
-    // doesn't get artificially truncated to the page-size cap.
     const take = Math.min(limit ?? 20, 500);
-    const needle = q?.trim().toLowerCase() ?? "";
-    const hasSubstring = needle.length > 0;
-
-    // Over-fetch budget. When a substring filter is active, scan a much
-    // wider history window — the previous 500-candidate ceiling was
-    // roughly the last day for 88Nine and made the search feel broken
-    // ("I played that yesterday and it's not there"). 10000 covers
-    // ~17 days for an active station; users with deeper lookups should
-    // also enable the date-range filter to bound the index scan.
-    const fetchMany = hasSubstring
-      ? Math.min(take * 5, 10_000)
-      : Math.min(Math.ceil(take * 1.5) + 5, 200);
-
-    const candidates = await ctx.db
-      .query("plays")
-      .withIndex("by_station_played_at", (idx) => {
-        const base = idx.eq("stationId", station._id);
-        if (afterMs !== undefined && beforeMs !== undefined) {
-          return base.gte("playedAt", afterMs).lte("playedAt", beforeMs);
-        }
-        if (afterMs !== undefined) return base.gte("playedAt", afterMs);
-        if (beforeMs !== undefined) return base.lte("playedAt", beforeMs);
-        return base;
-      })
-      .order("desc")
-      .take(fetchMany);
-
-    const visible = candidates
-      .filter((p) => {
-        if (p.deletedAt !== undefined) return false;
-        if (p.enrichmentStatus === "ignored") return false;
-        if (!hasSubstring) return true;
-        return (
-          p.artistRaw.toLowerCase().includes(needle) || p.titleRaw.toLowerCase().includes(needle)
-        );
-      })
-      .slice(0, take);
+    const needle = normalizeNeedle(q);
+    const visible =
+      needle.length > 0
+        ? await searchPlaysByText(
+            ctx,
+            station._id,
+            needle,
+            searchWindow(Date.now(), afterMs, beforeMs),
+            take,
+          )
+        : await playsInDateRange(ctx, station._id, afterMs, beforeMs, take);
 
     return Promise.all(visible.map((p) => buildPublicPlay(ctx, p, station)));
   },
 });
+
+async function searchPlaysByText(
+  ctx: QueryCtx,
+  stationId: Id<"stations">,
+  needle: string,
+  window: SearchWindow,
+  take: number,
+): Promise<Doc<"plays">[]> {
+  const buckets = fortnightsInWindow(window.startMs, window.endMs).slice(0, MAX_SEARCH_FORTNIGHTS);
+  let found: Doc<"plays">[] = [];
+  for (const bucket of buckets) {
+    const hits = await ctx.db
+      .query("plays")
+      .withSearchIndex("search_text", (s) =>
+        s.search("searchText", needle).eq("stationId", stationId).eq("playedFortnight", bucket),
+      )
+      .take(SEARCH_HITS_PER_FORTNIGHT);
+    found = [...found, ...hits.filter((play) => isSearchHit(play, needle, window))];
+    if (found.length >= take) break;
+  }
+  return found.sort((a, b) => b.playedAt - a.playedAt).slice(0, take);
+}
+
+async function playsInDateRange(
+  ctx: QueryCtx,
+  stationId: Id<"stations">,
+  afterMs: number | undefined,
+  beforeMs: number | undefined,
+  take: number,
+): Promise<Doc<"plays">[]> {
+  const candidates = await ctx.db
+    .query("plays")
+    .withIndex("by_station_played_at", (idx) => {
+      const base = idx.eq("stationId", stationId);
+      if (afterMs !== undefined && beforeMs !== undefined) {
+        return base.gte("playedAt", afterMs).lte("playedAt", beforeMs);
+      }
+      if (afterMs !== undefined) return base.gte("playedAt", afterMs);
+      if (beforeMs !== undefined) return base.lte("playedAt", beforeMs);
+      return base;
+    })
+    .order("desc")
+    .take(Math.min(Math.ceil(take * 1.5) + 5, 200));
+  return candidates
+    .filter((p) => p.deletedAt === undefined && p.enrichmentStatus !== "ignored")
+    .slice(0, take);
+}
 
 /**
  * Top songs for the widget's Top 7 / Top 30 tabs and the Reports export.
