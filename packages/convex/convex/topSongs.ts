@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type QueryCtx, internalMutation } from "./_generated/server";
+import { type MutationCtx, type QueryCtx, internalMutation } from "./_generated/server";
+import { type RotationArtist, buildRotation } from "./rotationLogic";
 import {
   TOP_SONGS_SNAPSHOT_SIZE,
   TOP_SONGS_WINDOWS,
@@ -64,6 +65,23 @@ function findSnapshot(
     .unique();
 }
 
+async function saveStationRotation(
+  ctx: MutationCtx,
+  stationId: Id<"stations">,
+  artists: RotationArtist[],
+  refreshedAt: number,
+): Promise<void> {
+  const existing = await ctx.db
+    .query("stationRotation")
+    .withIndex("by_station", (q) => q.eq("stationId", stationId))
+    .unique();
+  if (existing === null) {
+    await ctx.db.insert("stationRotation", { stationId, artists, refreshedAt });
+  } else {
+    await ctx.db.patch(existing._id, { artists, refreshedAt });
+  }
+}
+
 /** Cron entry point: one transaction per station keeps each read within Convex limits. */
 export const refreshAll = internalMutation({
   args: {},
@@ -81,6 +99,13 @@ export const refreshStation = internalMutation({
     const nowMs = Date.now();
     const longestWindow = Math.max(...TOP_SONGS_WINDOWS) as TopSongsWindowDays;
     const plays = await loadCountablePlays(ctx, stationId, windowStartMs(nowMs, longestWindow));
+
+    await saveStationRotation(
+      ctx,
+      stationId,
+      buildRotation(plays, windowStartMs(nowMs, longestWindow)),
+      nowMs,
+    );
 
     for (const windowDays of TOP_SONGS_WINDOWS) {
       const entries = rankTopPlays(

@@ -11,7 +11,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { normalizeArtistForMatch } from "./matchKey";
-import { rankArtistShows } from "./memoryLogic";
+import { matchLineup, mergeRotations } from "./rotationLogic";
 import { stationArtistShowValidator } from "./schema";
 import { nearestMetro } from "./showsByMetro";
 import { checkIngestKey, ingestKeyArg } from "./ingestKey";
@@ -535,7 +535,7 @@ export const allUpcomingEvents = query({
     // hasRotationMatch flag is cheap. Same lookback (30d) as the
     // Upcoming-from-Rotation panel — a single shared notion of
     // "currently in rotation."
-    const rotationArtistKeys = await loadRotationArtistKeys(ctx, org._id);
+    const rotationArtistKeys = await loadRotationArtistKeys(ctx);
 
     return Promise.all(
       visible.map(async (event) => {
@@ -574,27 +574,17 @@ export const allUpcomingEvents = query({
 });
 
 /**
- * Snapshot of artistKeys currently in rotation (last 30d of plays).
- * Computed once per allUpcomingEvents call so the per-event match
- * check is O(1) lookup against a Set.
+ * Artist keys currently in rotation on any station (daily stationRotation
+ * snapshot, last 30 days of plays). Shared notion of "in rotation" with the
+ * Upcoming-from-Rotation panel and the Concerts/Alexa cache.
  */
-async function loadRotationArtistKeys(
-  ctx: QueryCtx,
-  orgId: Id<"organizations">,
-): Promise<Set<string>> {
-  const lookbackMs = Date.now() - 30 * 86_400_000;
-  const recentPlays = await ctx.db
-    .query("plays")
-    .withIndex("by_org_played_at", (q) => q.eq("orgId", orgId).gte("playedAt", lookbackMs))
-    .take(16_000);
-  const keys = new Set<string>();
-  for (const play of recentPlays) {
-    if (play.deletedAt !== undefined) continue;
-    if (play.enrichmentStatus === "ignored") continue;
-    const key = normalizeEventArtistKey(play.artistRaw);
-    if (key.length > 0) keys.add(key);
-  }
-  return keys;
+async function loadRotationArtistKeys(ctx: QueryCtx): Promise<Set<string>> {
+  return new Set((await loadMergedRotation(ctx)).keys());
+}
+
+async function loadMergedRotation(ctx: QueryCtx) {
+  const rotations = await ctx.db.query("stationRotation").collect();
+  return mergeRotations(rotations.map(({ stationId, artists }) => ({ stationId, artists })));
 }
 
 // ---------------------------------------------------------------- //
@@ -612,25 +602,28 @@ export type RotationMatch = {
 
 type RotationArgs = {
   orgSlug: string;
+  /** Ignored: rotation is the daily 30-day stationRotation snapshot. Kept for old callers. */
   lookbackDays?: number;
   horizonDays?: number;
   limit?: number;
+  /** Ignored: matching starts from events now, so there is no artist list to cap. */
   artistCap?: number;
 };
 
-/** The upcomingFromRotation work, shared with the Alexa cache refresh. Soonest event first. */
+/**
+ * Upcoming events whose bill includes a rotation artist, soonest first. Shared
+ * by the dashboard panel and the Concerts/Alexa cache refresh.
+ *
+ * Starts from events (a few hundred in the horizon) rather than artists
+ * (thousands), and reads "in rotation" from the daily stationRotation
+ * snapshot instead of scanning plays. Empty until that snapshot exists.
+ */
 export async function computeUpcomingFromRotation(
   ctx: QueryCtx,
   args: RotationArgs,
 ): Promise<RotationMatch[]> {
-  const lookbackDays = args.lookbackDays ?? 30;
   const horizonDays = args.horizonDays ?? 90;
   const limit = args.limit ?? 50;
-  const artistCap = args.artistCap ?? 200;
-
-  const now = Date.now();
-  const lookbackMs = now - lookbackDays * 86_400_000;
-  const horizonMs = now + horizonDays * 86_400_000;
 
   const org = await ctx.db
     .query("organizations")
@@ -638,71 +631,40 @@ export async function computeUpcomingFromRotation(
     .first();
   if (org === null) return [];
 
-  // 1. Scan plays in lookback window across all stations.
-  const recentPlays = await ctx.db
-    .query("plays")
-    .withIndex("by_org_played_at", (q) => q.eq("orgId", org._id).gte("playedAt", lookbackMs))
-    .take(16_000);
+  const rotation = await loadMergedRotation(ctx);
+  if (rotation.size === 0) return [];
 
-  // 2. Group by normalized artistKey, count plays + remember stations.
-  type ArtistInfo = {
-    count: number;
-    stationIds: Set<Id<"stations">>;
-    displayName: string;
-  };
-  const byArtistKey = new Map<string, ArtistInfo>();
-  for (const play of recentPlays) {
-    if (play.deletedAt !== undefined) continue;
-    if (play.enrichmentStatus === "ignored") continue;
-    const key = normalizeEventArtistKey(play.artistRaw);
-    if (key.length === 0) continue;
-    const existing = byArtistKey.get(key);
-    if (existing !== undefined) {
-      existing.count++;
-      existing.stationIds.add(play.stationId);
-    } else {
-      byArtistKey.set(key, {
-        count: 1,
-        stationIds: new Set([play.stationId]),
-        displayName: play.artistRaw,
-      });
-    }
-  }
+  const now = Date.now();
+  const events = (
+    await ctx.db
+      .query("events")
+      .withIndex("by_org_starts", (q) =>
+        q
+          .eq("orgId", org._id)
+          .gt("startsAt", now)
+          .lte("startsAt", now + horizonDays * 86_400_000),
+      )
+      .collect()
+  ).filter(
+    (event) =>
+      event.duplicateOf === undefined &&
+      event.status !== "cancelled" &&
+      event.status !== "postponed",
+  );
 
-  // 3. Sort by play count, take top N artists. Bounds the follow-up
-  //    eventArtists lookups to keep the query under Convex's read budget.
-  const topArtists = Array.from(byArtistKey.entries())
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, artistCap);
+  const lineups = await Promise.all(
+    events.map((event) =>
+      ctx.db
+        .query("eventArtists")
+        .withIndex("by_event", (q) => q.eq("eventId", event._id))
+        .collect(),
+    ),
+  );
 
-  // 4. For each top artist, find matching upcoming events.
-  const matches: RotationMatch[] = [];
-
-  for (const [artistKey, info] of topArtists) {
-    const eventArtistRows = await ctx.db
-      .query("eventArtists")
-      .withIndex("by_artist_key", (q) => q.eq("artistKey", artistKey))
-      .take(20);
-
-    for (const ea of eventArtistRows) {
-      const event = await ctx.db.get(ea.eventId);
-      if (event === null) continue;
-      if (event.duplicateOf !== undefined) continue;
-      if (event.startsAt <= now) continue;
-      if (event.startsAt > horizonMs) continue;
-      if (event.status === "cancelled" || event.status === "postponed") continue;
-      matches.push({
-        artistKey,
-        artistName: ea.artistNameRaw,
-        playCount: info.count,
-        stationIds: Array.from(info.stationIds),
-        event,
-        role: ea.role,
-      });
-    }
-  }
-
-  // 5. Sort by event start ascending.
+  const matches = events.flatMap((event, index): RotationMatch[] => {
+    const match = matchLineup(lineups[index] ?? [], rotation);
+    return match === null ? [] : [{ ...match, event }];
+  });
   matches.sort((a, b) => a.event.startsAt - b.event.startsAt);
   return matches.slice(0, limit);
 }
@@ -729,14 +691,13 @@ export async function computeUpcomingFromRotation(
 export const upcomingFromRotation = query({
   args: {
     orgSlug: v.string(),
-    /** How far back to scan plays for "in rotation". Default 30 days. */
+    /** Ignored: "in rotation" is the daily 30-day stationRotation snapshot. */
     lookbackDays: v.optional(v.number()),
     /** Filter events to those starting within N days of now. Default 90. */
     horizonDays: v.optional(v.number()),
     /** Cap on returned matches. Default 50. */
     limit: v.optional(v.number()),
-    /** Cap on artists checked (top by play count). Bounds query cost
-     *  per call regardless of catalog growth. Default 200. */
+    /** Ignored: matching starts from events, so there is no artist list to cap. */
     artistCap: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -768,10 +729,12 @@ export const upcomingFromRotation = query({
 /** Single tenant; seed.ts creates this org. */
 const ORG_SLUG = "radiomilwaukee";
 const ALL_STATIONS_KEY = "all";
-const MAX_CACHED_SHOWS = 40;
+/** Every date, not one per artist: the Concerts tab lists them all; Alexa ranks at read time. */
+const MAX_CACHED_SHOWS = 300;
 
 type CachedShow = Infer<typeof stationArtistShowValidator>;
 type CacheSource = {
+  rotationReady: boolean;
   stationSlugs: string[];
   matches: Array<{ stationSlugs: string[]; show: CachedShow }>;
 };
@@ -804,7 +767,9 @@ export const rotationShowsForCache = internalQuery({
     });
     const stations = await ctx.db.query("stations").collect();
     const slugById = new Map(stations.map((station) => [station._id, station.slug]));
+    const rotationReady = (await ctx.db.query("stationRotation").first()) !== null;
     return {
+      rotationReady,
       stationSlugs: stations.map((station) => station.slug),
       matches: matches.map((match) => ({
         stationSlugs: match.stationIds.flatMap((id) => slugById.get(id) ?? []),
@@ -831,18 +796,19 @@ export const storeStationArtistShows = internalMutation({
   },
 });
 
-/** Cron: the slow rotation read runs once here so alexa:stationArtistShows is a single index read. */
+/** Cron: matching runs once here so the Concerts tab and alexa:stationArtistShows are single index reads. */
 export const refreshStationArtistShows = internalAction({
   args: {},
   handler: async (ctx): Promise<null> => {
     const source: CacheSource = await ctx.runQuery(internal.events.rotationShowsForCache, {});
+    // Before the first daily rotation snapshot, keep the old cache rather than empty it.
+    if (!source.rotationReady) return null;
     const rows = [ALL_STATIONS_KEY, ...source.stationSlugs].map((key) => ({
       key,
-      shows: rankArtistShows(
-        source.matches
-          .filter((m) => key === ALL_STATIONS_KEY || m.stationSlugs.includes(key))
-          .map((m) => m.show),
-      ).slice(0, MAX_CACHED_SHOWS),
+      shows: source.matches
+        .filter((m) => key === ALL_STATIONS_KEY || m.stationSlugs.includes(key))
+        .map((m) => m.show)
+        .slice(0, MAX_CACHED_SHOWS),
     }));
     await ctx.runMutation(internal.events.storeStationArtistShows, {
       refreshedAt: Date.now(),
