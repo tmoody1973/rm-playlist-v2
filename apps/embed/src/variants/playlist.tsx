@@ -251,7 +251,10 @@ function RecentPane({ config }: { config: WidgetConfig }) {
     // Search/filter mode uses its own larger limit so users see all
     // matches across the recent history, not just the visible page.
     limit: SEARCH_LIMIT,
-    autoUpdate,
+    // Loaded once, and only while a filter is on: a live search re-ran (and
+    // re-loaded up to 200 rows) on every new play, even with the box empty.
+    autoUpdate: false,
+    enabled: filtersActive,
   });
   const plays = filtersActive ? searchPlays : recentPlays;
   const enablePreview = config.enablePreview !== false;
