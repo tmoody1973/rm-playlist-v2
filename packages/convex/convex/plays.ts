@@ -393,7 +393,7 @@ export interface PublicPlay {
 
 const MAX_LOOKUP_FANOUT = 10;
 
-type EventCandidate = {
+export type EventCandidate = {
   event: Doc<"events">;
   matchedArtistName: string;
   role: "headliner" | "support";
@@ -428,7 +428,7 @@ async function upcomingEventsForArtist(
   return candidates.sort((a, b) => a.event.startsAt - b.event.startsAt);
 }
 
-async function toLiveEventSummary(
+export async function toLiveEventSummary(
   ctx: QueryCtx,
   candidate: EventCandidate,
 ): Promise<LiveEventSummary> {

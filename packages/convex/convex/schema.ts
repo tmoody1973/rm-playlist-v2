@@ -36,6 +36,8 @@ export const stationArtistShowValidator = v.object({
   ticketUrl: v.union(v.string(), v.null()),
   imageUrl: v.union(v.string(), v.null()),
   role: v.union(v.literal("headliner"), v.literal("support")),
+  /** Lets the widget's Concerts tab load the full event. Optional until the next cache refresh. */
+  eventId: v.optional(v.id("events")),
 });
 
 /** One cached Cadence program; see cadence.refreshStationSchedule and scheduleLogic.ts. */
