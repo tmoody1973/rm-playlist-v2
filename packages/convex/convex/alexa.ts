@@ -7,6 +7,7 @@ import { findPrograms, labelAirtimes, scheduleAt } from "./scheduleLogic";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
+  rankArtistShows,
   mergeSearchHits,
   preferFullMatches,
   fortnightsInWindow,
@@ -514,7 +515,9 @@ export const stationArtistShows = query({
       .withIndex("by_key", (q) => q.eq("key", station ?? "all"))
       .first();
     if (row === null) return { refreshedAt: null, shows: [] };
-    return { refreshedAt: row.refreshedAt, shows: row.shows.slice(0, clampShowLimit(limit)) };
+    // The cache holds every date (for the widget's Concerts tab); Alexa names one show per artist.
+    const ranked = rankArtistShows(row.shows);
+    return { refreshedAt: row.refreshedAt, shows: ranked.slice(0, clampShowLimit(limit)) };
   },
 });
 

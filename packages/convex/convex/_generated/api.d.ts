@@ -48,6 +48,7 @@ import type * as plays from "../plays.js";
 import type * as preview from "../preview.js";
 import type * as recall from "../recall.js";
 import type * as reports from "../reports.js";
+import type * as rotationLogic from "../rotationLogic.js";
 import type * as scheduleLogic from "../scheduleLogic.js";
 import type * as searchLogic from "../searchLogic.js";
 import type * as seed from "../seed.js";
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   preview: typeof preview;
   recall: typeof recall;
   reports: typeof reports;
+  rotationLogic: typeof rotationLogic;
   scheduleLogic: typeof scheduleLogic;
   searchLogic: typeof searchLogic;
   seed: typeof seed;

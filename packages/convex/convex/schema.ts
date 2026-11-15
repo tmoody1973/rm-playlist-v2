@@ -737,14 +737,27 @@ export default defineSchema({
   }).index("by_artist", ["artistId"]),
 
   /**
-   * events.upcomingFromRotation is too slow for Alexa (7-11 s), so a cron
-   * stores its answer here. key = station slug, or "all" for every station.
+   * Upcoming shows by rotation artists, every date, soonest first; rebuilt
+   * every 3 hours (events.refreshStationArtistShows). key = station slug, or
+   * "all". Read by the widget's Concerts tab and by Alexa, which keeps one
+   * show per artist at read time.
    */
   stationArtistShows: defineTable({
     key: v.string(),
     shows: v.array(stationArtistShowValidator),
     refreshedAt: v.number(),
   }).index("by_key", ["key"]),
+
+  /**
+   * Artists each station played in the last 30 days, with play counts.
+   * Written daily by topSongs.refreshStation from the plays it already reads;
+   * events.computeUpcomingFromRotation matches upcoming events against it.
+   */
+  stationRotation: defineTable({
+    stationId: v.id("stations"),
+    artists: v.array(v.object({ key: v.string(), name: v.string(), playCount: v.number() })),
+    refreshedAt: v.number(),
+  }).index("by_station", ["stationId"]),
 
   /**
    * Daily Top 7 / Top 30 rankings per station for the widget's Top tabs.
