@@ -157,7 +157,7 @@ function airtimesByProgram(episodes: readonly unknown[]): Map<string, Airtime[]>
 
 // --- on now / next ---------------------------------------------------------
 
-interface Occurrence extends Airing {
+export interface Occurrence extends Airing {
   program: ScheduleProgram;
 }
 
@@ -177,23 +177,44 @@ function toSlot({ program, startsAt, endsAt }: Occurrence): ScheduleSlot {
 }
 
 function occurrencesAround(programs: readonly ScheduleProgram[], at: number): Occurrence[] {
-  const today = localDateKey(at, SCHEDULE_TIME_ZONE);
+  const day = MINUTES_PER_DAY * MS_PER_MINUTE;
+  return occurrencesBetween(programs, at - SCAN_DAYS * day, at + (SCAN_DAYS + 1) * day);
+}
+
+/** A public caller may ask for at most this much schedule at once (a month of episodes, plus a week). */
+const MAX_AIRING_RANGE_MS = 35 * MINUTES_PER_DAY * MS_PER_MINUTE;
+
+export function clampAiringRange(fromMs: number, toMs: number): [number, number] {
+  return [fromMs, Math.min(Math.max(toMs, fromMs), fromMs + MAX_AIRING_RANGE_MS)];
+}
+
+/**
+ * Every airing that overlaps [fromMs, toMs), sorted by start. Days are scanned from one civil day
+ * before `fromMs` so a show that started the previous evening and runs past midnight is included.
+ */
+export function occurrencesBetween(
+  programs: readonly ScheduleProgram[],
+  fromMs: number,
+  toMs: number,
+): Occurrence[] {
+  const last = localDateKey(toMs, SCHEDULE_TIME_ZONE);
   const occurrences: Occurrence[] = [];
-  for (let offset = -SCAN_DAYS; offset <= SCAN_DAYS; offset++) {
-    const day = addDays(today, offset);
+  for (
+    let day = addDays(localDateKey(fromMs, SCHEDULE_TIME_ZONE), -1);
+    day <= last;
+    day = addDays(day, 1)
+  ) {
     const dayOfWeek = new Date(dayNumber(day) * MINUTES_PER_DAY * MS_PER_MINUTE).getUTCDay();
     for (const program of programs) {
       for (const airtime of program.airtimes) {
         if (airtime.dayOfWeek !== dayOfWeek) continue;
-        occurrences.push({
-          program,
-          startsAt: civilToMs(day, airtime.startMin),
-          endsAt: civilToMs(day, airtime.endMin),
-        });
+        const startsAt = civilToMs(day, airtime.startMin);
+        const endsAt = civilToMs(day, airtime.endMin);
+        if (endsAt > fromMs && startsAt < toMs) occurrences.push({ program, startsAt, endsAt });
       }
     }
   }
-  return occurrences;
+  return occurrences.sort((a, b) => a.startsAt - b.startsAt);
 }
 
 // --- find a program --------------------------------------------------------

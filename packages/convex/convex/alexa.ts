@@ -3,7 +3,13 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import { matchKey } from "./matchKey";
 import { findHost, publicProfiles, showArt } from "./hostProfilesLogic";
-import { findPrograms, labelAirtimes, scheduleAt } from "./scheduleLogic";
+import {
+  clampAiringRange,
+  findPrograms,
+  labelAirtimes,
+  occurrencesBetween,
+  scheduleAt,
+} from "./scheduleLogic";
 import { upcomingShowsByMetro, buildPublicPlay } from "./plays";
 import {
   clampShowLimit,
@@ -518,6 +524,37 @@ export const stationArtistShows = query({
     // The cache holds every date (for the widget's Concerts tab); Alexa names one show per artist.
     const ranked = rankArtistShows(row.shows);
     return { refreshedAt: row.refreshedAt, shows: ranked.slice(0, clampShowLimit(limit)) };
+  },
+});
+
+/**
+ * Every airing between fromMs and toMs (at most 35 days), with real start and end times, so a site can
+ * draw a week grid or find past episodes without redoing time-zone math. Reads the same Cadence cache
+ * as stationSchedule. Public read, like the other alexa:* queries.
+ */
+export const stationAirings = query({
+  args: { station: v.string(), fromMs: v.number(), toMs: v.number() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("stationSchedule")
+      .withIndex("by_station", (q) => q.eq("station", args.station))
+      .first();
+    if (row === null) return { refreshedAt: null, airings: [] };
+    const profiles = await hostProfilesRow(ctx, args.station);
+    const [fromMs, toMs] = clampAiringRange(args.fromMs, args.toMs);
+    const airings = occurrencesBetween(row.programs, fromMs, toMs).map(
+      ({ program, startsAt, endsAt }) => ({
+        name: program.name,
+        hosts: program.hosts,
+        description: program.description ?? null,
+        ...showArt(program.name, profiles?.shows ?? []),
+        // Cadence's own link wins over the show-page lookup when it has one.
+        ...(program.link ? { link: program.link } : {}),
+        startsAt,
+        endsAt,
+      }),
+    );
+    return { refreshedAt: row.refreshedAt, airings };
   },
 });
 
