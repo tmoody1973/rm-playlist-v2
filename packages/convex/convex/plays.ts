@@ -17,6 +17,7 @@ import {
 } from "./searchLogic";
 import { loadCountablePlays, readTopSongsSnapshot } from "./topSongs";
 import { normalizeForDedup, rankTopPlays, windowStartMs } from "./topSongsLogic";
+import { stillUpcoming } from "./concertsLogic";
 
 /**
  * Fetch a source by id or throw. Shared by `recordPolledPlays` (batch) and
@@ -421,7 +422,7 @@ async function upcomingEventsForArtist(
   const events = await Promise.all(rows.map((row) => ctx.db.get(row.eventId)));
   const candidates = rows.flatMap((row, i) => {
     const event = events[i];
-    if (!event || event.duplicateOf !== undefined || event.startsAt <= now) return [];
+    if (!event || event.duplicateOf !== undefined || !stillUpcoming(event, now)) return [];
     if (event.status === "cancelled" || event.status === "postponed") return [];
     return [{ event, matchedArtistName: row.artistNameRaw, role: row.role }];
   });

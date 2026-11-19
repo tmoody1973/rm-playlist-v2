@@ -60,3 +60,18 @@ export async function followDuplicates<E extends { _id: string; duplicateOf?: st
   }
   return current;
 }
+
+/**
+ * A date-only event is stored as its date at midnight UTC (6 pm Central the evening before). Keep it listed
+ * until the end of that date in Central time (UTC date + 30 hours), so it doesn't vanish on show day.
+ * Timed events are upcoming until they start, as before.
+ */
+const DATE_ONLY_GRACE_MS = 30 * 60 * 60 * 1000;
+export const DATE_ONLY_LOOKBACK_MS = DATE_ONLY_GRACE_MS;
+
+export function stillUpcoming(
+  event: { startsAt: number; dateOnly?: boolean },
+  now: number,
+): boolean {
+  return event.dateOnly === true ? event.startsAt + DATE_ONLY_GRACE_MS > now : event.startsAt > now;
+}
