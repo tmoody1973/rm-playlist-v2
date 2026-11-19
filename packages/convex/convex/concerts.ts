@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Infer } from "convex/values";
 import { type QueryCtx, query } from "./_generated/server";
 import { type LiveEventSummary, toLiveEventSummary } from "./plays";
+import { followDuplicates, withEventDetails, withStationContext } from "./concertsLogic";
 import type { stationArtistShowValidator } from "./schema";
 
 type CachedShow = Infer<typeof stationArtistShowValidator>;
@@ -25,7 +26,10 @@ export const upcomingByStation = query({
       v.literal("rhythmlab"),
     ),
   },
-  handler: async (ctx, { stationSlug }): Promise<LiveEventSummary[]> => {
+  handler: async (
+    ctx,
+    { stationSlug },
+  ): Promise<Array<LiveEventSummary & { metro: string; playCount: number }>> => {
     const cached = await ctx.db
       .query("stationArtistShows")
       .withIndex("by_key", (q) => q.eq("key", stationSlug))
@@ -37,11 +41,49 @@ export const upcomingByStation = query({
   },
 });
 
-async function summarizeShow(ctx: QueryCtx, show: CachedShow): Promise<LiveEventSummary | null> {
+async function summarizeShow(
+  ctx: QueryCtx,
+  show: CachedShow,
+): Promise<(LiveEventSummary & { metro: string; playCount: number }) | null> {
   // ponytail: rows cached before eventId existed are skipped; the 3-hourly refresh fills them in.
   if (show.eventId === undefined) return null;
   const event = await ctx.db.get(show.eventId);
   if (event === null || event.duplicateOf !== undefined) return null;
   if (event.status === "cancelled" || event.status === "postponed") return null;
-  return toLiveEventSummary(ctx, { event, matchedArtistName: show.artistName, role: show.role });
+  // metro and playCount are for the HYFIN site's events page; the widget ignores them.
+  return withStationContext(
+    await toLiveEventSummary(ctx, { event, matchedArtistName: show.artistName, role: show.role }),
+    show,
+  );
 }
+
+/**
+ * One event by id, for the HYFIN site's event pages: past, cancelled and postponed events included (the page
+ * says so), duplicates resolved to the canonical event. A malformed or unknown id answers null, never throws.
+ */
+export const eventById = query({
+  args: { eventId: v.string() },
+  handler: async (ctx, { eventId }) => {
+    const id = ctx.db.normalizeId("events", eventId);
+    if (id === null) return null;
+    const found = await ctx.db.get(id);
+    if (found === null) return null;
+    const event = await followDuplicates(found, async (next) => {
+      const nextId = ctx.db.normalizeId("events", next);
+      return nextId === null ? null : await ctx.db.get(nextId);
+    });
+    if (event === null) return null;
+    const lineup = await ctx.db
+      .query("eventArtists")
+      .withIndex("by_event", (q) => q.eq("eventId", event._id))
+      .collect();
+    const headliner =
+      lineup.find((a) => a.role === "headliner")?.artistNameRaw ?? event.title ?? "";
+    const summary = await toLiveEventSummary(ctx, {
+      event,
+      matchedArtistName: headliner,
+      role: "headliner",
+    });
+    return withEventDetails(summary, event);
+  },
+});
