@@ -3,6 +3,7 @@ import {
   CONCERTS_HORIZON_DAYS,
   concertsWithinHorizon,
   followDuplicates,
+  stillUpcoming,
   withEventDetails,
   withStationContext,
 } from "../convex/concertsLogic";
@@ -83,5 +84,29 @@ describe("site helpers", () => {
       status: null,
       region: "WI",
     });
+  });
+});
+
+describe("stillUpcoming", () => {
+  const dec4 = Date.parse("2026-12-04T00:00:00Z"); // a date-only Dec 4 show is stored as Dec 4 00:00 UTC
+
+  test("a date-only show stays upcoming until the end of its date in Central time", () => {
+    expect(
+      stillUpcoming({ startsAt: dec4, dateOnly: true }, Date.parse("2026-12-04T03:00:00Z")),
+    ).toBe(true); // 9 pm Dec 3 Central
+    expect(
+      stillUpcoming({ startsAt: dec4, dateOnly: true }, Date.parse("2026-12-05T02:00:00Z")),
+    ).toBe(true); // 8 pm Dec 4 Central, showtime
+    expect(
+      stillUpcoming({ startsAt: dec4, dateOnly: true }, Date.parse("2026-12-05T05:59:00Z")),
+    ).toBe(true); // 11:59 pm Dec 4 Central
+    expect(
+      stillUpcoming({ startsAt: dec4, dateOnly: true }, Date.parse("2026-12-05T06:00:01Z")),
+    ).toBe(false); // Dec 5
+  });
+
+  test("a timed show is upcoming until it starts, as before", () => {
+    expect(stillUpcoming({ startsAt: dec4 }, dec4 - 1)).toBe(true);
+    expect(stillUpcoming({ startsAt: dec4, dateOnly: false }, dec4)).toBe(false);
   });
 });

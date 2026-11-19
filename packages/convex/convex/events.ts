@@ -16,6 +16,7 @@ import { stationArtistShowValidator } from "./schema";
 import { nearestMetro } from "./showsByMetro";
 import { checkIngestKey, ingestKeyArg } from "./ingestKey";
 import { isStaff } from "./staff";
+import { DATE_ONLY_LOOKBACK_MS, stillUpcoming } from "./concertsLogic";
 
 /**
  * Cross-source event ingestion + dedup.
@@ -641,12 +642,14 @@ export async function computeUpcomingFromRotation(
       .withIndex("by_org_starts", (q) =>
         q
           .eq("orgId", org._id)
-          .gt("startsAt", now)
+          // Look back far enough to keep today's date-only shows (stored at midnight UTC).
+          .gt("startsAt", now - DATE_ONLY_LOOKBACK_MS)
           .lte("startsAt", now + horizonDays * 86_400_000),
       )
       .collect()
   ).filter(
     (event) =>
+      stillUpcoming(event, now) &&
       event.duplicateOf === undefined &&
       event.status !== "cancelled" &&
       event.status !== "postponed",
