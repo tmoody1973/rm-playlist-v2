@@ -4,7 +4,9 @@ import {
   buildSchedulePrograms,
   findProgram,
   findPrograms,
+  clampAiringRange,
   hostsFromName,
+  occurrencesBetween,
   programHosts,
   scheduleAt,
   weekDateRange,
@@ -327,4 +329,52 @@ describe("findPrograms", () => {
   test("no match is an empty list", () => {
     expect(findPrograms(PROGRAMS, "car talk", NOW)).toEqual([]);
   });
+});
+
+describe("occurrencesBetween", () => {
+  const rhythmLab = program("Rhythm Lab Radio", ["Tarik Moody"], [at(FRI, 1320, 1440)]);
+  const ms = (iso: string) => Date.parse(iso);
+
+  test("puts a 10 pm to midnight show on its start day", () => {
+    const got = occurrencesBetween(
+      [rhythmLab],
+      ms("2026-11-20T06:00:00Z"),
+      ms("2026-11-22T06:00:00Z"),
+    );
+    expect(got.map((o) => [o.startsAt, o.endsAt])).toEqual([
+      [ms("2026-11-21T04:00:00Z"), ms("2026-11-21T06:00:00Z")], // Fri 10 pm to Sat 12 am Central
+    ]);
+  });
+
+  test("is DST-safe: midnight to 6 am on 2026-11-01 lasts 7 hours", () => {
+    const overnight = program("Overnights", [], [at(SUN, 0, 360)]);
+    const [o] = occurrencesBetween(
+      [overnight],
+      ms("2026-11-01T05:00:00Z"),
+      ms("2026-11-02T06:00:00Z"),
+    );
+    expect(o!.startsAt).toBe(ms("2026-11-01T05:00:00Z"));
+    expect(o!.endsAt - o!.startsAt).toBe(7 * 3_600_000);
+  });
+
+  test("clips to the range and sorts by start", () => {
+    const daily = program(
+      "Mid-day",
+      ["Anthony"],
+      WEEKDAYS.map((d) => at(d, 720, 900)),
+    );
+    const got = occurrencesBetween([daily], ms("2026-11-17T20:00:00Z"), ms("2026-11-18T18:00:00Z"));
+    // Tue 12-3 pm CT ends 21:00Z (inside); Wed 12 pm CT starts 18:00Z (= toMs, excluded)
+    expect(got.map((o) => o.startsAt)).toEqual([ms("2026-11-17T18:00:00Z")]);
+  });
+});
+
+describe("clampAiringRange", () => {
+  const DAY = 86_400_000;
+  test("caps a range at 35 days", () =>
+    expect(clampAiringRange(0, 90 * DAY)).toEqual([0, 35 * DAY]));
+  test("turns a backwards range into an empty one", () =>
+    expect(clampAiringRange(10, 5)).toEqual([10, 10]));
+  test("leaves a normal week alone", () =>
+    expect(clampAiringRange(DAY, 8 * DAY)).toEqual([DAY, 8 * DAY]));
 });

@@ -277,8 +277,8 @@ async function logEvent(
 
 // --- Station schedule cache --------------------------------------------------
 
-/** Stations whose Cadence schedule is cached; HYFIN joins once its Cadence schedule is current. */
-const SCHEDULE_STATIONS = ["88nine"] as const;
+/** Stations whose Cadence schedule is cached (HYFIN joined 2026-11-19 for the new HYFIN site). */
+const SCHEDULE_STATIONS = ["88nine", "hyfin"] as const;
 
 export const storeStationSchedule = internalMutation({
   args: {
