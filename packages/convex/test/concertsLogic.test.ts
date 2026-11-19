@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { CONCERTS_HORIZON_DAYS, concertsWithinHorizon } from "../convex/concertsLogic";
+import {
+  CONCERTS_HORIZON_DAYS,
+  concertsWithinHorizon,
+  followDuplicates,
+  withEventDetails,
+  withStationContext,
+} from "../convex/concertsLogic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -36,5 +42,46 @@ describe("concertsWithinHorizon", () => {
   test("sorts soonest first", () => {
     const shows = [show("later", NOW + 5 * DAY_MS), show("sooner", NOW + 2 * DAY_MS)];
     expect(concertsWithinHorizon(shows, NOW).map((s) => s.eventId)).toEqual(["sooner", "later"]);
+  });
+});
+
+describe("site helpers", () => {
+  test("withStationContext adds the show's metro and play count", () => {
+    expect(withStationContext({ eventId: "e" }, { metro: "Chicago", playCount: 4 })).toEqual({
+      eventId: "e",
+      metro: "Chicago",
+      playCount: 4,
+    });
+  });
+
+  test("followDuplicates returns the canonical event", async () => {
+    const rows: Record<string, { _id: string; duplicateOf?: string }> = {
+      a: { _id: "a", duplicateOf: "b" },
+      b: { _id: "b" },
+    };
+    expect((await followDuplicates(rows.a!, async (id) => rows[id] ?? null))?._id).toBe("b");
+  });
+
+  test("followDuplicates stops at a missing canonical and at a loop", async () => {
+    const missing = { _id: "a", duplicateOf: "gone" };
+    expect(await followDuplicates(missing, async () => null)).toBeNull();
+    const loop: Record<string, { _id: string; duplicateOf?: string }> = {
+      a: { _id: "a", duplicateOf: "b" },
+      b: { _id: "b", duplicateOf: "a" },
+    };
+    expect(await followDuplicates(loop.a!, async (id) => loop[id] ?? null)).toBeNull();
+  });
+
+  test("withEventDetails adds status (null when unset) and region", () => {
+    expect(withEventDetails({ eventId: "e" }, { status: "cancelled", region: "IL" })).toEqual({
+      eventId: "e",
+      status: "cancelled",
+      region: "IL",
+    });
+    expect(withEventDetails({ eventId: "e" }, { region: "WI" })).toEqual({
+      eventId: "e",
+      status: null,
+      region: "WI",
+    });
   });
 });
